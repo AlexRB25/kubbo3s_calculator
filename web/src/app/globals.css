@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-ink: #101315;
+  --color-panel: #181c1f;
+  --color-raised: #22282c;
+  --color-line: #2e363b;
+  --color-muted: #9aa7ad;
+  /* Brand teal brightened for dark surfaces; `brand-deep` is the logo's own teal. */
+  --color-brand: #35c5d6;
+  --color-brand-deep: #15707f;
+  --color-money: #34d399;
+  --color-warn: #f5b83d;
+  --color-bad: #f87171;
+}
+
+body {
+  background: var(--color-ink);
+  color: #f4f4f6;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+h1 {
+  @apply text-2xl font-bold tracking-tight;
+}
+h2 {
+  @apply text-lg font-semibold;
+}
+
+/* The soft teal halo of the logo, behind hero sections. */
+.glow {
+  background: radial-gradient(60% 55% at 50% 40%, rgb(21 112 127 / 0.55), transparent 70%);
+}
+.text-glow {
+  text-shadow: 0 0 28px rgb(53 197 214 / 0.55);
+}
+
+.btn {
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-raised px-3.5 py-2 text-sm font-semibold text-white transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50;
+}
+.btn-primary {
+  @apply bg-brand text-ink;
+}
+.btn-danger {
+  @apply bg-bad/15 text-bad;
+}
+.btn-lg {
+  @apply px-5 py-3 text-base;
+}
+.card {
+  @apply rounded-xl border border-line bg-panel p-5;
+}
+.input {
+  @apply w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-white outline-none placeholder:text-muted/60 focus:border-brand;
+}
+.label {
+  @apply flex flex-col gap-1 text-xs font-medium text-muted;
+}
+.error {
+  @apply rounded-lg bg-bad/15 px-3 py-2 text-sm text-bad;
+}
+
+.table {
+  @apply w-full text-left text-sm;
+}
+.table th {
+  @apply border-b border-line px-3 py-2 text-xs font-medium text-muted;
+}
+.table td {
+  @apply border-b border-line/60 px-3 py-2.5 align-middle;
+}
+.table .num {
+  @apply text-right tabular-nums;
+}

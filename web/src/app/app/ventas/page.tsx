@@ -1,0 +1,221 @@
+"use client";
+
+import { useState } from "react";
+import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
+import { channelFees, productCost } from "@/lib/costs";
+import { useData, useSave } from "@/lib/data";
+import { day, money, num } from "@/lib/format";
+import { supabase } from "@/lib/supabase";
+
+function SaleForm({ onDone }: { onDone: () => void }) {
+  const { products, channels, filaments, printers, profile } = useData();
+  const { busy, error, setError, save } = useSave();
+
+  const [productId, setProductId] = useState("");
+  const [customName, setCustomName] = useState("");
+  const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
+  const [quantity, setQuantity] = useState("1");
+  // Empty fields use the automatic value shown as placeholder.
+  const [price, setPrice] = useState("");
+  const [fees, setFees] = useState("");
+  const [shipping, setShipping] = useState("");
+  const [customCost, setCustomCost] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const product = products.find((item) => item.id === productId);
+  const channel = channels.find((item) => item.id === channelId);
+  const pieces = Math.max(Math.round(num(quantity)), 0);
+  const listPrice = product?.prices[channelId] ?? 0;
+  const unitPrice = price === "" ? listPrice : num(price);
+  const autoFees = channelFees(channel, unitPrice, pieces);
+  const totalFees = fees === "" ? autoFees : num(fees);
+  const autoShipping = channel?.shipping_cost ?? 0;
+  const totalShipping = shipping === "" ? autoShipping : num(shipping);
+  const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0).total : num(customCost);
+  const profit = pieces * unitPrice - totalFees - totalShipping - pieces * unitCost;
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const name = product?.name ?? customName.trim();
+    if (!name) return setError("Elige un producto o escribe qué vendiste.");
+    if (pieces < 1) return setError("Indica cuántas piezas vendiste.");
+    if (unitPrice <= 0) return setError("Indica el precio de venta.");
+    save(
+      () =>
+        supabase()
+          .from("sales")
+          .insert({
+            product_id: productId || null,
+            product_name: name,
+            channel_id: channel?.id ?? null,
+            channel_name: channel?.name ?? "",
+            quantity: pieces,
+            unit_price: unitPrice,
+            fees: totalFees,
+            shipping_cost: totalShipping,
+            unit_cost: Math.round(unitCost * 100) / 100,
+            notes: notes.trim(),
+          }),
+      onDone,
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+      <label className="label sm:col-span-2">
+        Producto
+        <select className="input" value={productId} onChange={(event) => setProductId(event.target.value)}>
+          <option value="">Otra cosa (sin producto)</option>
+          {products.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name} · {item.stock} en stock
+            </option>
+          ))}
+        </select>
+        {product && pieces > product.stock && (
+          <span className="font-normal text-warn">Solo hay {product.stock} en stock: la venta se registra igual y el stock quedará en negativo.</span>
+        )}
+      </label>
+      {!product && (
+        <>
+          <label className="label">
+            ¿Qué vendiste?
+            <input className="input" value={customName} onChange={(event) => setCustomName(event.target.value)} maxLength={80} />
+          </label>
+          <label className="label">
+            Costo por pieza ($)
+            <input className="input" type="number" min={0} step="any" value={customCost} onChange={(event) => setCustomCost(event.target.value)} placeholder="0" />
+          </label>
+        </>
+      )}
+      <label className="label">
+        Canal
+        <select className="input" value={channelId} onChange={(event) => setChannelId(event.target.value)}>
+          {channels.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="label">
+        Piezas
+        <input className="input" type="number" min={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+      </label>
+      <label className="label">
+        Precio por pieza ($)
+        <input className="input" type="number" min={0} step="any" value={price} onChange={(event) => setPrice(event.target.value)} placeholder={listPrice ? listPrice.toFixed(2) : "0"} />
+      </label>
+      <label className="label">
+        Comisiones ($)
+        <input className="input" type="number" min={0} step="any" value={fees} onChange={(event) => setFees(event.target.value)} placeholder={autoFees.toFixed(2)} />
+      </label>
+      <label className="label">
+        Envío que pagaste ($)
+        <input className="input" type="number" min={0} step="any" value={shipping} onChange={(event) => setShipping(event.target.value)} placeholder={autoShipping.toFixed(2)} />
+      </label>
+      <label className="label">
+        Notas
+        <input className="input" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={200} placeholder="Número de pedido, cliente…" />
+      </label>
+      <p className="text-xs text-muted sm:col-span-2">
+        Comisión y envío salen del canal; escribe el dato real si la plataforma te cobró otra cosa.
+      </p>
+
+      <div className="flex flex-col gap-1 rounded-lg bg-ink p-3 sm:col-span-2">
+        <Line label={`${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
+        <Line label="Comisiones" value={`− ${money(totalFees)}`} />
+        <Line label="Envío" value={`− ${money(totalShipping)}`} />
+        <Line label={`Costo de producción (${money(unitCost)} c/u)`} value={`− ${money(pieces * unitCost)}`} />
+        <Line strong label="Ganancia" value={money(profit)} />
+      </div>
+
+      {error && (
+        <p role="alert" className="error sm:col-span-2">
+          {error}
+        </p>
+      )}
+      <div className="sm:col-span-2">
+        <button className="btn btn-primary" disabled={busy}>
+          {busy ? "Guardando…" : "Registrar venta"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export default function SalesPage() {
+  const { sales } = useData();
+  const { error, save } = useSave();
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <>
+      <PageHeader title="Ventas">
+        <button className="btn btn-primary" onClick={() => setAdding(true)}>
+          Registrar venta
+        </button>
+      </PageHeader>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+
+      {sales.length === 0 ? (
+        <Empty>Registra tus ventas de Mercado Libre, TikTok o directas y mira cuánto ganas en cada una.</Empty>
+      ) : (
+        <TableCard>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Venta</th>
+                <th>Canal</th>
+                <th className="num">Total</th>
+                <th className="num">Comisiones y envío</th>
+                <th className="num">Costo</th>
+                <th className="num">Ganancia</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {sales.map((sale) => (
+                <tr key={sale.id}>
+                  <td className="whitespace-nowrap text-muted">{day(sale.sold_at)}</td>
+                  <td>
+                    {sale.quantity} × {sale.product_name}
+                    {sale.notes && <div className="text-xs text-muted">{sale.notes}</div>}
+                  </td>
+                  <td className="text-muted">{sale.channel_name || "—"}</td>
+                  <td className="num">{money(sale.quantity * sale.unit_price)}</td>
+                  <td className="num text-muted">{money(sale.fees + sale.shipping_cost)}</td>
+                  <td className="num text-muted">{money(sale.quantity * sale.unit_cost)}</td>
+                  <td className={`num font-semibold ${sale.profit >= 0 ? "text-money" : "text-bad"}`}>{money(sale.profit)}</td>
+                  <td className="num">
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => {
+                        if (window.confirm(`Se eliminará la venta de ${sale.quantity} × ${sale.product_name}; las piezas vuelven al stock. ¿Eliminar?`)) {
+                          save(() => supabase().from("sales").delete().eq("id", sale.id));
+                        }
+                      }}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
+
+      {adding && (
+        <Modal wide title="Registrar venta" onClose={() => setAdding(false)}>
+          <SaleForm onDone={() => setAdding(false)} />
+        </Modal>
+      )}
+    </>
+  );
+}

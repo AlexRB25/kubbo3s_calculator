@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Kubbo3D",
+    "slug": "kubbo3d",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "kubbo3d",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.alexr.kubbo3d",
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#101315",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.alexr.kubbo3d"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#101315",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 140
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kubbo3D usa tus fotos para ponerle imagen a tus productos.",
+          "cameraPermission": "Kubbo3D usa la cámara para fotografiar tus productos."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "backgroundColor": "#101315",
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  }
+}
