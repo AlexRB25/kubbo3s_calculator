@@ -49,7 +49,19 @@ export function authErrorMessage(error: { code?: string; message: string }): str
     case "over_email_send_rate_limit":
     case "over_request_rate_limit":
       return "Demasiados intentos. Espera un momento y vuelve a probar.";
+    case "signup_disabled":
+      return "El registro de cuentas nuevas está desactivado.";
+    case "email_address_invalid":
+      return "Ese correo no parece válido.";
+    case "email_address_not_authorized":
+      return "El servidor de correo todavía no puede enviar mensajes a esa dirección.";
     default:
-      return "Algo salió mal. Inténtalo de nuevo.";
+      // "Database error saving new user" is the signup trigger of schema.sql failing (or the schema not applied).
+      if (/database error/i.test(error.message)) {
+        return "No se pudo crear tu perfil en la base de datos. Avísanos para revisarlo.";
+      }
+      if (/fetch|network/i.test(error.message)) return "No se pudo conectar con el servidor. Revisa tu conexión.";
+      // Unknown errors show Supabase's own text: a vague message here hides what has to be fixed.
+      return `Algo salió mal: ${error.message}`;
   }
 }
