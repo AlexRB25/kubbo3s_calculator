@@ -250,6 +250,17 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- Cuentas creadas antes de ejecutar este archivo: les da su perfil y sus canales de arranque.
+insert into public.profiles (id, email, name)
+select u.id, coalesce(u.email, ''), coalesce(u.raw_user_meta_data ->> 'name', '')
+from auth.users u
+on conflict (id) do nothing;
+
+insert into public.channels (user_id, name, commission_pct, sort)
+select u.id, c.name, c.commission_pct, c.sort
+from auth.users u
+cross join (values ('Mercado Libre', 15, 1), ('TikTok Shop', 8, 2), ('Venta directa', 0, 3)) as c (name, commission_pct, sort)
+where not exists (select 1 from public.channels x where x.user_id = u.id);
 -- La app la llama al abrirse: marca la última visita y el día activo.
 create or replace function public.touch() returns void
 language plpgsql security definer set search_path = '' as $$
