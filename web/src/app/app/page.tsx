@@ -21,7 +21,7 @@ export default function SummaryPage() {
   const monthExpenses = expenses.filter((expense) => expense.spent_at.startsWith(monthKey));
 
   const income = monthSales.reduce((total, sale) => total + sale.quantity * sale.unit_price, 0);
-  const channelCosts = monthSales.reduce((total, sale) => total + sale.fees + sale.shipping_cost, 0);
+  const channelCosts = monthSales.reduce((total, sale) => total + sale.fees + sale.shipping_cost + sale.packaging_cost, 0);
   const production = monthSales.reduce((total, sale) => total + sale.quantity * sale.unit_cost, 0);
   const profit = monthSales.reduce((total, sale) => total + sale.profit, 0);
   const spent = monthExpenses.reduce((total, expense) => total + expense.amount, 0);
@@ -62,11 +62,11 @@ export default function SummaryPage() {
         <div className="card flex flex-col gap-2">
           <h2>De la venta a la ganancia</h2>
           <Line label="Ventas" value={money(income)} />
-          <Line label="Comisiones y envíos" value={`− ${money(channelCosts)}`} />
+          <Line label="Comisiones, envíos y embalaje" value={`− ${money(channelCosts)}`} />
           <Line label="Costo de producir lo vendido" value={`− ${money(production)}`} />
           <Line strong label="Ganancia de las ventas" value={money(profit)} />
           <p className="text-xs text-muted">
-            El flujo de caja es lo que entró menos lo que pagaste este mes (ventas − comisiones y envíos − gastos). La ganancia
+            El flujo de caja es lo que entró menos lo que pagaste este mes (ventas − comisiones, envíos y embalaje − gastos). La ganancia
             compara cada venta con lo que costó producirla.
           </p>
         </div>

@@ -50,6 +50,19 @@ export type Channel = {
   sort: number;
 };
 
+export type PackagingKind = 'box' | 'envelope' | 'bag' | 'other';
+
+export type Packaging = {
+  id: string;
+  name: string;
+  kind: PackagingKind;
+  length_mm: number;
+  width_mm: number;
+  height_mm: number;
+  cost: number;
+  notes: string;
+};
+
 export type FilamentUse = { filament_id: string; grams: number };
 
 export type Product = {
@@ -66,6 +79,8 @@ export type Product = {
   printer_ids: string[];
   /** Selling price by channel id. */
   prices: Record<string, number>;
+  /** Packaging it ships in; counts toward the "with shipping" price. */
+  packaging_id: string | null;
 };
 
 export type PrintStatus = 'printing' | 'done' | 'failed';
@@ -95,6 +110,7 @@ export type Sale = {
   fees: number;
   shipping_cost: number;
   unit_cost: number;
+  packaging_cost: number;
   profit: number;
   notes: string;
   sold_at: string;

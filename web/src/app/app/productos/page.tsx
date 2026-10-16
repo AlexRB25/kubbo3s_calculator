@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { filamentName, productCost, suggestedPrice, unitProfit } from "@/lib/costs";
+import { filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { duration, field, money, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -14,7 +14,7 @@ type RecipeRow = { filament_id: string; grams: string };
 
 function ProductForm({ product, onDone }: { product?: Product; onDone: () => void }) {
   const { session } = useSession();
-  const { filaments, printers, channels, profile } = useData();
+  const { filaments, printers, channels, profile, packaging } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [name, setName] = useState(product?.name ?? "");
@@ -29,6 +29,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     product?.filaments.map((use) => ({ filament_id: use.filament_id, grams: String(use.grams) })) ?? [{ filament_id: "", grams: "" }],
   );
   const [printerIds, setPrinterIds] = useState<string[]>(product?.printer_ids ?? []);
+  const [packagingId, setPackagingId] = useState(product?.packaging_id ?? "");
+  const box = packaging.find((item) => item.id === packagingId);
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
   );
@@ -57,6 +59,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       description: description.trim(),
       image_path: imagePath,
       ...draft,
+      packaging_id: packagingId || null,
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
       // Prints and sales move the stock on the server; send it only when it was corrected here.
       ...(product && Math.round(num(stock)) === product.stock ? {} : { stock: Math.round(num(stock)) }),
@@ -160,7 +163,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       <label className="label">
         Otros costos por pieza ($)
         <input className="input" type="number" min={0} step="any" value={extraCost} onChange={(event) => setExtraCost(event.target.value)} placeholder="0" />
-        <span className="font-normal">Empaque, tornillos, imanes, etiquetas…</span>
+        <span className="font-normal">Tornillos, imanes, etiquetas… El embalaje para envío va aparte.</span>
       </label>
       <label className="label">
         Piezas en stock
@@ -176,8 +179,25 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         <Line strong label="Costo por pieza" value={money(cost.total)} />
       </div>
 
+      <label className="label sm:col-span-2">
+        Embalaje para envío
+        <select className="input" value={packagingId} onChange={(event) => setPackagingId(event.target.value)}>
+          <option value="">Sin embalaje</option>
+          {packaging.map((item) => (
+            <option key={item.id} value={item.id}>
+              {packagingName(item)} · {money(item.cost)}
+            </option>
+          ))}
+        </select>
+        <span className="font-normal">
+          {packaging.length ? "Con envío se suma este embalaje y el envío del canal." : "Registra tus cajas, sobres y bolsas en Embalaje."}
+        </span>
+      </label>
+
       {channels.map((channel) => {
         const price = num(prices[channel.id] ?? "");
+        const margin = profile?.margin_pct ?? 0;
+        const shipping = shippingCost(channel, box);
         return (
           <label key={channel.id} className="label">
             Precio en {channel.name} ($)
@@ -188,9 +208,13 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
               step="any"
               value={prices[channel.id] ?? ""}
               onChange={(event) => setPrices({ ...prices, [channel.id]: event.target.value })}
-              placeholder={`Sugerido ${suggestedPrice(cost.total, channel, profile?.margin_pct ?? 0).toFixed(2)}`}
+              placeholder={`Sugerido ${suggestedPrice(cost.total, channel, margin).toFixed(2)}`}
             />
-            {price > 0 && <span className="font-normal">Ganas {money(unitProfit(price, cost.total, channel))} por pieza</span>}
+            <span className="font-normal">
+              {price > 0
+                ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
+                : `Sugerido con envío: ${money(suggestedPrice(cost.total, channel, margin, shipping))}`}
+            </span>
           </label>
         );
       })}
@@ -215,7 +239,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
 }
 
 export default function ProductsPage() {
-  const { products, filaments, printers, channels, profile } = useData();
+  const { products, filaments, printers, channels, profile, packaging } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
 
   return (
@@ -266,18 +290,24 @@ export default function ProductsPage() {
                     <td className="num">{money(cost)}</td>
                     {channels.map((channel) => {
                       const price = product.prices[channel.id];
+                      const shipping = shippingCost(channel, packaging.find((item) => item.id === product.packaging_id));
+                      const margin = profile?.margin_pct ?? 0;
                       if (!price) {
                         return (
                           <td key={channel.id} className="num text-xs text-muted">
-                            sugerido {money(suggestedPrice(cost, channel, profile?.margin_pct ?? 0))}
+                            sugerido {money(suggestedPrice(cost, channel, margin))}
+                            <div>con envío {money(suggestedPrice(cost, channel, margin, shipping))}</div>
                           </td>
                         );
                       }
-                      const profit = unitProfit(price, cost, channel);
+                      const tone = (profit: number) => (profit >= 0 ? "text-money" : "text-bad");
+                      const plain = unitProfit(price, cost, channel);
+                      const shipped = unitProfit(price, cost, channel, shipping);
                       return (
                         <td key={channel.id} className="num">
                           {money(price)}
-                          <div className={`text-xs ${profit >= 0 ? "text-money" : "text-bad"}`}>gana {money(profit)}</div>
+                          <div className={`text-xs ${tone(plain)}`}>sin envío gana {money(plain)}</div>
+                          <div className={`text-xs ${tone(shipped)}`}>con envío gana {money(shipped)}</div>
                         </td>
                       );
                     })}

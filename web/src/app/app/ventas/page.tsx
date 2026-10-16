@@ -8,7 +8,7 @@ import { day, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 
 function SaleForm({ onDone }: { onDone: () => void }) {
-  const { products, channels, filaments, printers, profile } = useData();
+  const { products, channels, filaments, printers, profile, packaging } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [productId, setProductId] = useState("");
@@ -18,7 +18,9 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   // Empty fields use the automatic value shown as placeholder.
   const [price, setPrice] = useState("");
   const [fees, setFees] = useState("");
+  const [delivery, setDelivery] = useState<"shipped" | "pickup">("shipped");
   const [shipping, setShipping] = useState("");
+  const [packagingCost, setPackagingCost] = useState("");
   const [customCost, setCustomCost] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -29,10 +31,14 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const unitPrice = price === "" ? listPrice : num(price);
   const autoFees = channelFees(channel, unitPrice, pieces);
   const totalFees = fees === "" ? autoFees : num(fees);
-  const autoShipping = channel?.shipping_cost ?? 0;
-  const totalShipping = shipping === "" ? autoShipping : num(shipping);
+  const shipped = delivery === "shipped";
+  const autoShipping = shipped ? (channel?.shipping_cost ?? 0) : 0;
+  const totalShipping = shipped && shipping !== "" ? num(shipping) : autoShipping;
+  // One package per sale, whatever the number of pieces.
+  const autoPackaging = shipped ? (packaging.find((item) => item.id === product?.packaging_id)?.cost ?? 0) : 0;
+  const totalPackaging = shipped && packagingCost !== "" ? num(packagingCost) : autoPackaging;
   const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0).total : num(customCost);
-  const profit = pieces * unitPrice - totalFees - totalShipping - pieces * unitCost;
+  const profit = pieces * unitPrice - totalFees - totalShipping - totalPackaging - pieces * unitCost;
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -53,6 +59,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
             unit_price: unitPrice,
             fees: totalFees,
             shipping_cost: totalShipping,
+            packaging_cost: totalPackaging,
             unit_cost: Math.round(unitCost * 100) / 100,
             notes: notes.trim(),
           }),
@@ -111,21 +118,37 @@ function SaleForm({ onDone }: { onDone: () => void }) {
         <input className="input" type="number" min={0} step="any" value={fees} onChange={(event) => setFees(event.target.value)} placeholder={autoFees.toFixed(2)} />
       </label>
       <label className="label">
-        Envío que pagaste ($)
-        <input className="input" type="number" min={0} step="any" value={shipping} onChange={(event) => setShipping(event.target.value)} placeholder={autoShipping.toFixed(2)} />
+        Entrega
+        <select className="input" value={delivery} onChange={(event) => setDelivery(event.target.value as "shipped" | "pickup")}>
+          <option value="shipped">Con envío</option>
+          <option value="pickup">Sin envío (recoge o paga el cliente)</option>
+        </select>
       </label>
+      {shipped && (
+        <>
+          <label className="label">
+            Envío que pagaste ($)
+            <input className="input" type="number" min={0} step="any" value={shipping} onChange={(event) => setShipping(event.target.value)} placeholder={autoShipping.toFixed(2)} />
+          </label>
+          <label className="label">
+            Embalaje ($)
+            <input className="input" type="number" min={0} step="any" value={packagingCost} onChange={(event) => setPackagingCost(event.target.value)} placeholder={autoPackaging.toFixed(2)} />
+          </label>
+        </>
+      )}
       <label className="label">
         Notas
         <input className="input" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={200} placeholder="Número de pedido, cliente…" />
       </label>
       <p className="text-xs text-muted sm:col-span-2">
-        Comisión y envío salen del canal; escribe el dato real si la plataforma te cobró otra cosa.
+        Comisión y envío salen del canal y el embalaje del producto; escribe el dato real si te cobraron otra cosa.
       </p>
 
       <div className="flex flex-col gap-1 rounded-lg bg-ink p-3 sm:col-span-2">
         <Line label={`${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
         <Line label="Comisiones" value={`− ${money(totalFees)}`} />
         <Line label="Envío" value={`− ${money(totalShipping)}`} />
+        <Line label="Embalaje" value={`− ${money(totalPackaging)}`} />
         <Line label={`Costo de producción (${money(unitCost)} c/u)`} value={`− ${money(pieces * unitCost)}`} />
         <Line strong label="Ganancia" value={money(profit)} />
       </div>
@@ -173,7 +196,7 @@ export default function SalesPage() {
                 <th>Venta</th>
                 <th>Canal</th>
                 <th className="num">Total</th>
-                <th className="num">Comisiones y envío</th>
+                <th className="num">Comisiones, envío y embalaje</th>
                 <th className="num">Costo</th>
                 <th className="num">Ganancia</th>
                 <th />
@@ -189,7 +212,7 @@ export default function SalesPage() {
                   </td>
                   <td className="text-muted">{sale.channel_name || "—"}</td>
                   <td className="num">{money(sale.quantity * sale.unit_price)}</td>
-                  <td className="num text-muted">{money(sale.fees + sale.shipping_cost)}</td>
+                  <td className="num text-muted">{money(sale.fees + sale.shipping_cost + sale.packaging_cost)}</td>
                   <td className="num text-muted">{money(sale.quantity * sale.unit_cost)}</td>
                   <td className={`num font-semibold ${sale.profit >= 0 ? "text-money" : "text-bad"}`}>{money(sale.profit)}</td>
                   <td className="num">

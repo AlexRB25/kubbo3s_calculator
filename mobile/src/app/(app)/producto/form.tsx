@@ -7,7 +7,7 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { filamentName, productCost, suggestedPrice, unitProfit } from '@/lib/costs';
+import { filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
 import { field, money, num, weight } from '@/lib/format';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
@@ -18,7 +18,7 @@ type RecipeRow = { filament_id: string | null; grams: string };
 export default function ProductFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { session } = useSession();
-  const { products, filaments, printers, channels, profile } = useData();
+  const { products, filaments, printers, channels, profile, packaging } = useData();
   const { busy, error, setError, save } = useSave();
   const product = products.find((item) => item.id === id);
 
@@ -36,6 +36,8 @@ export default function ProductFormScreen() {
     ],
   );
   const [printerIds, setPrinterIds] = useState<string[]>(product?.printer_ids ?? []);
+  const [packagingId, setPackagingId] = useState<string | null>(product?.packaging_id ?? null);
+  const box = packaging.find((item) => item.id === packagingId);
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
   );
@@ -75,6 +77,7 @@ export default function ProductFormScreen() {
       description: description.trim(),
       image_path: imagePath,
       ...draft,
+      packaging_id: packagingId,
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
       // Prints and sales move the stock on the server; send it only when it was corrected here.
       ...(product && Math.round(num(stock)) === product.stock ? {} : { stock: Math.round(num(stock)) }),
@@ -183,7 +186,7 @@ export default function ProductFormScreen() {
         value={extraCost}
         onChangeText={setExtraCost}
         placeholder="0"
-        hint="Empaque, tornillos, imanes, etiquetas…"
+        hint="Tornillos, imanes, etiquetas… El embalaje para envío va aparte."
       />
 
       <Card>
@@ -194,9 +197,21 @@ export default function ProductFormScreen() {
         <Line strong label="Costo por pieza" value={money(cost.total)} />
       </Card>
 
+      <Select
+        label="Embalaje para envío"
+        value={packagingId}
+        onChange={setPackagingId}
+        none="Sin embalaje"
+        options={packaging.map((item) => ({ value: item.id, label: packagingName(item), hint: money(item.cost) }))}
+      />
+      {packaging.length === 0 && <Muted>Registra tus cajas, sobres y bolsas en Más → Embalaje para sumarlos al precio con envío.</Muted>}
+
       <Heading>Precio de venta</Heading>
+      <Muted>Con envío suma el embalaje y el envío del canal; sin envío, el cliente recoge o paga el envío.</Muted>
       {channels.map((channel) => {
         const price = num(prices[channel.id] ?? '');
+        const margin = profile?.margin_pct ?? 0;
+        const shipping = shippingCost(channel, box);
         return (
           <Field
             key={channel.id}
@@ -205,8 +220,12 @@ export default function ProductFormScreen() {
             numeric
             value={prices[channel.id] ?? ''}
             onChangeText={(text) => setPrices({ ...prices, [channel.id]: text })}
-            placeholder={`Sugerido ${suggestedPrice(cost.total, channel, profile?.margin_pct ?? 0).toFixed(2)}`}
-            hint={price > 0 ? `Ganas ${money(unitProfit(price, cost.total, channel))} por pieza` : undefined}
+            placeholder={`Sugerido ${suggestedPrice(cost.total, channel, margin).toFixed(2)}`}
+            hint={
+              price > 0
+                ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
+                : `Sugerido con envío: ${money(suggestedPrice(cost.total, channel, margin, shipping))}`
+            }
           />
         );
       })}

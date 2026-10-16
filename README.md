@@ -35,7 +35,10 @@ navegador se llaman `PB_*` y están declaradas en el `env` de cada `next.config.
 - **Costo por pieza** = filamento (gramos × costo por kg) + luz (horas × watts de la impresora × precio del kWh)
   + desgaste de la máquina (horas × costo por hora) + otros costos (empaque, tornillería). Con varias máquinas
   asignadas se usa el promedio.
-- **Precio sugerido por canal** = (costo × (1 + ganancia deseada) + cargo fijo + envío) ÷ (1 − comisión). Las
+- **Embalaje.** Cajas, sobres y bolsas con medidas y costo (*Embalaje*). Cada producto puede tener uno asignado.
+- **Precio sugerido por canal**, en dos versiones: *sin envío* = (costo × (1 + ganancia deseada) + cargo fijo) ÷
+  (1 − comisión); *con envío* suma al numerador el envío del canal y el embalaje del producto. Al registrar una venta
+  se elige *con envío* (descuenta envío y embalaje) o *sin envío* (el cliente recoge o paga su envío). Las
   comisiones con las que nace cada cuenta (Mercado Libre 15 %, TikTok Shop 8 %) son aproximadas: cada usuario
   debe poner las que su cuenta paga de verdad en *Canales de venta*.
 - **Filamento.** Cada filamento es un tipo (material + color + marca), no un carrete. Una *compra* suma gramos,

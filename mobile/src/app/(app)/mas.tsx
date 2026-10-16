@@ -7,11 +7,12 @@ import { supabase } from '@/lib/supabase';
 import { useData } from '@/store/data';
 
 export default function MoreScreen() {
-  const { profile, printers, suppliers, expenses, channels } = useData();
+  const { profile, printers, suppliers, expenses, channels, packaging } = useData();
 
   const links: { href: Href; icon: IconName; title: string; subtitle: string }[] = [
     { href: '/impresoras', icon: 'print', title: 'Impresoras', subtitle: `${printers.length} · mantenimientos y ajustes` },
     { href: '/proveedores', icon: 'business', title: 'Proveedores', subtitle: `${suppliers.length} registrados` },
+    { href: '/embalaje', icon: 'cube', title: 'Embalaje', subtitle: `${packaging.length} cajas, sobres y bolsas` },
     { href: '/gastos', icon: 'receipt', title: 'Gastos', subtitle: `${expenses.length} registrados` },
     { href: '/canales', icon: 'storefront', title: 'Canales de venta', subtitle: channels.map((channel) => channel.name).join(', ') },
     { href: '/ajustes', icon: 'settings', title: 'Ajustes', subtitle: 'Negocio, precio de la luz y ganancia deseada' },

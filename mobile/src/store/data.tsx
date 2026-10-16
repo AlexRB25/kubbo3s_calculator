@@ -8,6 +8,7 @@ import type {
   Expense,
   Filament,
   Maintenance,
+  Packaging,
   PrintJob,
   Printer,
   Product,
@@ -27,6 +28,7 @@ type Tables = {
   sales: Sale[];
   maintenance: Maintenance[];
   expenses: Expense[];
+  packaging: Packaging[];
 };
 
 type DataState = Tables & {
@@ -47,6 +49,7 @@ const EMPTY: Tables = {
   sales: [],
   maintenance: [],
   expenses: [],
+  packaging: [],
 };
 
 /** History tables load their most recent rows; older ones stay in the database. */
@@ -63,7 +66,7 @@ export function useData(): DataState {
 type Loaded = { tables: Tables; error?: undefined } | { tables?: undefined; error: string };
 
 async function fetchTables(userId: string): Promise<Loaded> {
-  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses] = await Promise.all([
+  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
     supabase.from('suppliers').select('*').order('name'),
     supabase.from('printers').select('*').order('name'),
@@ -78,9 +81,10 @@ async function fetchTables(userId: string): Promise<Loaded> {
     supabase.from('sales').select('*').order('sold_at', { ascending: false }).limit(HISTORY_LIMIT),
     supabase.from('maintenance').select('*').order('performed_at', { ascending: false }).limit(HISTORY_LIMIT),
     supabase.from('expenses').select('*').order('spent_at', { ascending: false }).limit(HISTORY_LIMIT),
+    supabase.from('packaging').select('*').order('name'),
   ]);
 
-  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses].find(
+  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging].find(
     (result) => result.error,
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
@@ -96,6 +100,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       sales: sales.data ?? [],
       maintenance: maintenance.data ?? [],
       expenses: expenses.data ?? [],
+      packaging: packaging.data ?? [],
     },
   };
 }

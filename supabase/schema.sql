@@ -90,6 +90,21 @@ create table if not exists public.channels (
 );
 create index if not exists channels_user_idx on public.channels (user_id);
 
+-- Material de embalaje (cajas, sobres, bolsas…) con medidas y costo por unidad.
+create table if not exists public.packaging (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null,
+  kind text not null default 'box' check (kind in ('box', 'envelope', 'bag', 'other')),
+  length_mm numeric(8,1) not null default 0 check (length_mm >= 0),
+  width_mm numeric(8,1) not null default 0 check (width_mm >= 0),
+  height_mm numeric(8,1) not null default 0 check (height_mm >= 0),
+  cost numeric(10,2) not null default 0 check (cost >= 0),
+  notes text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists packaging_user_idx on public.packaging (user_id);
+
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
@@ -110,6 +125,8 @@ create table if not exists public.products (
   created_at timestamptz not null default now()
 );
 create index if not exists products_user_idx on public.products (user_id);
+-- Embalaje con el que se envía una pieza; entra al precio "con envío".
+alter table public.products add column if not exists packaging_id uuid references public.packaging (id) on delete set null;
 
 create table if not exists public.print_jobs (
   id uuid primary key default gen_random_uuid(),
@@ -158,12 +175,26 @@ create table if not exists public.sales (
   shipping_cost numeric(12,2) not null default 0 check (shipping_cost >= 0),
   -- Costo de producción por pieza al momento de vender.
   unit_cost numeric(12,2) not null default 0 check (unit_cost >= 0),
-  profit numeric(12,2) generated always as (quantity * unit_price - fees - shipping_cost - quantity * unit_cost) stored,
+  -- Embalaje usado en esta venta (0 si no se envió).
+  packaging_cost numeric(12,2) not null default 0 check (packaging_cost >= 0),
+  profit numeric(12,2) generated always as (quantity * unit_price - fees - shipping_cost - packaging_cost - quantity * unit_cost) stored,
   notes text not null default '',
   sold_at timestamptz not null default now()
 );
 create index if not exists sales_user_idx on public.sales (user_id, sold_at desc);
 create index if not exists sales_sold_at_idx on public.sales (sold_at);
+
+-- Bases creadas antes del embalaje: agrega la columna y recalcula la ganancia con ella.
+do $
+begin
+  if not exists (select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'sales' and column_name = 'packaging_cost') then
+    alter table public.sales add column packaging_cost numeric(12,2) not null default 0 check (packaging_cost >= 0);
+    alter table public.sales drop column profit;
+    alter table public.sales add column profit numeric(12,2)
+      generated always as (quantity * unit_price - fees - shipping_cost - packaging_cost - quantity * unit_cost) stored;
+  end if;
+end $;
 
 create table if not exists public.maintenance (
   id uuid primary key default gen_random_uuid(),
@@ -219,7 +250,7 @@ declare
   t text;
 begin
   foreach t in array array['suppliers', 'printers', 'filaments', 'channels', 'products', 'print_jobs',
-                           'print_job_filaments', 'sales', 'maintenance', 'expenses'] loop
+                           'print_job_filaments', 'sales', 'maintenance', 'expenses', 'packaging'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists own_rows on public.%I', t);
     execute format(

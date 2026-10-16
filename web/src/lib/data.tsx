@@ -2,7 +2,7 @@
 
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from "react";
 import { supabase } from "./supabase";
-import type { Channel, Expense, Filament, Maintenance, PrintJob, Printer, Product, Profile, Sale, Supplier } from "./types";
+import type { Channel, Expense, Filament, Maintenance, Packaging, PrintJob, Printer, Product, Profile, Sale, Supplier } from "./types";
 
 // Web twin of mobile/src/store/data.tsx: same tables, same queries, same Supabase project.
 
@@ -17,6 +17,7 @@ type Tables = {
   sales: Sale[];
   maintenance: Maintenance[];
   expenses: Expense[];
+  packaging: Packaging[];
 };
 
 type DataState = Tables & {
@@ -37,6 +38,7 @@ const EMPTY: Tables = {
   sales: [],
   maintenance: [],
   expenses: [],
+  packaging: [],
 };
 
 /** History tables load their most recent rows; older ones stay in the database. */
@@ -54,7 +56,7 @@ type Loaded = { tables: Tables; error?: undefined } | { tables?: undefined; erro
 
 async function fetchTables(userId: string): Promise<Loaded> {
   const db = supabase();
-  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses] = await Promise.all([
+  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging] = await Promise.all([
     db.from("profiles").select("*").eq("id", userId).maybeSingle(),
     db.from("suppliers").select("*").order("name"),
     db.from("printers").select("*").order("name"),
@@ -69,9 +71,10 @@ async function fetchTables(userId: string): Promise<Loaded> {
     db.from("sales").select("*").order("sold_at", { ascending: false }).limit(HISTORY_LIMIT),
     db.from("maintenance").select("*").order("performed_at", { ascending: false }).limit(HISTORY_LIMIT),
     db.from("expenses").select("*").order("spent_at", { ascending: false }).limit(HISTORY_LIMIT),
+    db.from("packaging").select("*").order("name"),
   ]);
 
-  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses].find(
+  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging].find(
     (result) => result.error,
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
@@ -87,6 +90,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       sales: sales.data ?? [],
       maintenance: maintenance.data ?? [],
       expenses: expenses.data ?? [],
+      packaging: packaging.data ?? [],
     },
   };
 }

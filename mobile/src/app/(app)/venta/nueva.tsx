@@ -9,7 +9,7 @@ import { useData, useSave } from '@/store/data';
 
 export default function NewSaleScreen() {
   const { producto } = useLocalSearchParams<{ producto?: string }>();
-  const { products, channels, filaments, printers, profile } = useData();
+  const { products, channels, filaments, printers, profile, packaging } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [productId, setProductId] = useState<string | null>(producto ?? null);
@@ -19,7 +19,9 @@ export default function NewSaleScreen() {
   // Empty fields use the automatic value shown as placeholder.
   const [price, setPrice] = useState('');
   const [fees, setFees] = useState('');
+  const [delivery, setDelivery] = useState<'shipped' | 'pickup'>('shipped');
   const [shipping, setShipping] = useState('');
+  const [packagingCost, setPackagingCost] = useState('');
   const [customCost, setCustomCost] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -30,10 +32,14 @@ export default function NewSaleScreen() {
   const unitPrice = price === '' ? listPrice : num(price);
   const autoFees = channelFees(channel, unitPrice, pieces);
   const totalFees = fees === '' ? autoFees : num(fees);
-  const autoShipping = channel?.shipping_cost ?? 0;
-  const totalShipping = shipping === '' ? autoShipping : num(shipping);
+  const shipped = delivery === 'shipped';
+  const autoShipping = shipped ? (channel?.shipping_cost ?? 0) : 0;
+  const totalShipping = shipped && shipping !== '' ? num(shipping) : autoShipping;
+  // One package per sale, whatever the number of pieces.
+  const autoPackaging = shipped ? (packaging.find((item) => item.id === product?.packaging_id)?.cost ?? 0) : 0;
+  const totalPackaging = shipped && packagingCost !== '' ? num(packagingCost) : autoPackaging;
   const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0).total : num(customCost);
-  const profit = pieces * unitPrice - totalFees - totalShipping - pieces * unitCost;
+  const profit = pieces * unitPrice - totalFees - totalShipping - totalPackaging - pieces * unitCost;
 
   function submit() {
     const name = product?.name ?? customName.trim();
@@ -50,6 +56,7 @@ export default function NewSaleScreen() {
         unit_price: unitPrice,
         fees: totalFees,
         shipping_cost: totalShipping,
+        packaging_cost: totalPackaging,
         unit_cost: Math.round(unitCost * 100) / 100,
         notes: notes.trim(),
       }),
@@ -93,33 +100,48 @@ export default function NewSaleScreen() {
           placeholder={listPrice ? listPrice.toFixed(2) : '0'}
         />
       </Row>
-      <Row>
-        <Field
-          style={{ flex: 1 }}
-          label="Comisiones"
-          unit="$"
-          numeric
-          value={fees}
-          onChangeText={setFees}
-          placeholder={autoFees.toFixed(2)}
-        />
-        <Field
-          style={{ flex: 1 }}
-          label="Envío que pagaste"
-          unit="$"
-          numeric
-          value={shipping}
-          onChangeText={setShipping}
-          placeholder={autoShipping.toFixed(2)}
-        />
-      </Row>
-      <Muted>Comisión y envío salen del canal; escribe el dato real si la plataforma te cobró otra cosa.</Muted>
+      <Field label="Comisiones" unit="$" numeric value={fees} onChangeText={setFees} placeholder={autoFees.toFixed(2)} />
+      <Chips
+        label="Entrega"
+        options={[
+          { value: 'shipped', label: 'Con envío' },
+          { value: 'pickup', label: 'Sin envío' },
+        ]}
+        value={delivery}
+        onChange={setDelivery}
+      />
+      {shipped ? (
+        <Row>
+          <Field
+            style={{ flex: 1 }}
+            label="Envío que pagaste"
+            unit="$"
+            numeric
+            value={shipping}
+            onChangeText={setShipping}
+            placeholder={autoShipping.toFixed(2)}
+          />
+          <Field
+            style={{ flex: 1 }}
+            label="Embalaje"
+            unit="$"
+            numeric
+            value={packagingCost}
+            onChangeText={setPackagingCost}
+            placeholder={autoPackaging.toFixed(2)}
+          />
+        </Row>
+      ) : (
+        <Muted>Sin envío: el cliente recoge o paga su envío, así que no se descuenta envío ni embalaje.</Muted>
+      )}
+      <Muted>Los montos salen del canal y del embalaje del producto; escribe el dato real si te cobraron otra cosa.</Muted>
       <Field label="Notas" value={notes} onChangeText={setNotes} maxLength={200} placeholder="Número de pedido, cliente…" />
 
       <Card>
         <Line label={`${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
         <Line label="Comisiones" value={`− ${money(totalFees)}`} />
         <Line label="Envío" value={`− ${money(totalShipping)}`} />
+        <Line label="Embalaje" value={`− ${money(totalPackaging)}`} />
         <Line label={`Costo de producción (${money(unitCost)} c/u)`} value={`− ${money(pieces * unitCost)}`} />
         <Line strong label="Ganancia" value={money(profit)} />
       </Card>

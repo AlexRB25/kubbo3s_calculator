@@ -1,4 +1,4 @@
-import type { Channel, Filament, Printer, Product } from './types';
+import type { Channel, Filament, Packaging, Printer, Product } from './types';
 
 export type CostBreakdown = {
   filament: number;
@@ -37,16 +37,30 @@ export function channelFees(channel: Channel | undefined, unitPrice: number, qua
   return quantity * ((unitPrice * channel.commission_pct) / 100 + channel.fixed_fee);
 }
 
-/** What is left from selling one piece at `price` after commission, shipping and production. */
-export function unitProfit(price: number, cost: number, channel: Channel) {
-  return price - channelFees(channel, price) - channel.shipping_cost - cost;
+/**
+ * What sending one order costs the seller: the channel's shipping plus the product's packaging.
+ * Prices "sin envío" leave it out (the buyer picks up or pays shipping); "con envío" add it.
+ */
+export function shippingCost(channel: Channel, packaging: Packaging | undefined) {
+  return channel.shipping_cost + (packaging?.cost ?? 0);
 }
 
-/** Price that leaves `marginPct` percent of the cost as profit once the channel takes its cut. */
-export function suggestedPrice(cost: number, channel: Channel, marginPct: number) {
+/** What is left from selling one piece at `price` after commission, `shipping` and production. */
+export function unitProfit(price: number, cost: number, channel: Channel, shipping = 0) {
+  return price - channelFees(channel, price) - shipping - cost;
+}
+
+/** Price that leaves `marginPct` percent of the cost as profit once the channel and `shipping` are paid. */
+export function suggestedPrice(cost: number, channel: Channel, marginPct: number, shipping = 0) {
   const kept = 1 - channel.commission_pct / 100;
   if (kept <= 0) return 0;
-  return (cost * (1 + marginPct / 100) + channel.fixed_fee + channel.shipping_cost) / kept;
+  return (cost * (1 + marginPct / 100) + channel.fixed_fee + shipping) / kept;
+}
+
+/** "Caja chica · 20×15×10 cm"-style label: measures only when there are any. */
+export function packagingName(packaging: Packaging) {
+  const sizes = [packaging.length_mm, packaging.width_mm, packaging.height_mm].filter((value) => value > 0);
+  return sizes.length ? `${packaging.name} · ${sizes.map((value) => Math.round(value) / 10).join('×')} cm` : packaging.name;
 }
 
 export function filamentName(filament: Filament) {

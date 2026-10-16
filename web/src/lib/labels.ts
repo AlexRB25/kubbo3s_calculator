@@ -1,4 +1,11 @@
-import type { ExpenseCategory, MaintenanceKind } from './types';
+import type { ExpenseCategory, MaintenanceKind, PackagingKind } from './types';
+
+export const PACKAGING_KINDS: { value: PackagingKind; label: string }[] = [
+  { value: 'box', label: 'Caja' },
+  { value: 'envelope', label: 'Sobre' },
+  { value: 'bag', label: 'Bolsa / plástico' },
+  { value: 'other', label: 'Otro' },
+];
 
 export const MAINTENANCE_KINDS: { value: MaintenanceKind; label: string }[] = [
   { value: 'maintenance', label: 'Mantenimiento' },

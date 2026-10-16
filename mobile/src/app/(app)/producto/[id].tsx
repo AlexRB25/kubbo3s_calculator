@@ -4,18 +4,20 @@ import { Text, View } from 'react-native';
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Card, Empty, Heading, Line, Muted, Row, Screen } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
-import { channelFees, filamentName, productCost, suggestedPrice, unitProfit } from '@/lib/costs';
+import { channelFees, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
 import { duration, money, weight } from '@/lib/format';
 import { useData } from '@/store/data';
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { products, filaments, printers, channels, profile } = useData();
+  const { products, filaments, printers, channels, profile, packaging } = useData();
   const product = products.find((item) => item.id === id);
   if (!product) return <Empty icon="cube-outline" text="Este producto ya no existe." />;
 
   const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0);
   const machines = printers.filter((printer) => product.printer_ids.includes(printer.id));
+  const box = packaging.find((item) => item.id === product.packaging_id);
+  const margin = profile?.margin_pct ?? 0;
 
   return (
     <Screen>
@@ -57,32 +59,44 @@ export default function ProductScreen() {
         </Muted>
       </Card>
 
+      <Card>
+        <Line label={box ? `Embalaje: ${packagingName(box)}` : 'Sin embalaje asignado'} value={box ? money(box.cost) : '—'} />
+        <Muted>El embalaje y el envío del canal solo cuentan en las ventas con envío.</Muted>
+      </Card>
+
       <Heading>Venta por canal</Heading>
       {channels.map((channel) => {
         const price = product.prices[channel.id] ?? 0;
-        const suggested = suggestedPrice(cost.total, channel, profile?.margin_pct ?? 0);
+        const shipping = shippingCost(channel, box);
+        const suggested = `Sugerido: ${money(suggestedPrice(cost.total, channel, margin))} sin envío · ${money(suggestedPrice(cost.total, channel, margin, shipping))} con envío`;
         if (!price) {
           return (
             <Card key={channel.id}>
               <Line strong label={channel.name} value="Sin precio" />
-              <Line label={`Sugerido para ganar ${profile?.margin_pct ?? 0}% sobre el costo`} value={money(suggested)} />
+              <Muted>{suggested}</Muted>
             </Card>
           );
         }
-        const profit = unitProfit(price, cost.total, channel);
+        const withoutShipping = unitProfit(price, cost.total, channel);
+        const withShipping = unitProfit(price, cost.total, channel, shipping);
+        const profitLine = (label: string, profit: number) => (
+          <Row style={{ justifyContent: 'space-between' }}>
+            <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600' }}>{label}</Text>
+            <Text style={{ color: profit >= 0 ? Colors.money : Colors.danger, fontSize: 15, fontWeight: '700' }}>
+              {money(profit)} ({Math.round((profit / price) * 100)}%)
+            </Text>
+          </Row>
+        );
         return (
           <Card key={channel.id}>
             <Line strong label={channel.name} value={money(price)} />
             <Line label={`Comisión (${channel.commission_pct}%${channel.fixed_fee ? ` + ${money(channel.fixed_fee)}` : ''})`} value={`− ${money(channelFees(channel, price))}`} />
-            <Line label="Envío" value={`− ${money(channel.shipping_cost)}`} />
             <Line label="Costo de la pieza" value={`− ${money(cost.total)}`} />
-            <Row style={{ justifyContent: 'space-between' }}>
-              <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600' }}>Ganancia</Text>
-              <Text style={{ color: profit >= 0 ? Colors.money : Colors.danger, fontSize: 15, fontWeight: '700' }}>
-                {money(profit)} ({Math.round((profit / price) * 100)}%)
-              </Text>
-            </Row>
-            <Muted>Precio sugerido: {money(suggested)}</Muted>
+            {profitLine('Ganancia sin envío', withoutShipping)}
+            <Line label="Envío del canal" value={`− ${money(channel.shipping_cost)}`} />
+            <Line label="Embalaje" value={`− ${money(box?.cost ?? 0)}`} />
+            {profitLine('Ganancia con envío', withShipping)}
+            <Muted>{suggested}</Muted>
           </Card>
         );
       })}
