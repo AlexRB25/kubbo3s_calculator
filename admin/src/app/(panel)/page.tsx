@@ -3,7 +3,16 @@ import { BarChart } from "@/components/BarChart";
 import { count, kilos, percent, shortDay } from "@/lib/format";
 import { admin, must } from "@/lib/supabase/admin";
 
-type Overview = Record<string, number>;
+type Overview = Record<string, number> & { top_tool: string | null };
+
+const TOOL_NAMES: Record<string, string> = {
+  partir: "Partidor",
+  moldes: "Moldero",
+  galletas: "Galletero",
+  hueco: "Huequito",
+  alcancia: "Alcancía",
+  lampara: "Lámpara",
+};
 
 type Daily = {
   day: string;
@@ -96,6 +105,20 @@ export default async function MetricsPage({ searchParams }: PageProps<"/">) {
           label="Registraron una venta"
           value={percent(overview.users_with_sale, overview.users)}
           hint={`${count(overview.users_with_sale)} de ${count(overview.users)} usuarios`}
+        />
+      </section>
+
+      <h2>Herramientas 3D</h2>
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Stat label="Usos en 30 días" value={count(overview.tool_runs_30d)} hint={`${count(overview.tool_runs)} en total`} />
+        <Stat
+          label="Usuarios que las usaron"
+          value={count(overview.tool_users)}
+          hint={`${percent(overview.tool_users, overview.users)} de los registrados`}
+        />
+        <Stat
+          label="La más usada"
+          value={overview.top_tool ? (TOOL_NAMES[overview.top_tool] ?? overview.top_tool) : "—"}
         />
       </section>
 

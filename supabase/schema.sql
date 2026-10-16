@@ -472,6 +472,26 @@ create policy kubbo_products_own_folder on storage.objects for all to authentica
   using (bucket_id = 'products' and (storage.foldername(name))[1] = (select auth.uid())::text)
   with check (bucket_id = 'products' and (storage.foldername(name))[1] = (select auth.uid())::text);
 
+-- ───────────────────────── Herramientas 3D ─────────────────────────
+-- Cada vez que alguien usa una herramienta del sitio kubbo3d-tools (misma cuenta que la calculadora).
+
+create table if not exists public.tool_runs (
+  id bigint generated always as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  tool text not null check (char_length(tool) between 1 and 40),
+  created_at timestamptz not null default now()
+);
+create index if not exists tool_runs_created_at_idx on public.tool_runs (created_at);
+create index if not exists tool_runs_user_idx on public.tool_runs (user_id);
+
+alter table public.tool_runs enable row level security;
+revoke all on public.tool_runs from anon;
+revoke update, delete on public.tool_runs from authenticated;
+drop policy if exists tool_runs_insert_own on public.tool_runs;
+create policy tool_runs_insert_own on public.tool_runs for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists tool_runs_select_own on public.tool_runs;
+create policy tool_runs_select_own on public.tool_runs for select to authenticated using (user_id = (select auth.uid()));
+
 -- ───────────────────────── Dashboard (solo service_role) ─────────────────────────
 
 create or replace function public.admin_overview() returns jsonb
@@ -497,7 +517,11 @@ language sql stable set search_path = '' as $$
     'pieces_sold', (select coalesce(sum(quantity), 0) from public.sales),
     'expenses', (select count(*) from public.expenses),
     'maintenance', (select count(*) from public.maintenance),
-    'grams_printed', (select coalesce(sum(grams), 0) from public.print_job_filaments)
+    'grams_printed', (select coalesce(sum(grams), 0) from public.print_job_filaments),
+    'tool_runs', (select count(*) from public.tool_runs),
+    'tool_runs_30d', (select count(*) from public.tool_runs r where (r.created_at at time zone 'America/Mexico_City')::date > t.today - 30),
+    'tool_users', (select count(distinct user_id) from public.tool_runs),
+    'top_tool', (select r.tool from public.tool_runs r group by r.tool order by count(*) desc limit 1)
   )
   from t
 $$;
@@ -545,7 +569,8 @@ select
   (select count(*) from public.filaments x where x.user_id = p.id) as filaments,
   (select count(*) from public.print_jobs x where x.user_id = p.id) as print_jobs,
   (select count(*) from public.sales x where x.user_id = p.id) as sales,
-  (select coalesce(sum(x.grams), 0) from public.print_job_filaments x where x.user_id = p.id) as grams_printed
+  (select coalesce(sum(x.grams), 0) from public.print_job_filaments x where x.user_id = p.id) as grams_printed,
+  (select count(*) from public.tool_runs x where x.user_id = p.id) as tool_runs
 from public.profiles p;
 
 revoke all on public.admin_users from anon, authenticated;

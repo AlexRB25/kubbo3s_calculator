@@ -15,6 +15,7 @@ type User = {
   print_jobs: number;
   sales: number;
   grams_printed: number;
+  tool_runs: number;
 };
 
 const ORDERS = {
@@ -23,6 +24,7 @@ const ORDERS = {
   activos: { column: "active_days_30", label: "Más días activos" },
   impresiones: { column: "print_jobs", label: "Más impresiones" },
   ventas: { column: "sales", label: "Más ventas" },
+  herramientas: { column: "tool_runs", label: "Más uso de herramientas 3D" },
 } as const;
 
 export default async function UsersPage({ searchParams }: PageProps<"/usuarios">) {
@@ -75,6 +77,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/usuarios">
               <th className="num">Impresiones</th>
               <th className="num">Filamento impreso</th>
               <th className="num">Ventas</th>
+              <th className="num">Herramientas 3D</th>
             </tr>
           </thead>
           <tbody>
@@ -98,11 +101,12 @@ export default async function UsersPage({ searchParams }: PageProps<"/usuarios">
                 <td className="num">{count(user.print_jobs)}</td>
                 <td className="num">{kilos(user.grams_printed)}</td>
                 <td className="num">{count(user.sales)}</td>
+                <td className="num">{count(user.tool_runs)}</td>
               </tr>
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-muted">
+                <td colSpan={10} className="text-muted">
                   {query ? "No hay usuarios con esa búsqueda." : "Todavía no se registra nadie."}
                 </td>
               </tr>
