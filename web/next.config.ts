@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   env: {
     PB_SUPABASE_URL: process.env.PB_SUPABASE_URL ?? "",
     PB_SUPABASE_PUBLISHABLE_KEY: process.env.PB_SUPABASE_PUBLISHABLE_KEY ?? "",
+    PB_COOKIE_DOMAIN: process.env.PB_COOKIE_DOMAIN ?? "",
   },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" }],

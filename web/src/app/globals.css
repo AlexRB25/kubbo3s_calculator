@@ -20,11 +20,14 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-h1 {
-  @apply text-2xl font-bold tracking-tight;
-}
-h2 {
-  @apply text-lg font-semibold;
+/* In the base layer, so size utilities on a heading (text-4xl…) still win. */
+@layer base {
+  h1 {
+    @apply text-2xl font-bold tracking-tight;
+  }
+  h2 {
+    @apply text-lg font-semibold;
+  }
 }
 
 /* The soft teal halo of the logo, behind hero sections. */

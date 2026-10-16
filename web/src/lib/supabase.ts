@@ -10,7 +10,10 @@ let browser: SupabaseClient | undefined;
 
 /** Client for the browser: carries the signed-in user's session, so RLS shows only their rows. */
 export function supabase(): SupabaseClient {
-  return (browser ??= createBrowserClient(url || "https://sin-configurar.supabase.co", key || "sin-configurar"));
+  return (browser ??= createBrowserClient(url || "https://sin-configurar.supabase.co", key || "sin-configurar", {
+    // With a shared parent domain (e.g. ".kubbo3d.com") one sign-in works on every Kubbo3D site.
+    cookieOptions: process.env.PB_COOKIE_DOMAIN ? { domain: process.env.PB_COOKIE_DOMAIN } : undefined,
+  }));
 }
 
 /** Sessionless client for Server Components: reads only what the store publishes to everyone. */
