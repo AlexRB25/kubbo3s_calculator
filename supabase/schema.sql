@@ -202,7 +202,7 @@ create index if not exists sales_user_idx on public.sales (user_id, sold_at desc
 create index if not exists sales_sold_at_idx on public.sales (sold_at);
 
 -- Bases creadas antes del embalaje: agrega la columna y recalcula la ganancia con ella.
-do $
+do $$
 begin
   if not exists (select 1 from information_schema.columns
                  where table_schema = 'public' and table_name = 'sales' and column_name = 'packaging_cost') then
@@ -211,7 +211,7 @@ begin
     alter table public.sales add column profit numeric(12,2)
       generated always as (quantity * unit_price - fees - shipping_cost - packaging_cost - quantity * unit_cost) stored;
   end if;
-end $;
+end $$;
 
 create table if not exists public.maintenance (
   id uuid primary key default gen_random_uuid(),
