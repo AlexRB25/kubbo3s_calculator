@@ -51,6 +51,8 @@ navegador se llaman `PB_*` y están declaradas en el `env` de cada `next.config.
   caja* (ventas − comisiones y envíos − gastos pagados ese mes).
 - **Impresoras.** Historial de mantenimientos, ajustes y reparaciones; con costo también quedan como gasto.
 
+- **Mis archivos** (`/app/archivos`): modelos 3D e imágenes del usuario en un bucket privado (`user-files`), compartidos con las herramientas 3D (`kubbo3d-tools`).
+
 Las existencias las mueven triggers de la base de datos, no los clientes, así que app y web no se descuadran.
 
 ## La tienda

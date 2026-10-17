@@ -105,6 +105,23 @@ create table if not exists public.packaging (
 );
 create index if not exists packaging_user_idx on public.packaging (user_id);
 
+-- Mis archivos: modelos 3D (STL, OBJ, 3MF) e imágenes que cada usuario subió en las herramientas o en
+-- la calculadora, para volver a usarlos sin buscarlos en su computadora. Los archivos viven en el
+-- bucket privado "user-files".
+create table if not exists public.user_files (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 200),
+  -- Ruta dentro del bucket: <user_id>/<uuid>-<nombre>.
+  path text not null unique,
+  size bigint not null default 0 check (size >= 0),
+  kind text not null default 'other' check (kind in ('model', 'image', 'other')),
+  -- Dónde se subió: 'tools' o 'calculator'.
+  app text not null default 'tools' check (app in ('tools', 'calculator')),
+  created_at timestamptz not null default now()
+);
+create index if not exists user_files_user_idx on public.user_files (user_id, created_at desc);
+
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
@@ -250,7 +267,7 @@ declare
   t text;
 begin
   foreach t in array array['suppliers', 'printers', 'filaments', 'channels', 'products', 'print_jobs',
-                           'print_job_filaments', 'sales', 'maintenance', 'expenses', 'packaging'] loop
+                           'print_job_filaments', 'sales', 'maintenance', 'expenses', 'packaging', 'user_files'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists own_rows on public.%I', t);
     execute format(
@@ -471,6 +488,15 @@ drop policy if exists kubbo_products_own_folder on storage.objects;
 create policy kubbo_products_own_folder on storage.objects for all to authenticated
   using (bucket_id = 'products' and (storage.foldername(name))[1] = (select auth.uid())::text)
   with check (bucket_id = 'products' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- Mis archivos: bucket privado, cada usuario solo lee y escribe en su carpeta <user_id>/.
+insert into storage.buckets (id, name, public) values ('user-files', 'user-files', false)
+on conflict (id) do nothing;
+
+drop policy if exists kubbo_user_files_own_folder on storage.objects;
+create policy kubbo_user_files_own_folder on storage.objects for all to authenticated
+  using (bucket_id = 'user-files' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'user-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
 
 -- ───────────────────────── Herramientas 3D ─────────────────────────
 -- Cada vez que alguien usa una herramienta del sitio kubbo3d-tools (misma cuenta que la calculadora).
