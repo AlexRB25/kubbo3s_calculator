@@ -789,3 +789,154 @@ create or replace trigger store_order_status_moves_stock
 -- Fotos de la tienda: bucket público; solo el dashboard (clave secreta) puede subir.
 insert into storage.buckets (id, name, public) values ('store', 'store', true)
 on conflict (id) do nothing;
+-- ───────────────────────── Planes y suscripciones ─────────────────────────
+-- Los planes se cobran con Mercado Pago (suscripción mensual) desde la landing. Los límites se revisan
+-- aquí mismo, en la base de datos, así valen igual en la calculadora web, la app y las herramientas.
+
+create table if not exists public.plans (
+  id text primary key,
+  name text not null,
+  -- Precio que se anuncia, en dólares. Mercado Pago cobra en pesos: la landing lo convierte.
+  price_usd numeric(10,2) not null default 0 check (price_usd >= 0),
+  tagline text not null default '',
+  sort int not null default 0,
+  -- Límites; vacío (null) = sin límite.
+  max_products int check (max_products >= 0),
+  max_printers int check (max_printers >= 0),
+  tool_runs_month int check (tool_runs_month >= 0),
+  storage_mb int check (storage_mb >= 0),
+  -- Descargas con colores (3MF/OBJ) en las herramientas.
+  color_export boolean not null default false,
+  -- Lo que se lista en la tarjeta del plan, además de los límites.
+  features text[] not null default '{}',
+  highlighted boolean not null default false,
+  active boolean not null default true
+);
+
+-- Solo se insertan si no existen: lo que cambies después en Supabase no se pisa al volver a correr esto.
+insert into public.plans (id, name, price_usd, tagline, sort, max_products, max_printers, tool_runs_month, storage_mb, color_export, features, highlighted)
+values
+  ('free', 'Gratis', 0, 'Para probar y para tu primer impresora', 0, 15, 2, 10, 500, false,
+    array['Calculadora en la web y en la app', 'Costos, precios por canal y ganancias', 'Todas las herramientas 3D', 'Soporte por correo'], false),
+  ('maker', 'Maker', 25, 'Para quien ya vende sus piezas', 1, 150, 5, 150, 5120, true,
+    array['Todo lo de Gratis', 'Inventario de filamento y productos', 'Ventas, gastos y mantenimiento', 'Descargas con colores para tu laminador'], false),
+  ('taller', 'Taller', 49, 'Para un taller con varias impresoras', 2, null, 15, 600, 20480, true,
+    array['Todo lo de Maker', 'Soporte prioritario'], true),
+  ('fabrica', 'Fábrica', 99, 'Para una granja de impresoras', 3, null, null, null, 102400, true,
+    array['Todo lo de Taller', 'Soporte por WhatsApp', 'Una sesión de configuración de tu cuenta'], false)
+on conflict (id) do nothing;
+
+alter table public.plans enable row level security;
+revoke insert, update, delete on public.plans from anon, authenticated;
+drop policy if exists plans_read on public.plans;
+create policy plans_read on public.plans for select to anon, authenticated using (active);
+
+create table if not exists public.subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  plan_id text not null references public.plans (id),
+  -- La suscripción ("preapproval") en Mercado Pago.
+  mp_preapproval_id text not null unique,
+  status text not null default 'pending' check (status in ('pending', 'authorized', 'paused', 'cancelled')),
+  amount numeric(12,2) not null default 0,
+  currency text not null default 'MXN',
+  payer_email text not null default '',
+  -- Hasta cuándo está pagado: al cancelar, el plan sigue hasta esta fecha.
+  paid_until timestamptz,
+  next_payment_date timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists subscriptions_user_idx on public.subscriptions (user_id, created_at desc);
+
+-- Solo la landing (con la llave secreta) escribe aquí, a partir de lo que dice Mercado Pago.
+alter table public.subscriptions enable row level security;
+revoke all on public.subscriptions from anon;
+revoke insert, update, delete on public.subscriptions from authenticated;
+drop policy if exists subscriptions_own on public.subscriptions;
+create policy subscriptions_own on public.subscriptions for select to authenticated using (user_id = (select auth.uid()));
+
+-- El plan vigente de un usuario: el de su suscripción activa (o pagada hasta hoy), si no, Gratis.
+create or replace function public.plan_of(uid uuid) returns public.plans
+language sql stable security definer set search_path = public as $$
+  select p.* from public.plans p
+  where p.id = coalesce(
+    (select s.plan_id from public.subscriptions s
+      where s.user_id = uid and (s.status = 'authorized' or s.paid_until > now())
+      order by s.created_at desc limit 1),
+    'free');
+$$;
+revoke execute on function public.plan_of(uuid) from public, anon, authenticated;
+
+-- Productos, impresoras y archivos de más se rechazan con un mensaje para el usuario.
+create or replace function public.enforce_plan_limits() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  plan public.plans;
+  used bigint;
+  cap int;
+  what text;
+begin
+  plan := public.plan_of(new.user_id);
+  if plan.id is null then
+    return new;
+  end if;
+  if tg_table_name = 'user_files' then
+    if plan.storage_mb is not null
+      and (select coalesce(sum(size), 0) from public.user_files where user_id = new.user_id) + new.size > plan.storage_mb::bigint * 1048576 then
+      raise exception using errcode = 'P0001', message = format(
+        'Tu plan %s incluye %s MB en Mis archivos y este archivo ya no cabe. Borra archivos que no uses o mejora tu plan en la página de precios de Kubbo3D.',
+        plan.name, plan.storage_mb);
+    end if;
+    return new;
+  end if;
+  if tg_table_name = 'products' then
+    cap := plan.max_products;
+    what := 'productos';
+    if cap is not null then
+      select count(*) into used from public.products where user_id = new.user_id;
+    end if;
+  else
+    cap := plan.max_printers;
+    what := 'impresoras';
+    if cap is not null then
+      select count(*) into used from public.printers where user_id = new.user_id;
+    end if;
+  end if;
+  if cap is not null and used >= cap then
+    raise exception using errcode = 'P0001', message = format(
+      'Tu plan %s permite hasta %s %s. Mejora tu plan en la página de precios de Kubbo3D para agregar más.', plan.name, cap, what);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists products_plan_limit on public.products;
+create trigger products_plan_limit before insert on public.products for each row execute function public.enforce_plan_limits();
+drop trigger if exists printers_plan_limit on public.printers;
+create trigger printers_plan_limit before insert on public.printers for each row execute function public.enforce_plan_limits();
+drop trigger if exists user_files_plan_limit on public.user_files;
+create trigger user_files_plan_limit before insert on public.user_files for each row execute function public.enforce_plan_limits();
+
+-- Plan, suscripción y uso del usuario que llama: para "Mi plan" y para revisar antes de usar una herramienta.
+create or replace function public.my_plan() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'plan', to_jsonb(p),
+    'subscription', (
+      select to_jsonb(s) - 'user_id' from public.subscriptions s
+      where s.user_id = auth.uid() and s.status <> 'pending'
+      order by s.created_at desc limit 1),
+    'usage', jsonb_build_object(
+      'products', (select count(*) from public.products where user_id = auth.uid()),
+      'printers', (select count(*) from public.printers where user_id = auth.uid()),
+      'tool_runs_month', (
+        select count(*) from public.tool_runs
+        where user_id = auth.uid()
+          and created_at >= (date_trunc('month', now() at time zone 'America/Mexico_City') at time zone 'America/Mexico_City')),
+      'storage_mb', round((select coalesce(sum(size), 0) from public.user_files where user_id = auth.uid()) / 1048576.0, 1)))
+  from public.plan_of(auth.uid()) p
+  where auth.uid() is not null;
+$$;
+revoke execute on function public.my_plan() from public, anon;
+grant execute on function public.my_plan() to authenticated;
