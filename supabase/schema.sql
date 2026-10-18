@@ -121,6 +121,8 @@ create table if not exists public.user_files (
   created_at timestamptz not null default now()
 );
 create index if not exists user_files_user_idx on public.user_files (user_id, created_at desc);
+-- Vista previa de los modelos 3D (una imagen chica en el mismo bucket, carpeta thumbs/).
+alter table public.user_files add column if not exists thumb_path text;
 
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
