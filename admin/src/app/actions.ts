@@ -101,6 +101,21 @@ export async function saveOrder(form: FormData) {
   revalidatePath("/pedidos");
 }
 
+const REPORT_STATUSES = ["new", "reviewing", "fixed", "dismissed"];
+
+export async function saveBugReport(form: FormData) {
+  await requireAdmin();
+  const status = text(form, "status");
+  if (!REPORT_STATUSES.includes(status)) throw new Error("Estado no válido.");
+  must(
+    await admin()
+      .from("bug_reports")
+      .update({ status, admin_note: text(form, "admin_note"), updated_at: new Date().toISOString() })
+      .eq("id", text(form, "id")),
+  );
+  revalidatePath("/reportes");
+}
+
 export async function saveStoreSettings(form: FormData) {
   await requireAdmin();
   must(

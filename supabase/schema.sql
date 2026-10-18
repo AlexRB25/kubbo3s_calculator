@@ -940,3 +940,57 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.my_plan() from public, anon;
 grant execute on function public.my_plan() to authenticated;
+
+-- ───────────────────────── Reportes de problemas ─────────────────────────
+-- El botón "Reportar un problema" de las herramientas (y después de los otros sitios) guarda aquí lo que
+-- escribe el usuario más el contexto de lo que estaba haciendo. Solo el panel admin los lee.
+
+create table if not exists public.bug_reports (
+  id uuid primary key default gen_random_uuid(),
+  number bigint generated always as identity,
+  user_id uuid default auth.uid() references auth.users (id) on delete set null,
+  email text not null default '' check (char_length(email) <= 200),
+  app text not null default 'tools' check (app in ('tools', 'calculator', 'landing', 'mobile')),
+  -- Página donde estaba (por ejemplo /partir).
+  page text not null default '' check (char_length(page) <= 300),
+  message text not null check (char_length(message) between 5 and 5000),
+  -- Herramienta, archivo, ajustes, último error, navegador…
+  context jsonb not null default '{}',
+  -- Captura opcional, en el bucket privado bug-reports.
+  screenshot_path text,
+  status text not null default 'new' check (status in ('new', 'reviewing', 'fixed', 'dismissed')),
+  admin_note text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists bug_reports_created_idx on public.bug_reports (created_at desc);
+create index if not exists bug_reports_status_idx on public.bug_reports (status, created_at desc);
+
+alter table public.bug_reports enable row level security;
+revoke all on public.bug_reports from anon;
+revoke update, delete on public.bug_reports from authenticated;
+drop policy if exists bug_reports_insert_own on public.bug_reports;
+create policy bug_reports_insert_own on public.bug_reports for insert to authenticated
+  with check (user_id = (select auth.uid()) and status = 'new' and admin_note = '');
+drop policy if exists bug_reports_select_own on public.bug_reports;
+create policy bug_reports_select_own on public.bug_reports for select to authenticated using (user_id = (select auth.uid()));
+
+-- Hasta 10 reportes por hora por persona, para que nadie llene la bandeja por error (o a propósito).
+create or replace function public.bug_reports_rate_limit() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.bug_reports where user_id = new.user_id and created_at > now() - interval '1 hour') >= 10 then
+    raise exception using errcode = 'P0001', message = 'Ya enviaste varios reportes en la última hora. Espera un poco antes de mandar otro.';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists bug_reports_rate_limit on public.bug_reports;
+create trigger bug_reports_rate_limit before insert on public.bug_reports for each row execute function public.bug_reports_rate_limit();
+
+-- Capturas: cada quien sube a su carpeta; nadie más que el panel admin (llave secreta) las ve.
+insert into storage.buckets (id, name, public) values ('bug-reports', 'bug-reports', false)
+on conflict (id) do nothing;
+drop policy if exists kubbo_bug_reports_upload on storage.objects;
+create policy kubbo_bug_reports_upload on storage.objects for insert to authenticated
+  with check (bucket_id = 'bug-reports' and (storage.foldername(name))[1] = (select auth.uid())::text);

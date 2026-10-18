@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/", label: "Métricas" },
   { href: "/usuarios", label: "Usuarios" },
   { href: "/pedidos", label: "Pedidos" },
+  { href: "/reportes", label: "Reportes de problemas" },
   { href: "/tienda", label: "Tienda: productos" },
   { href: "/ajustes", label: "Tienda: ajustes" },
 ];
@@ -21,6 +22,7 @@ export default async function PanelLayout({ children }: LayoutProps<"/">) {
     .from("store_orders")
     .select("id", { count: "exact", head: true })
     .eq("status", "pending");
+  const { count: newReports } = await admin().from("bug_reports").select("id", { count: "exact", head: true }).eq("status", "new");
 
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col md:flex-row">
@@ -39,6 +41,9 @@ export default async function PanelLayout({ children }: LayoutProps<"/">) {
               {link.label}
               {link.href === "/pedidos" && !!pending && (
                 <span className="rounded-full bg-warn px-2 text-xs font-bold text-ink">{pending}</span>
+              )}
+              {link.href === "/reportes" && !!newReports && (
+                <span className="rounded-full bg-warn px-2 text-xs font-bold text-ink">{newReports}</span>
               )}
             </Link>
           ))}
