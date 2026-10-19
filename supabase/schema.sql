@@ -384,10 +384,12 @@ create or replace trigger sale_moves_stock
   after insert or update or delete on public.sales
   for each row execute function public.sale_moves_stock();
 
--- Compra de filamento: suma gramos y recalcula el costo por kilo como promedio ponderado
--- entre lo que quedaba y lo que se compró.
+-- Compra de filamento: suma los gramos y recalcula el costo real por gramo con todas las compras
+-- (total pagado ÷ gramos comprados). El costo por kg que escribe el usuario queda como referencia.
 create or replace function public.expense_moves_filament() returns trigger
 language plpgsql set search_path = '' as $$
+declare
+  touched uuid[] := '{}';
 begin
   if tg_op = 'UPDATE'
      and (old.filament_id, old.grams, old.amount) is not distinct from (new.filament_id, new.grams, new.amount) then
@@ -395,13 +397,16 @@ begin
   end if;
   if tg_op <> 'INSERT' and old.filament_id is not null and old.grams is not null then
     update public.filaments set stock_g = stock_g - old.grams where id = old.filament_id;
+    touched := touched || old.filament_id;
   end if;
   if tg_op <> 'DELETE' and new.filament_id is not null and new.grams is not null then
-    update public.filaments set
-      cost_per_kg = round((greatest(stock_g, 0) * cost_per_kg + new.amount * 1000) / (greatest(stock_g, 0) + new.grams), 2),
-      stock_g = stock_g + new.grams
-    where id = new.filament_id;
+    update public.filaments set stock_g = stock_g + new.grams where id = new.filament_id;
+    touched := touched || new.filament_id;
   end if;
+  update public.filaments f set avg_cost_per_g = coalesce((
+      select sum(e.amount) / nullif(sum(e.grams), 0) from public.expenses e where e.filament_id = f.id and e.grams is not null
+    ), 0)
+  where f.id = any(touched);
   return null;
 end $$;
 
@@ -996,3 +1001,230 @@ on conflict (id) do nothing;
 drop policy if exists kubbo_bug_reports_upload on storage.objects;
 create policy kubbo_bug_reports_upload on storage.objects for insert to authenticated
   with check (bucket_id = 'bug-reports' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- ───────────────────────── Inventario ─────────────────────────
+-- Materia prima (filamento y otros materiales) y productos terminados. Las existencias se mueven
+-- solas: compras (gastos), impresiones, ventas y ajustes de conteo.
+
+-- Otros materiales además del filamento: resina, imanes, tornillos, pintura… con su unidad.
+create table if not exists public.materials (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 120),
+  category text not null default '',
+  unit text not null default 'pza' check (unit in ('g', 'ml', 'pza')),
+  -- Lo mantienen las compras y los ajustes.
+  stock numeric(14,3) not null default 0,
+  -- Costo promedio por unidad (por gramo, mililitro o pieza).
+  cost_per_unit numeric(14,4) not null default 0 check (cost_per_unit >= 0),
+  low_stock numeric(14,3) not null default 0 check (low_stock >= 0),
+  supplier_id uuid references public.suppliers (id) on delete set null,
+  notes text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists materials_user_idx on public.materials (user_id);
+alter table public.materials enable row level security;
+drop policy if exists own_rows on public.materials;
+create policy own_rows on public.materials for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- La compra de un material es un gasto (como la del filamento) que suma existencia.
+alter table public.expenses add column if not exists material_id uuid references public.materials (id) on delete set null;
+alter table public.expenses add column if not exists quantity numeric(14,3) check (quantity > 0);
+
+-- Costo real por gramo / unidad: total pagado ÷ cantidad comprada en todas las compras. El costo que
+-- escribe el usuario (cost_per_kg, cost_per_unit) es su referencia de lo que normalmente cuesta.
+alter table public.filaments add column if not exists avg_cost_per_g numeric(14,6) not null default 0;
+alter table public.materials add column if not exists avg_cost_per_unit numeric(14,6) not null default 0;
+update public.filaments f set avg_cost_per_g = coalesce((
+    select sum(e.amount) / nullif(sum(e.grams), 0) from public.expenses e where e.filament_id = f.id and e.grams is not null
+  ), 0);
+update public.materials m set avg_cost_per_unit = coalesce((
+    select sum(e.amount) / nullif(sum(e.quantity), 0) from public.expenses e where e.material_id = m.id and e.quantity is not null
+  ), 0);
+do $$
+begin
+  alter table public.expenses drop constraint if exists expenses_category_check;
+  alter table public.expenses add constraint expenses_category_check
+    check (category in ('filament', 'material', 'parts', 'electricity', 'shipping', 'packaging', 'maintenance', 'other'));
+end $$;
+
+-- Compra de material: suma la cantidad y recalcula el costo real por unidad con todas las compras.
+create or replace function public.expense_moves_material() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  touched uuid[] := '{}';
+begin
+  if tg_op = 'UPDATE'
+     and (old.material_id, old.quantity, old.amount) is not distinct from (new.material_id, new.quantity, new.amount) then
+    return null;
+  end if;
+  if tg_op <> 'INSERT' and old.material_id is not null and old.quantity is not null then
+    update public.materials set stock = stock - old.quantity where id = old.material_id;
+    touched := touched || old.material_id;
+  end if;
+  if tg_op <> 'DELETE' and new.material_id is not null and new.quantity is not null then
+    update public.materials set stock = stock + new.quantity where id = new.material_id;
+    touched := touched || new.material_id;
+  end if;
+  update public.materials m set avg_cost_per_unit = coalesce((
+      select sum(e.amount) / nullif(sum(e.quantity), 0) from public.expenses e where e.material_id = m.id and e.quantity is not null
+    ), 0)
+  where m.id = any(touched);
+  return null;
+end $$;
+
+create or replace trigger expense_moves_material
+  after insert or update or delete on public.expenses
+  for each row execute function public.expense_moves_material();
+
+-- Ajustes de conteo: lo que se corrige a mano en cualquier existencia (positivo entra, negativo sale).
+create table if not exists public.inventory_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  item_type text not null check (item_type in ('filament', 'material', 'product')),
+  item_id uuid not null,
+  delta numeric(14,3) not null check (delta <> 0),
+  note text not null default '',
+  moved_at date not null default current_date,
+  created_at timestamptz not null default now()
+);
+create index if not exists inventory_adjustments_item_idx on public.inventory_adjustments (user_id, item_type, item_id);
+alter table public.inventory_adjustments enable row level security;
+drop policy if exists own_rows on public.inventory_adjustments;
+create policy own_rows on public.inventory_adjustments for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+create or replace function public.apply_adjustment(kind text, item uuid, change numeric) returns void
+language plpgsql set search_path = '' as $$
+begin
+  if kind = 'filament' then
+    update public.filaments set stock_g = stock_g + change where id = item;
+  elsif kind = 'material' then
+    update public.materials set stock = stock + change where id = item;
+  else
+    if change <> trunc(change) then
+      raise exception using errcode = 'P0001', message = 'Los productos se cuentan en piezas enteras.';
+    end if;
+    update public.products set stock = stock + change::int where id = item;
+  end if;
+end $$;
+revoke execute on function public.apply_adjustment(text, uuid, numeric) from public, anon;
+grant execute on function public.apply_adjustment(text, uuid, numeric) to authenticated;
+
+create or replace function public.adjustment_moves_stock() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if tg_op <> 'INSERT' then
+    perform public.apply_adjustment(old.item_type, old.item_id, -old.delta);
+  end if;
+  if tg_op <> 'DELETE' then
+    perform public.apply_adjustment(new.item_type, new.item_id, new.delta);
+  end if;
+  return null;
+end $$;
+
+create or replace trigger adjustment_moves_stock
+  after insert or update or delete on public.inventory_adjustments
+  for each row execute function public.adjustment_moves_stock();
+
+-- Todos los movimientos de existencias en un solo lugar (se arma con lo que ya está registrado).
+-- Cantidad con signo: gramos de filamento, unidades del material o piezas del producto.
+create or replace view public.inventory_moves with (security_invoker = true) as
+  select e.id, 'filament'::text as item_type, e.filament_id as item_id, 'purchase'::text as kind,
+         e.grams as quantity, e.amount as total, e.spent_at::timestamptz as moved_at, e.note, e.supplier_id
+    from public.expenses e where e.filament_id is not null and e.grams is not null
+  union all
+  select e.id, 'material', e.material_id, 'purchase', e.quantity, e.amount, e.spent_at::timestamptz, e.note, e.supplier_id
+    from public.expenses e where e.material_id is not null and e.quantity is not null
+  union all
+  select f.id, 'filament', f.filament_id, 'print', -f.grams, f.cost, j.created_at, j.product_name, null
+    from public.print_job_filaments f join public.print_jobs j on j.id = f.job_id where f.filament_id is not null
+  union all
+  select j.id, 'product', j.product_id, 'production', j.good_quantity, null, coalesce(j.finished_at, j.created_at), j.notes, null
+    from public.print_jobs j where j.product_id is not null and j.good_quantity > 0
+  union all
+  select s.id, 'product', s.product_id, 'sale', -s.quantity, s.quantity * s.unit_price, s.sold_at, s.channel_name, null
+    from public.sales s where s.product_id is not null
+  union all
+  select a.id, a.item_type, a.item_id, 'adjustment', a.delta, null, a.moved_at::timestamptz, a.note, null
+    from public.inventory_adjustments a;
+revoke all on public.inventory_moves from anon;
+grant select on public.inventory_moves to authenticated;
+
+-- ───────────────────────── Arqueo: la existencia solo cambia con movimientos ─────────────────────────
+-- Compras, impresiones, ventas y arqueos (inventory_adjustments) mueven la existencia desde sus
+-- triggers. Un cambio directo (desde un formulario de editar) se rechaza: para corregir se arquea,
+-- y el arqueo queda en el historial.
+
+create or replace function public.stock_only_by_moves() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  -- Dentro de otro trigger (una compra, una impresión, un arqueo…) sí se permite.
+  if pg_trigger_depth() > 1 then
+    return new;
+  end if;
+  if tg_table_name = 'filaments' then
+    if new.stock_g is distinct from old.stock_g then
+      raise exception using errcode = 'P0001',
+        message = 'La existencia solo cambia con compras, impresiones o un arqueo. Usa «Arquear» para corregirla.';
+    end if;
+  elsif new.stock is distinct from old.stock then
+    raise exception using errcode = 'P0001',
+      message = 'La existencia solo cambia con compras, impresiones, ventas o un arqueo. Usa «Arquear» para corregirla.';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists filaments_stock_only_by_moves on public.filaments;
+create trigger filaments_stock_only_by_moves before update on public.filaments
+  for each row execute function public.stock_only_by_moves();
+drop trigger if exists materials_stock_only_by_moves on public.materials;
+create trigger materials_stock_only_by_moves before update on public.materials
+  for each row execute function public.stock_only_by_moves();
+drop trigger if exists products_stock_only_by_moves on public.products;
+create trigger products_stock_only_by_moves before update on public.products
+  for each row execute function public.stock_only_by_moves();
+
+-- Lo que ya se tenía al dar de alta un filamento, material o producto entra como un primer arqueo
+-- ("Existencia inicial"), así aparece en el historial.
+create or replace function public.initial_stock_as_count() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  initial numeric;
+  kind text;
+begin
+  if tg_table_name = 'filaments' then
+    initial := new.stock_g;
+    kind := 'filament';
+  elsif tg_table_name = 'materials' then
+    initial := new.stock;
+    kind := 'material';
+  else
+    initial := new.stock;
+    kind := 'product';
+  end if;
+  if coalesce(initial, 0) = 0 then
+    return null;
+  end if;
+  if kind = 'filament' then
+    update public.filaments set stock_g = 0 where id = new.id;
+  elsif kind = 'material' then
+    update public.materials set stock = 0 where id = new.id;
+  else
+    update public.products set stock = 0 where id = new.id;
+  end if;
+  insert into public.inventory_adjustments (user_id, item_type, item_id, delta, note)
+  values (new.user_id, kind, new.id, initial, 'Existencia inicial');
+  return null;
+end $$;
+
+drop trigger if exists filaments_initial_stock on public.filaments;
+create trigger filaments_initial_stock after insert on public.filaments
+  for each row execute function public.initial_stock_as_count();
+drop trigger if exists materials_initial_stock on public.materials;
+create trigger materials_initial_stock after insert on public.materials
+  for each row execute function public.initial_stock_as_count();
+drop trigger if exists products_initial_stock on public.products;
+create trigger products_initial_stock after insert on public.products
+  for each row execute function public.initial_stock_as_count();

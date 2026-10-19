@@ -2,9 +2,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Chips, confirmDelete, ErrorText, Field, Row, Screen, Select } from '@/components/ui';
+import { Button, Card, Chips, confirmDelete, ErrorText, Field, Line, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { field, num } from '@/lib/format';
+import { field, num, weight } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
 
@@ -42,8 +42,8 @@ export default function FilamentFormScreen() {
       cost_per_kg: num(costPerKg),
       low_stock_g: num(lowStock),
       notes: notes.trim(),
-      // Prints and purchases move the stock on the server; send it only when it was corrected here.
-      ...(filament && num(stock) === filament.stock_g ? {} : { stock_g: num(stock) }),
+      // Stock is typed only for a new filament; later purchases, prints and arqueos move it.
+      ...(filament ? {} : { stock_g: num(stock) }),
     };
     save(() => (filament ? supabase.from('filaments').update(row).eq('id', filament.id) : supabase.from('filaments').insert(row)));
   }
@@ -82,18 +82,28 @@ export default function FilamentFormScreen() {
         </View>
       </View>
 
-      <Row>
-        <Field
-          style={{ flex: 1 }}
-          label="En existencia"
-          unit="g"
-          numeric
-          value={stock}
-          onChangeText={setStock}
-          placeholder="1000"
-        />
-        <Field style={{ flex: 1 }} label="Costo por kg" unit="$" numeric value={costPerKg} onChangeText={setCostPerKg} placeholder="0" />
-      </Row>
+      {filament ? (
+        <Card>
+          <Line label="En existencia" value={weight(filament.stock_g)} strong />
+          <Muted>Sube con las compras y baja con las impresiones. Para corregirla, arquéala.</Muted>
+          <Button
+            label="Arquear"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/inventario/arqueo', params: { type: 'filament', id: filament.id } })}
+          />
+        </Card>
+      ) : (
+        <Field label="Existencia inicial" unit="g" numeric value={stock} onChangeText={setStock} placeholder="1000" hint="Lo que ya tienes; queda en el historial." />
+      )}
+      <Field
+        label="Costo de referencia por kg"
+        unit="$"
+        numeric
+        value={costPerKg}
+        onChangeText={setCostPerKg}
+        placeholder="0"
+        hint="Lo que normalmente cuesta. El costo real por gramo sale de tus compras."
+      />
       <Field
         label="Avisarme al bajar de"
         unit="g"

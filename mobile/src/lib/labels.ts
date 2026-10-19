@@ -24,6 +24,7 @@ export const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
 
 export const EXPENSE_LABELS: Record<ExpenseCategory, string> = {
   filament: 'Filamento',
+  material: 'Materia prima',
   parts: 'Refacciones',
   electricity: 'Luz',
   shipping: 'Envíos',

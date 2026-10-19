@@ -16,8 +16,8 @@ type Recipe = Pick<Product, 'filaments' | 'printer_ids' | 'print_minutes' | 'ext
  */
 export function productCost(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number): CostBreakdown {
   const filament = product.filaments.reduce((total, use) => {
-    const perKg = filaments.find((item) => item.id === use.filament_id)?.cost_per_kg ?? 0;
-    return total + (use.grams / 1000) * perKg;
+    const used = filaments.find((item) => item.id === use.filament_id);
+    return total + use.grams * (used ? costPerGram(used) : 0);
   }, 0);
 
   const assigned = printers.filter((printer) => product.printer_ids.includes(printer.id));
@@ -61,6 +61,11 @@ export function suggestedPrice(cost: number, channel: Channel, marginPct: number
 export function packagingName(packaging: Packaging) {
   const sizes = [packaging.length_mm, packaging.width_mm, packaging.height_mm].filter((value) => value > 0);
   return sizes.length ? `${packaging.name} · ${sizes.map((value) => Math.round(value) / 10).join('×')} cm` : packaging.name;
+}
+
+/** What a gram of a filament costs: from its purchases, or the reference per kg while it has none. */
+export function costPerGram(filament: Pick<Filament, 'avg_cost_per_g' | 'cost_per_kg'>) {
+  return filament.avg_cost_per_g > 0 ? Number(filament.avg_cost_per_g) : filament.cost_per_kg / 1000;
 }
 
 export function filamentName(filament: Filament) {

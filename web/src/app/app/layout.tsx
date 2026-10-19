@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 
 const LINKS = [
   { href: "/app", label: "Resumen" },
+  { href: "/app/inventario", label: "Inventario" },
   { href: "/app/productos", label: "Productos" },
   { href: "/app/filamento", label: "Filamento" },
   { href: "/app/impresiones", label: "Impresiones" },

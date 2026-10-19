@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { PurchaseForm } from "@/components/app/PurchaseForm";
+import { CountForm, StockHistory } from "@/components/app/StockDialogs";
 import { Empty, FieldsForm, Modal, PageHeader, Stat, TableCard, type FieldDef } from "@/components/app/ui";
-import { filamentName } from "@/lib/costs";
+import { costPerGram, filamentName } from "@/lib/costs";
 import { useData } from "@/lib/data";
-import { isoDay, money, weight } from "@/lib/format";
+import { money, weight } from "@/lib/format";
+import { filamentItem, preciseMoney } from "@/lib/inventory";
 import { supabase } from "@/lib/supabase";
 import type { Filament } from "@/lib/types";
 
@@ -12,6 +15,8 @@ export default function FilamentsPage() {
   const { filaments, suppliers } = useData();
   const [editing, setEditing] = useState<Filament | "new" | null>(null);
   const [buying, setBuying] = useState<Filament | "any" | null>(null);
+  const [counting, setCounting] = useState<Filament | null>(null);
+  const [history, setHistory] = useState<Filament | null>(null);
 
   const supplierOptions = suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }));
   const fields: FieldDef[] = [
@@ -19,29 +24,17 @@ export default function FilamentsPage() {
     { name: "color", label: "Color", placeholder: "Negro mate" },
     { name: "brand", label: "Marca" },
     { name: "color_hex", label: "Color en las listas", type: "color" },
-    { name: "stock_g", label: "En existencia (g)", type: "number", hint: "Las impresiones descuentan y las compras suman solas." },
-    { name: "cost_per_kg", label: "Costo por kg ($)", type: "number" },
+    // Stock is typed only when the filament is new; later it moves with purchases, prints and arqueos.
+    ...(editing === "new"
+      ? [{ name: "stock_g", label: "Existencia inicial (g)", type: "number" as const, hint: "Lo que ya tienes; queda en el historial como existencia inicial." }]
+      : []),
+    { name: "cost_per_kg", label: "Costo de referencia por kg ($)", type: "number", hint: "Lo que normalmente cuesta. El costo real por gramo sale de tus compras." },
     { name: "low_stock_g", label: "Avisarme al bajar de (g)", type: "number" },
     { name: "supplier_id", label: "Proveedor", type: "select", options: supplierOptions, none: "Sin proveedor" },
     { name: "notes", label: "Notas", type: "textarea", placeholder: "Temperaturas, secado…" },
   ];
-  const purchaseFields: FieldDef[] = [
-    {
-      name: "filament_id",
-      label: "Filamento",
-      type: "select",
-      required: true,
-      wide: true,
-      options: filaments.map((filament) => ({ value: filament.id, label: `${filamentName(filament)} · quedan ${weight(filament.stock_g)}` })),
-    },
-    { name: "grams", label: "Cantidad (g)", type: "number", required: true },
-    { name: "amount", label: "Total pagado ($)", type: "number", required: true },
-    { name: "supplier_id", label: "Proveedor", type: "select", options: supplierOptions, none: "Sin proveedor" },
-    { name: "spent_at", label: "Fecha", type: "date", required: true },
-  ];
-
   const totalGrams = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0);
-  const totalValue = filaments.reduce((total, filament) => total + (Math.max(filament.stock_g, 0) / 1000) * filament.cost_per_kg, 0);
+  const totalValue = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0) * costPerGram(filament), 0);
   const current = editing === "new" ? undefined : (editing ?? undefined);
 
   return (
@@ -71,7 +64,8 @@ export default function FilamentsPage() {
                 <tr>
                   <th>Filamento</th>
                   <th>Proveedor</th>
-                  <th className="num">Costo por kg</th>
+                  <th className="num">Referencia por kg</th>
+                  <th className="num">Costo por g actual</th>
                   <th className="num">Existencia</th>
                   <th />
                 </tr>
@@ -84,12 +78,28 @@ export default function FilamentsPage() {
                       {filamentName(filament)}
                     </td>
                     <td className="text-muted">{suppliers.find((supplier) => supplier.id === filament.supplier_id)?.name ?? "—"}</td>
-                    <td className="num">{money(filament.cost_per_kg)}</td>
+                    <td className="num text-muted">{filament.cost_per_kg > 0 ? money(filament.cost_per_kg) : "—"}</td>
+                    <td className="num">
+                      {filament.avg_cost_per_g > 0 ? (
+                        <>
+                          {preciseMoney(filament.avg_cost_per_g)}
+                          <span className="block text-xs text-muted">{money(filament.avg_cost_per_g * 1000)} / kg · de tus compras</span>
+                        </>
+                      ) : (
+                        <span className="text-muted">Sin compras</span>
+                      )}
+                    </td>
                     <td className={`num font-semibold ${filament.stock_g <= filament.low_stock_g ? "text-bad" : ""}`}>{weight(filament.stock_g)}</td>
                     <td className="num">
                       <div className="flex justify-end gap-2">
                         <button className="btn" onClick={() => setBuying(filament)}>
                           Comprar
+                        </button>
+                        <button className="btn" onClick={() => setCounting(filament)}>
+                          Arquear
+                        </button>
+                        <button className="btn" onClick={() => setHistory(filament)}>
+                          Historial
                         </button>
                         <button className="btn" onClick={() => setEditing(filament)}>
                           Editar
@@ -111,8 +121,8 @@ export default function FilamentsPage() {
             initial={current ?? { material: "PLA", color_hex: "#ffffff", low_stock_g: 200 }}
             onDone={() => setEditing(null)}
             onSubmit={(values) => {
-              // Prints and purchases move the stock on the server; send it only when it was corrected here.
-              if (current && values.stock_g === current.stock_g) delete values.stock_g;
+              // The stock is not edited here: it is corrected with an arqueo, which stays in the history.
+              if (current) delete values.stock_g;
               return current ? supabase().from("filaments").update(values).eq("id", current.id) : supabase().from("filaments").insert(values);
             }}
             onDelete={current ? () => supabase().from("filaments").delete().eq("id", current.id) : undefined}
@@ -121,29 +131,19 @@ export default function FilamentsPage() {
         </Modal>
       )}
 
+      {counting && (
+        <Modal title={`Arquear · ${filamentName(counting)}`} onClose={() => setCounting(null)}>
+          <CountForm item={filamentItem(counting)} onDone={() => setCounting(null)} />
+        </Modal>
+      )}
+      {history && (
+        <Modal title={`Movimientos · ${filamentName(history)}`} onClose={() => setHistory(null)} wide>
+          <StockHistory item={filamentItem(history)} />
+        </Modal>
+      )}
       {buying && (
-        <Modal title="Compra de filamento" onClose={() => setBuying(null)}>
-          <FieldsForm
-            fields={purchaseFields}
-            initial={{
-              filament_id: buying === "any" ? filaments[0]?.id : buying.id,
-              supplier_id: buying === "any" ? null : buying.supplier_id,
-              grams: 1000,
-              spent_at: isoDay(),
-            }}
-            submitLabel="Registrar compra"
-            onDone={() => setBuying(null)}
-            onSubmit={(values) => {
-              const filament = filaments.find((item) => item.id === values.filament_id);
-              return supabase()
-                .from("expenses")
-                .insert({ ...values, category: "filament", note: `Compra de ${filament ? filamentName(filament) : "filamento"}` });
-            }}
-          >
-            <p className="text-xs text-muted">
-              La compra suma los gramos a tu existencia, recalcula el costo por kg como promedio y queda registrada como gasto.
-            </p>
-          </FieldsForm>
+        <Modal title="Compra de filamento" onClose={() => setBuying(null)} wide>
+          <PurchaseForm items={filaments.map(filamentItem)} initial={buying === "any" ? undefined : filamentItem(buying)} onDone={() => setBuying(null)} />
         </Modal>
       )}
     </>

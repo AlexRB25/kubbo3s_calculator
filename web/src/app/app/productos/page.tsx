@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from "@/lib/costs";
+import { costPerGram, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { duration, field, money, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
@@ -61,8 +62,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       ...draft,
       packaging_id: packagingId || null,
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
-      // Prints and sales move the stock on the server; send it only when it was corrected here.
-      ...(product && Math.round(num(stock)) === product.stock ? {} : { stock: Math.round(num(stock)) }),
+      // Stock is typed only for a new product; later prints, sales and arqueos move it.
+      ...(product ? {} : { stock: Math.round(num(stock)) }),
     };
     const result = product
       ? await supabase().from("products").update(row).eq("id", product.id)
@@ -115,7 +116,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                 <option value="">Elegir…</option>
                 {filaments.map((filament) => (
                   <option key={filament.id} value={filament.id}>
-                    {filamentName(filament)} · {money(filament.cost_per_kg)}/kg
+                    {filamentName(filament)} · {money(costPerGram(filament) * 1000)}/kg
                   </option>
                 ))}
               </select>
@@ -165,11 +166,24 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         <input className="input" type="number" min={0} step="any" value={extraCost} onChange={(event) => setExtraCost(event.target.value)} placeholder="0" />
         <span className="font-normal">Tornillos, imanes, etiquetas… El embalaje para envío va aparte.</span>
       </label>
-      <label className="label">
-        Piezas en stock
-        <input className="input" type="number" step={1} value={stock} onChange={(event) => setStock(event.target.value)} />
-        <span className="font-normal">Sube con cada impresión y baja con cada venta; cámbialo solo para corregirlo.</span>
-      </label>
+      {product ? (
+        <div className="label">
+          Piezas en stock: {product.stock}
+          <span className="font-normal">
+            Suben con cada impresión y bajan con cada venta. Para corregirlas usa «Arquear» en{" "}
+            <Link href="/app/inventario" className="text-brand hover:underline">
+              Inventario
+            </Link>
+            .
+          </span>
+        </div>
+      ) : (
+        <label className="label">
+          Piezas que ya tienes
+          <input className="input" type="number" step={1} value={stock} onChange={(event) => setStock(event.target.value)} />
+          <span className="font-normal">Quedan en el historial como existencia inicial.</span>
+        </label>
+      )}
 
       <div className="flex flex-col gap-1 rounded-lg bg-ink p-3 sm:col-span-2">
         <Line label="Filamento" value={money(cost.filament)} />

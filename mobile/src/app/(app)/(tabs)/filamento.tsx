@@ -1,17 +1,14 @@
 import { router } from 'expo-router';
 
 import { Button, Empty, ListItem, Row, Screen, Stat, Swatch } from '@/components/ui';
-import { filamentName } from '@/lib/costs';
+import { costPerGram, filamentName } from '@/lib/costs';
 import { money, weight } from '@/lib/format';
 import { useData } from '@/store/data';
 
 export default function FilamentsScreen() {
   const { filaments } = useData();
   const totalGrams = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0);
-  const totalValue = filaments.reduce(
-    (total, filament) => total + (Math.max(filament.stock_g, 0) / 1000) * filament.cost_per_kg,
-    0,
-  );
+  const totalValue = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0) * costPerGram(filament), 0);
 
   return (
     <Screen>
@@ -29,7 +26,11 @@ export default function FilamentsScreen() {
           key={filament.id}
           left={<Swatch color={filament.color_hex} />}
           title={filamentName(filament)}
-          subtitle={`${money(filament.cost_per_kg)} por kg`}
+          subtitle={
+            filament.avg_cost_per_g > 0
+              ? `${money(filament.avg_cost_per_g * 1000)} por kg · de tus compras`
+              : `Referencia: ${money(filament.cost_per_kg)} por kg · sin compras`
+          }
           value={weight(filament.stock_g)}
           tone={filament.stock_g <= filament.low_stock_g ? 'bad' : undefined}
           onPress={() => router.push({ pathname: '/filamento/form', params: { id: filament.id } })}

@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Card, Empty, Heading, Line, Muted, Row, Screen } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
-import { channelFees, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
+import { channelFees, costPerGram, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
 import { duration, money, weight } from '@/lib/format';
 import { useData } from '@/store/data';
 
@@ -46,7 +46,7 @@ export default function ProductScreen() {
             <Line
               key={use.filament_id}
               label={`${filament ? filamentName(filament) : 'Filamento eliminado'} · ${weight(use.grams)}`}
-              value={money((use.grams / 1000) * (filament?.cost_per_kg ?? 0))}
+              value={money(use.grams * (filament ? costPerGram(filament) : 0))}
             />
           );
         })}

@@ -9,7 +9,7 @@ import { useData, useSave } from '@/store/data';
 
 export default function FilamentPurchaseScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { filaments, suppliers } = useData();
+  const { filaments, suppliers, expenses } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [filamentId, setFilamentId] = useState<string | null>(id ?? null);
@@ -21,9 +21,13 @@ export default function FilamentPurchaseScreen() {
   const supplierId = pickedSupplier === undefined ? (filament?.supplier_id ?? null) : pickedSupplier;
   const [date, setDate] = useState(isoDay());
 
-  // Same weighted average the database applies (see expense_moves_filament in schema.sql).
-  const left = Math.max(filament?.stock_g ?? 0, 0);
-  const newCost = left + num(grams) > 0 ? (left * (filament?.cost_per_kg ?? 0) + num(amount) * 1000) / (left + num(grams)) : 0;
+  // Same rule as the database (expense_moves_filament): everything paid ÷ every gram bought.
+  const before = expenses.reduce(
+    (sum, expense) => (expense.filament_id === filamentId && expense.grams ? { paid: sum.paid + Number(expense.amount), grams: sum.grams + Number(expense.grams) } : sum),
+    { paid: 0, grams: 0 },
+  );
+  const thisCost = num(grams) > 0 ? (num(amount) / num(grams)) * 1000 : 0;
+  const newCost = before.grams + num(grams) > 0 ? ((before.paid + num(amount)) / (before.grams + num(grams))) * 1000 : 0;
 
   function submit() {
     if (!filament) return setError('Elige el filamento que compraste.');
@@ -66,7 +70,11 @@ export default function FilamentPurchaseScreen() {
       {filament && (
         <Card>
           <Line label="Existencia después de la compra" value={weight(filament.stock_g + num(grams))} />
-          <Line label="Costo por kg (promedio)" value={`${money(filament.cost_per_kg)} → ${money(newCost)}`} />
+          <Line label="Esta compra" value={`${money(thisCost)} por kg`} />
+          <Line
+            label="Costo real por kg (tus compras)"
+            value={`${before.grams > 0 ? money((before.paid / before.grams) * 1000) : 'sin compras'} → ${money(newCost)}`}
+          />
         </Card>
       )}
 

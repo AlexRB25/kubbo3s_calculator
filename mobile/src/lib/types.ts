@@ -36,7 +36,10 @@ export type Filament = {
   color_hex: string;
   supplier_id: string | null;
   stock_g: number;
+  /** Reference: what a kilo usually costs, as the user typed it. */
   cost_per_kg: number;
+  /** Real cost of one gram from all purchases (total paid ÷ grams bought); 0 before the first one. */
+  avg_cost_per_g: number;
   low_stock_g: number;
   notes: string;
 };
@@ -129,7 +132,7 @@ export type Maintenance = {
   next_due: string | null;
 };
 
-export type ExpenseCategory = 'filament' | 'parts' | 'electricity' | 'shipping' | 'packaging' | 'maintenance' | 'other';
+export type ExpenseCategory = 'filament' | 'material' | 'parts' | 'electricity' | 'shipping' | 'packaging' | 'maintenance' | 'other';
 
 export type Expense = {
   id: string;
@@ -141,5 +144,39 @@ export type Expense = {
   printer_id: string | null;
   filament_id: string | null;
   grams: number | null;
+  /** Purchase of another raw material: which one and how many of its unit. */
+  material_id: string | null;
+  quantity: number | null;
   maintenance_id: string | null;
+};
+
+/** A raw material other than filament (resin, magnets, screws, paint…). */
+export type Material = {
+  id: string;
+  name: string;
+  category: string;
+  unit: 'g' | 'ml' | 'pza';
+  stock: number;
+  /** Reference: what one unit (gram, millilitre or piece) usually costs, as the user typed it. */
+  cost_per_unit: number;
+  /** Real cost of one unit from all purchases; 0 before the first one. */
+  avg_cost_per_unit: number;
+  low_stock: number;
+  supplier_id: string | null;
+  notes: string;
+};
+
+export type InventoryItemType = 'filament' | 'material' | 'product';
+
+/** One movement of stock, from the inventory_moves view. Quantity is signed. */
+export type InventoryMove = {
+  id: string;
+  item_type: InventoryItemType;
+  item_id: string;
+  kind: 'purchase' | 'print' | 'production' | 'sale' | 'adjustment';
+  quantity: number;
+  total: number | null;
+  moved_at: string;
+  note: string | null;
+  supplier_id: string | null;
 };

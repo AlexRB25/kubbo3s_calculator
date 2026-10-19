@@ -7,7 +7,7 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
+import { costPerGram, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
 import { field, money, num, weight } from '@/lib/format';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
@@ -79,8 +79,8 @@ export default function ProductFormScreen() {
       ...draft,
       packaging_id: packagingId,
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
-      // Prints and sales move the stock on the server; send it only when it was corrected here.
-      ...(product && Math.round(num(stock)) === product.stock ? {} : { stock: Math.round(num(stock)) }),
+      // Stock is typed only for a new product; later prints, sales and arqueos move it.
+      ...(product ? {} : { stock: Math.round(num(stock)) }),
     };
     const result = product
       ? await supabase.from('products').update(row).eq('id', product.id)
@@ -140,7 +140,7 @@ export default function ProductFormScreen() {
             options={filaments.map((filament) => ({
               value: filament.id,
               label: filamentName(filament),
-              hint: `${weight(filament.stock_g)} · ${money(filament.cost_per_kg)}/kg`,
+              hint: `${weight(filament.stock_g)} · ${money(costPerGram(filament) * 1000)}/kg`,
             }))}
           />
           <Field style={{ flex: 1 }} label="Gramos" numeric value={row.grams} onChangeText={(grams) => setRow(index, { grams })} />
@@ -230,13 +230,19 @@ export default function ProductFormScreen() {
         );
       })}
 
-      <Field
-        label="Piezas en stock"
-        numeric
-        value={stock}
-        onChangeText={setStock}
-        hint="Sube con cada impresión terminada y baja con cada venta. Cámbialo solo para corregirlo."
-      />
+      {product ? (
+        <Card>
+          <Line label="Piezas en stock" value={String(product.stock)} strong />
+          <Muted>Suben con cada impresión terminada y bajan con cada venta. Para corregirlas, arquéalas.</Muted>
+          <Button
+            label="Arquear"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/inventario/arqueo', params: { type: 'product', id: product.id } })}
+          />
+        </Card>
+      ) : (
+        <Field label="Piezas que ya tienes" numeric value={stock} onChangeText={setStock} hint="Quedan en el historial como existencia inicial." />
+      )}
 
       <ErrorText>{error}</ErrorText>
       <Button label="Guardar" onPress={submit} loading={busy} />
