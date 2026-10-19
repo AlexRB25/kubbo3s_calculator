@@ -910,6 +910,7 @@ create table if not exists public.plans (
   -- Límites; vacío (null) = sin límite.
   max_products int check (max_products >= 0),
   max_printers int check (max_printers >= 0),
+  -- Resultados de las herramientas que se pueden descargar al mes (probar es libre).
   tool_runs_month int check (tool_runs_month >= 0),
   storage_mb int check (storage_mb >= 0),
   -- Descargas con colores (3MF/OBJ) en las herramientas.
@@ -1039,6 +1040,61 @@ create trigger printers_plan_limit before insert on public.printers for each row
 drop trigger if exists user_files_plan_limit on public.user_files;
 create trigger user_files_plan_limit before insert on public.user_files for each row execute function public.enforce_plan_limits();
 
+-- ───────────────────────── Descargas de las herramientas ─────────────────────────
+-- Probar las herramientas es libre: lo que cuenta para el plan (plans.tool_runs_month) es bajar un
+-- resultado. Un resultado (una corrida) cuenta una sola vez aunque se bajen varias piezas o formatos,
+-- y queda guardado en Mis archivos para volver a bajarlo o editarlo sin contar otra vez.
+
+create table if not exists public.tool_downloads (
+  id bigint generated always as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  tool text not null check (char_length(tool) between 1 and 40),
+  result_id uuid not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, result_id)
+);
+create index if not exists tool_downloads_month_idx on public.tool_downloads (user_id, created_at);
+
+-- Solo se escribe con claim_download, que revisa el plan.
+alter table public.tool_downloads enable row level security;
+revoke all on public.tool_downloads from anon;
+revoke insert, update, delete on public.tool_downloads from authenticated;
+drop policy if exists tool_downloads_select_own on public.tool_downloads;
+create policy tool_downloads_select_own on public.tool_downloads for select to authenticated using (user_id = (select auth.uid()));
+
+-- Lo creado con las herramientas se guarda en Mis archivos marcado como resultado.
+alter table public.user_files add column if not exists origin text not null default 'upload' check (origin in ('upload', 'result'));
+alter table public.user_files add column if not exists tool text not null default '' check (char_length(tool) <= 40);
+
+-- Cuenta la descarga de un resultado si el plan lo permite. La misma descarga otra vez no cuenta.
+create or replace function public.claim_download(p_result uuid, p_tool text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_user uuid := auth.uid();
+  v_plan public.plans;
+  v_used int;
+begin
+  if v_user is null then
+    raise exception using errcode = 'P0001', message = 'Entra con tu cuenta Kubbo3D para descargar.';
+  end if;
+  if exists (select 1 from public.tool_downloads where user_id = v_user and result_id = p_result) then
+    return jsonb_build_object('charged', false);
+  end if;
+  v_plan := public.plan_of(v_user);
+  select count(*) into v_used from public.tool_downloads
+  where user_id = v_user
+    and created_at >= (date_trunc('month', now() at time zone 'America/Mexico_City') at time zone 'America/Mexico_City');
+  if v_plan.tool_runs_month is not null and v_used >= v_plan.tool_runs_month then
+    raise exception using errcode = 'P0001', message = format(
+      'Ya descargaste los %s resultados de tu plan %s de este mes. Puedes seguir probando las herramientas; para descargar mejora tu plan o espera al día 1 del próximo mes.',
+      v_plan.tool_runs_month, v_plan.name);
+  end if;
+  insert into public.tool_downloads (user_id, tool, result_id) values (v_user, left(coalesce(p_tool, ''), 40), p_result);
+  return jsonb_build_object('charged', true, 'used', v_used + 1, 'limit', v_plan.tool_runs_month);
+end $$;
+revoke execute on function public.claim_download(uuid, text) from public, anon;
+grant execute on function public.claim_download(uuid, text) to authenticated;
+
 -- Plan, suscripción y uso del usuario que llama: para "Mi plan" y para revisar antes de usar una herramienta.
 create or replace function public.my_plan() returns jsonb
 language sql stable security definer set search_path = public as $$
@@ -1058,6 +1114,11 @@ language sql stable security definer set search_path = public as $$
       'printers', (select count(*) from public.printers where user_id = auth.uid()),
       'tool_runs_month', (
         select count(*) from public.tool_runs
+        where user_id = auth.uid()
+          and created_at >= (date_trunc('month', now() at time zone 'America/Mexico_City') at time zone 'America/Mexico_City')),
+      -- Lo que cuenta el plan: resultados descargados este mes.
+      'tool_downloads_month', (
+        select count(*) from public.tool_downloads
         where user_id = auth.uid()
           and created_at >= (date_trunc('month', now() at time zone 'America/Mexico_City') at time zone 'America/Mexico_City')),
       'storage_mb', round((select coalesce(sum(size), 0) from public.user_files where user_id = auth.uid()) / 1048576.0, 1)))
