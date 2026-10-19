@@ -70,6 +70,31 @@ export async function deleteStoreProduct(form: FormData) {
   redirect("/tienda");
 }
 
+// ── Catálogo de impresoras ──
+
+export async function saveCatalogPrinter(form: FormData) {
+  await requireAdmin();
+  const id = text(form, "id");
+  const row = {
+    brand: text(form, "brand"),
+    model: text(form, "model"),
+    power_watts: number(form, "power_watts"),
+    notes: text(form, "notes"),
+    sort: number(form, "sort"),
+    active: flag(form, "active"),
+  };
+  must(id ? await admin().from("printer_catalog").update(row).eq("id", id) : await admin().from("printer_catalog").insert(row));
+  revalidatePath("/impresoras");
+  redirect("/impresoras");
+}
+
+export async function deleteCatalogPrinter(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("printer_catalog").delete().eq("id", text(form, "id")));
+  revalidatePath("/impresoras");
+  redirect("/impresoras");
+}
+
 // ── Catálogo de filamentos ──
 
 export async function saveCatalogFilament(form: FormData) {

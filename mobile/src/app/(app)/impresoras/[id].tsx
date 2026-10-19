@@ -24,10 +24,15 @@ export default function PrinterScreen() {
   return (
     <Screen>
       <Text style={{ color: Colors.text, fontSize: 22, fontWeight: '700' }}>{printer.name}</Text>
-      {printer.model ? <Muted>{printer.model}</Muted> : null}
+      <Muted>
+        {[printer.brand, printer.model].filter(Boolean).join(' ')}
+        {printer.device_id ? ` · ID ${printer.device_id}` : ''}
+      </Muted>
 
       <Card>
-        <Line label="Tiempo impreso" value={duration(printer.print_minutes)} />
+        <Line label="Tiempo impreso" value={duration(printer.print_minutes + printer.initial_minutes)} />
+        {printer.initial_minutes > 0 ? <Line label="Antes de registrarla" value={duration(printer.initial_minutes)} /> : null}
+        {printer.purchase_price > 0 ? <Line label="Te costó" value={money(printer.purchase_price)} /> : null}
         <Line label="Impresiones" value={`${printerJobs.length}${failed ? ` (${failed} fallidas)` : ''}`} />
         <Line label="Consumo" value={`${printer.power_watts} W`} />
         <Line label="Desgaste por hora" value={money(printer.hourly_cost)} />

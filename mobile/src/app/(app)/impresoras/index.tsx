@@ -19,8 +19,8 @@ export default function PrintersScreen() {
           <ListItem
             key={printer.id}
             title={printer.name}
-            subtitle={[printer.model, latest ? `Último servicio ${day(latest.performed_at)}` : 'Sin mantenimientos'].filter(Boolean).join(' · ')}
-            value={duration(printer.print_minutes)}
+            subtitle={[[printer.brand, printer.model].filter(Boolean).join(' '), latest ? `Último servicio ${day(latest.performed_at)}` : 'Sin mantenimientos'].filter(Boolean).join(' · ')}
+            value={duration(printer.print_minutes + printer.initial_minutes)}
             valueHint="impresas"
             onPress={() => router.push({ pathname: '/impresoras/[id]', params: { id: printer.id } })}
           />

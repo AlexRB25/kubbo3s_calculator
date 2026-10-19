@@ -18,13 +18,26 @@ export type Supplier = {
   notes: string;
 };
 
+/** A printer model Kubbo3D keeps up to date for users to pick. */
+export type CatalogPrinter = { id: string; brand: string; model: string; power_watts: number; notes: string; sort: number };
+
 export type Printer = {
   id: string;
+  /** Built from brand, model and device id ("Bambu Lab A1 · 605"). */
   name: string;
+  brand: string;
   model: string;
+  /** Serial number or device id, to tell two equal printers apart. */
+  device_id: string;
+  catalog_id: string | null;
   power_watts: number;
   hourly_cost: number;
   print_minutes: number;
+  /** Hours it already had when registered, in minutes; they add to print_minutes. */
+  initial_minutes: number;
+  /** What the printer cost and the hours it is expected to last: they give the wear per hour. */
+  purchase_price: number;
+  life_hours: number;
   notes: string;
 };
 

@@ -1,20 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { PrinterForm } from "@/components/app/PrinterForm";
 import { Empty, FieldsForm, Line, Modal, PageHeader, type FieldDef } from "@/components/app/ui";
 import { useData, useSave } from "@/lib/data";
 import { day, duration, isoDay, money } from "@/lib/format";
 import { MAINTENANCE_KINDS, maintenanceLabel } from "@/lib/labels";
 import { supabase } from "@/lib/supabase";
 import type { Printer } from "@/lib/types";
-
-const PRINTER_FIELDS: FieldDef[] = [
-  { name: "name", label: "Nombre", required: true, placeholder: "Bambu 1" },
-  { name: "model", label: "Marca y modelo", placeholder: "Bambu Lab A1" },
-  { name: "power_watts", label: "Consumo (watts)", type: "number", hint: "Promedio mientras imprime." },
-  { name: "hourly_cost", label: "Desgaste por hora ($)", type: "number", hint: "Precio de la máquina ÷ horas de vida útil." },
-  { name: "notes", label: "Notas", type: "textarea" },
-];
 
 const SERVICE_FIELDS: FieldDef[] = [
   { name: "kind", label: "Tipo", type: "select", required: true, options: MAINTENANCE_KINDS },
@@ -59,7 +52,10 @@ export default function PrintersPage() {
               <header className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2>{printer.name}</h2>
-                  {printer.model && <p className="text-sm text-muted">{printer.model}</p>}
+                  <p className="text-sm text-muted">
+                    {[printer.brand, printer.model].filter(Boolean).join(" ")}
+                    {printer.device_id && ` · ID ${printer.device_id}`}
+                  </p>
                 </div>
                 <div className="flex gap-2">
                   <button className="btn btn-primary" onClick={() => setServicing(printer)}>
@@ -71,7 +67,11 @@ export default function PrintersPage() {
                 </div>
               </header>
               <div className="flex flex-col gap-1">
-                <Line label="Tiempo impreso" value={duration(printer.print_minutes)} />
+                <Line
+                  label={printer.initial_minutes > 0 ? `Tiempo impreso (${duration(printer.initial_minutes)} antes de registrarla)` : "Tiempo impreso"}
+                  value={duration(printer.print_minutes + printer.initial_minutes)}
+                />
+                {printer.purchase_price > 0 && <Line label="Te costó" value={money(printer.purchase_price)} />}
                 <Line label="Impresiones" value={`${printerJobs.length}${failed ? ` (${failed} fallidas)` : ""}`} />
                 <Line label="Consumo / desgaste por hora" value={`${printer.power_watts} W / ${money(printer.hourly_cost)}`} />
                 <Line label="Gastado en mantenimiento" value={money(history.reduce((total, record) => total + record.cost, 0))} />
@@ -111,16 +111,7 @@ export default function PrintersPage() {
 
       {editing && (
         <Modal title={current?.name ?? "Nueva impresora"} onClose={() => setEditing(null)}>
-          <FieldsForm
-            fields={PRINTER_FIELDS}
-            initial={current}
-            onDone={() => setEditing(null)}
-            onSubmit={(values) =>
-              current ? supabase().from("printers").update(values).eq("id", current.id) : supabase().from("printers").insert(values)
-            }
-            onDelete={current ? () => supabase().from("printers").delete().eq("id", current.id) : undefined}
-            deleteConfirm="Se eliminará junto con su historial de mantenimientos y ajustes. ¿Eliminar?"
-          />
+          <PrinterForm printer={current} onDone={() => setEditing(null)} />
         </Modal>
       )}
 

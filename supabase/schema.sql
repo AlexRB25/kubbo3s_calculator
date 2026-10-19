@@ -1372,3 +1372,51 @@ alter table public.filaments add column if not exists catalog_id uuid references
 -- Fotos del catálogo: públicas; las sube el panel admin.
 insert into storage.buckets (id, name, public) values ('catalog', 'catalog', true)
 on conflict (id) do nothing;
+
+-- ───────────────────────── Catálogo de impresoras Kubbo ─────────────────────────
+-- Marcas y modelos que Kubbo3D mantiene al día desde el panel admin. Al dar de alta su impresora
+-- el usuario elige marca y modelo (o escribe otro) y anota su ID o número de serie.
+
+create table if not exists public.printer_catalog (
+  id uuid primary key default gen_random_uuid(),
+  brand text not null check (char_length(brand) between 1 and 60),
+  model text not null check (char_length(model) between 1 and 80),
+  -- Consumo promedio mientras imprime; 0 si no se conoce (el usuario lo escribe).
+  power_watts numeric(8,2) not null default 0 check (power_watts >= 0),
+  notes text not null default '',
+  active boolean not null default true,
+  sort int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (brand, model)
+);
+create index if not exists printer_catalog_list_idx on public.printer_catalog (active, brand, sort, model);
+
+alter table public.printer_catalog enable row level security;
+revoke insert, update, delete on public.printer_catalog from anon, authenticated;
+drop policy if exists printer_catalog_read on public.printer_catalog;
+create policy printer_catalog_read on public.printer_catalog for select to anon, authenticated using (active);
+
+-- Modelos de arranque; los que ya existen no se tocan (se editan desde el panel admin).
+insert into public.printer_catalog (brand, model, sort) values
+  ('Bambu Lab', 'A1 mini', 1), ('Bambu Lab', 'A1', 2), ('Bambu Lab', 'P1P', 3), ('Bambu Lab', 'P1S', 4),
+  ('Bambu Lab', 'P2S', 5), ('Bambu Lab', 'X1 Carbon', 6), ('Bambu Lab', 'X1E', 7), ('Bambu Lab', 'H2D', 8),
+  ('Bambu Lab', 'H2S', 9), ('Bambu Lab', 'H2C', 10),
+  ('Creality', 'Ender-3 V3 SE', 1), ('Creality', 'Ender-3 V3 KE', 2), ('Creality', 'Ender-3 V3', 3), ('Creality', 'K1', 4),
+  ('Creality', 'K1C', 5), ('Creality', 'K1 Max', 6), ('Creality', 'K2 Plus', 7), ('Creality', 'Hi', 8),
+  ('Prusa Research', 'MINI+', 1), ('Prusa Research', 'MK4S', 2), ('Prusa Research', 'CORE One', 3), ('Prusa Research', 'XL', 4),
+  ('Elegoo', 'Neptune 4', 1), ('Elegoo', 'Neptune 4 Pro', 2), ('Elegoo', 'Neptune 4 Max', 3), ('Elegoo', 'Centauri Carbon', 4),
+  ('Anycubic', 'Kobra 2 Neo', 1), ('Anycubic', 'Kobra 3', 2), ('Anycubic', 'Kobra 3 Combo', 3), ('Anycubic', 'Kobra S1', 4),
+  ('Flashforge', 'Adventurer 5M', 1), ('Flashforge', 'Adventurer 5M Pro', 2), ('Flashforge', 'AD5X', 3),
+  ('Sovol', 'SV06', 1), ('Sovol', 'SV07', 2), ('Sovol', 'SV08', 3),
+  ('Qidi', 'Q1 Pro', 1), ('Qidi', 'Plus4', 2)
+on conflict (brand, model) do nothing;
+
+-- La impresora del usuario: marca, modelo, su ID o número de serie y de qué modelo del catálogo salió.
+alter table public.printers add column if not exists brand text not null default '';
+alter table public.printers add column if not exists device_id text not null default '';
+alter table public.printers add column if not exists catalog_id uuid references public.printer_catalog (id) on delete set null;
+-- Horas que ya traía la impresora al darla de alta (opcional); se suman a las de sus impresiones.
+alter table public.printers add column if not exists initial_minutes int not null default 0 check (initial_minutes >= 0);
+-- Lo que costó la impresora y las horas de vida que se le calculan: dan el desgaste por hora.
+alter table public.printers add column if not exists purchase_price numeric(12,2) not null default 0 check (purchase_price >= 0);
+alter table public.printers add column if not exists life_hours int not null default 0 check (life_hours >= 0);
