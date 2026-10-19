@@ -70,6 +70,81 @@ export async function deleteStoreProduct(form: FormData) {
   redirect("/tienda");
 }
 
+// ── Suscripciones asignadas a mano ──
+
+const back = (key: "listo" | "error", message: string): never => redirect(`/suscripciones?${key}=${encodeURIComponent(message)}`);
+
+/** Gives a plan to an account without charging it: for a while, until a date or for life. */
+export async function grantSubscription(form: FormData) {
+  await requireAdmin();
+  const email = text(form, "email").toLowerCase();
+  const users = must(await admin().from("admin_users").select("id, email").ilike("email", email.replace(/[%_\\]/g, ""))) as { id: string; email: string }[];
+  const user = users.find((item) => item.email.toLowerCase() === email) ?? back("error", `No hay ninguna cuenta con el correo ${email}.`);
+  const plan =
+    (must(await admin().from("plans").select("id, name").eq("id", text(form, "plan")).maybeSingle()) as { id: string; name: string } | null) ??
+    back("error", "Ese plan no existe.");
+
+  const duration = text(form, "duration");
+  const lifetime = duration === "life";
+  let until: Date | null = null;
+  if (duration === "date") {
+    const day = text(form, "until");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) back("error", "Elige la fecha de vencimiento.");
+    // End of that day in Mexico City.
+    until = new Date(`${day}T23:59:59-06:00`);
+  } else if (!lifetime) {
+    until = new Date();
+    if (duration === "7d") until.setDate(until.getDate() + 7);
+    else until.setMonth(until.getMonth() + ({ "1m": 1, "3m": 3, "12m": 12 }[duration] ?? 1));
+  }
+  if (until && until.getTime() <= Date.now()) back("error", "La fecha de vencimiento ya pasó.");
+
+  const now = new Date().toISOString();
+  // Only one hand-given plan at a time.
+  must(
+    await admin()
+      .from("subscriptions")
+      .update({ status: "cancelled", paid_until: now, updated_at: now })
+      .eq("user_id", user.id)
+      .eq("source", "admin")
+      .eq("status", "authorized"),
+  );
+  must(
+    await admin()
+      .from("subscriptions")
+      .insert({
+        user_id: user.id,
+        plan_id: plan.id,
+        source: "admin",
+        status: "authorized",
+        lifetime,
+        paid_until: until?.toISOString() ?? null,
+        amount: 0,
+        currency: "USD",
+        payer_email: user.email,
+        note: text(form, "note").slice(0, 200),
+      }),
+  );
+  revalidatePath("/suscripciones");
+  const end = until ? `hasta el ${until.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })}` : "de por vida";
+  back("listo", `${user.email} ahora tiene el plan ${plan.name} ${end}.`);
+}
+
+/** Ends a hand-given plan right away. Mercado Pago subscriptions are cancelled by their owner. */
+export async function cancelSubscription(form: FormData) {
+  await requireAdmin();
+  const now = new Date().toISOString();
+  must(
+    await admin()
+      .from("subscriptions")
+      .update({ status: "cancelled", paid_until: now, updated_at: now })
+      .eq("id", text(form, "id"))
+      .eq("source", "admin"),
+  );
+  revalidatePath("/suscripciones");
+  back("listo", "Suscripción cancelada.");
+}
+
 // ── Catálogo de impresoras ──
 
 export async function saveCatalogPrinter(form: FormData) {

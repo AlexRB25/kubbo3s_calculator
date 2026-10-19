@@ -955,6 +955,16 @@ create table if not exists public.subscriptions (
   updated_at timestamptz not null default now()
 );
 create index if not exists subscriptions_user_idx on public.subscriptions (user_id, created_at desc);
+-- Planes asignados desde el panel admin (pruebas, cortesías): sin Mercado Pago, vencen en paid_until
+-- o son de por vida. Se cancelan desde el panel.
+alter table public.subscriptions alter column mp_preapproval_id drop not null;
+alter table public.subscriptions add column if not exists source text not null default 'mercadopago'
+  check (source in ('mercadopago', 'admin'));
+alter table public.subscriptions add column if not exists lifetime boolean not null default false;
+alter table public.subscriptions add column if not exists note text not null default '';
+alter table public.subscriptions drop constraint if exists subscriptions_admin_has_end;
+alter table public.subscriptions add constraint subscriptions_admin_has_end
+  check (source <> 'admin' or lifetime or paid_until is not null);
 
 -- Solo la landing (con la llave secreta) escribe aquí, a partir de lo que dice Mercado Pago.
 alter table public.subscriptions enable row level security;
@@ -969,7 +979,11 @@ language sql stable security definer set search_path = public as $$
   select p.* from public.plans p
   where p.id = coalesce(
     (select s.plan_id from public.subscriptions s
-      where s.user_id = uid and (s.status = 'authorized' or s.paid_until > now())
+      where s.user_id = uid
+        and case when s.source = 'admin'
+              -- Asignado desde el panel: vale mientras no se cancele y no venza.
+              then s.status = 'authorized' and (s.lifetime or s.paid_until > now())
+              else s.status = 'authorized' or s.paid_until > now() end
       order by s.created_at desc limit 1),
     'free');
 $$;
@@ -1033,7 +1047,12 @@ language sql stable security definer set search_path = public as $$
     'subscription', (
       select to_jsonb(s) - 'user_id' from public.subscriptions s
       where s.user_id = auth.uid() and s.status <> 'pending'
-      order by s.created_at desc limit 1),
+      -- Primero la que da el plan vigente (la misma regla que plan_of).
+      order by case when s.source = 'admin'
+                 then s.status = 'authorized' and (s.lifetime or s.paid_until > now())
+                 else s.status = 'authorized' or s.paid_until > now() end desc,
+               s.created_at desc
+      limit 1),
     'usage', jsonb_build_object(
       'products', (select count(*) from public.products where user_id = auth.uid()),
       'printers', (select count(*) from public.printers where user_id = auth.uid()),

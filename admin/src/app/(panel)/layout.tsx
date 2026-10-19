@@ -7,6 +7,7 @@ import { admin } from "@/lib/supabase/admin";
 const LINKS = [
   { href: "/", label: "Métricas" },
   { href: "/usuarios", label: "Usuarios" },
+  { href: "/suscripciones", label: "Suscripciones" },
   { href: "/pedidos", label: "Pedidos" },
   { href: "/reportes", label: "Reportes de problemas" },
   { href: "/tienda", label: "Tienda: productos" },
