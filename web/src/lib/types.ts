@@ -87,6 +87,9 @@ export type Packaging = {
 
 export type FilamentUse = { filament_id: string; grams: number };
 
+/** One build plate of a piece on one printer: its time and the grams of each filament the product uses (0 if it is not on this plate). */
+export type Plate = { printer_id: string; name: string; minutes: number; grams: Record<string, number> };
+
 export type Product = {
   id: string;
   name: string;
@@ -99,6 +102,8 @@ export type Product = {
   /** Grams of each filament one piece takes. */
   filaments: FilamentUse[];
   printer_ids: string[];
+  /** Plates on each printer; filaments, print_minutes and printer_ids are their average. */
+  plates: Plate[];
   /** Selling price by channel id. */
   prices: Record<string, number>;
   /** Packaging it ships in; counts toward the "with shipping" price. */

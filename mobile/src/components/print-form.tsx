@@ -5,7 +5,7 @@ import { Pressable } from 'react-native';
 
 import { Button, Chips, confirmDelete, ErrorText, Field, Heading, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
-import { filamentName } from '@/lib/costs';
+import { filamentName, recipeFor } from '@/lib/costs';
 import { duration, num, weight } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import type { PrintJob, PrintStatus, Product } from '@/lib/types';
@@ -46,9 +46,11 @@ export function PrintForm({ job, productId: initialProduct }: { job?: PrintJob; 
   );
 
   const pieces = Math.max(Math.round(num(quantity)), 0);
+  // What the product takes on the chosen printer: the sum of its plates there.
+  const recipe = product ? recipeFor(product, printerId) : { filaments: [], minutes: 0 };
   const recipeGrams = (filamentId: string | null) =>
-    (product?.filaments.find((use) => use.filament_id === filamentId)?.grams ?? 0) * pieces;
-  const recipeMinutes = (product?.print_minutes ?? 0) * pieces;
+    (recipe.filaments.find((use) => use.filament_id === filamentId)?.grams ?? 0) * pieces;
+  const recipeMinutes = recipe.minutes * pieces;
 
   function chooseProduct(next: string | null) {
     const chosen = products.find((item) => item.id === next);

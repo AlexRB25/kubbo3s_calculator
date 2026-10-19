@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Empty, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { filamentName } from "@/lib/costs";
+import { filamentName, recipeFor } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { day, duration, num, weight } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
@@ -43,8 +43,10 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
   );
 
   const pieces = Math.max(Math.round(num(quantity)), 0);
-  const recipeGrams = (filamentId: string) => (product?.filaments.find((use) => use.filament_id === filamentId)?.grams ?? 0) * pieces;
-  const recipeMinutes = (product?.print_minutes ?? 0) * pieces;
+  // What the product takes on the chosen printer: the sum of its plates there.
+  const recipe = product ? recipeFor(product, printerId) : { filaments: [], minutes: 0 };
+  const recipeGrams = (filamentId: string) => (recipe.filaments.find((use) => use.filament_id === filamentId)?.grams ?? 0) * pieces;
+  const recipeMinutes = recipe.minutes * pieces;
 
   function chooseProduct(next: string) {
     const chosen = products.find((item) => item.id === next);

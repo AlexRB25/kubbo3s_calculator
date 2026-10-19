@@ -8,27 +8,57 @@ export type CostBreakdown = {
   total: number;
 };
 
-type Recipe = Pick<Product, 'filaments' | 'printer_ids' | 'print_minutes' | 'extra_cost'>;
+type Recipe = Pick<Product, 'filaments' | 'printer_ids' | 'print_minutes' | 'extra_cost'> & { plates?: Product['plates'] };
 
 /**
- * What one piece costs to make. With several printers assigned, electricity and wear use
- * their average, since any of them may end up printing it.
+ * Filament and time one piece takes on a printer: the sum of its plates there. Products without
+ * plates on that printer use their general recipe.
  */
-export function productCost(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number): CostBreakdown {
-  const filament = product.filaments.reduce((total, use) => {
+export function recipeFor(product: Pick<Product, 'filaments' | 'print_minutes'> & { plates?: Product['plates'] }, printerId?: string | null) {
+  const plates = (product.plates ?? []).filter((plate) => plate.printer_id === printerId);
+  if (!plates.length) return { filaments: product.filaments, minutes: product.print_minutes };
+  const grams = new Map<string, number>();
+  for (const plate of plates)
+    for (const [filamentId, amount] of Object.entries(plate.grams)) grams.set(filamentId, (grams.get(filamentId) ?? 0) + (Number(amount) || 0));
+  return {
+    filaments: [...grams].filter(([, amount]) => amount > 0).map(([filament_id, amount]) => ({ filament_id, grams: amount })),
+    minutes: plates.reduce((total, plate) => total + plate.minutes, 0),
+  };
+}
+
+function breakdown(uses: Product['filaments'], minutes: number, machines: Printer[], filaments: Filament[], kwhPrice: number, extra: number): CostBreakdown {
+  const filament = uses.reduce((total, use) => {
     const used = filaments.find((item) => item.id === use.filament_id);
     return total + use.grams * (used ? costPerGram(used) : 0);
   }, 0);
-
-  const assigned = printers.filter((printer) => product.printer_ids.includes(printer.id));
   const average = (pick: (printer: Printer) => number) =>
-    assigned.length ? assigned.reduce((total, printer) => total + pick(printer), 0) / assigned.length : 0;
-  const hours = product.print_minutes / 60;
+    machines.length ? machines.reduce((total, printer) => total + pick(printer), 0) / machines.length : 0;
+  const hours = minutes / 60;
   const electricity = hours * (average((printer) => printer.power_watts) / 1000) * kwhPrice;
   const machine = hours * average((printer) => printer.hourly_cost);
-
-  const extra = product.extra_cost;
   return { filament, electricity, machine, extra, total: filament + electricity + machine + extra };
+}
+
+/** What one piece costs on one printer, from its plates there. */
+export function costOnPrinter(product: Recipe, printer: Printer, filaments: Filament[], kwhPrice: number) {
+  const recipe = recipeFor(product, printer.id);
+  return breakdown(recipe.filaments, recipe.minutes, [printer], filaments, kwhPrice, product.extra_cost);
+}
+
+/**
+ * What one piece costs to make. With plates, it is the average of what it costs on each printer
+ * that has them, since any of them may end up printing it. Older products without plates use one
+ * recipe and the average electricity and wear of their printers.
+ */
+export function productCost(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number): CostBreakdown {
+  const plated = printers.filter((printer) => product.plates?.some((plate) => plate.printer_id === printer.id));
+  if (plated.length) {
+    const each = plated.map((printer) => costOnPrinter(product, printer, filaments, kwhPrice));
+    const mean = (pick: (cost: CostBreakdown) => number) => each.reduce((total, cost) => total + pick(cost), 0) / each.length;
+    return { filament: mean((cost) => cost.filament), electricity: mean((cost) => cost.electricity), machine: mean((cost) => cost.machine), extra: product.extra_cost, total: mean((cost) => cost.total) };
+  }
+  const assigned = printers.filter((printer) => product.printer_ids.includes(printer.id));
+  return breakdown(product.filaments, product.print_minutes, assigned, filaments, kwhPrice, product.extra_cost);
 }
 
 /** Commission the channel keeps on a sale (shipping is counted apart). */

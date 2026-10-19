@@ -10,6 +10,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { costPerGram, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
 import { field, money, num, weight } from '@/lib/format';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
+import type { Product } from '@/lib/types';
 import { useData, useSave } from '@/store/data';
 import { useSession } from '@/store/session';
 
@@ -42,12 +43,17 @@ export default function ProductFormScreen() {
     Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
   );
 
-  const draft = {
-    filaments: recipe.flatMap((row) => (row.filament_id && num(row.grams) > 0 ? [{ filament_id: row.filament_id, grams: num(row.grams) }] : [])),
-    printer_ids: printerIds,
-    print_minutes: Math.round(num(hours) * 60 + num(minutes)),
-    extra_cost: num(extraCost),
-  };
+  // Products with plates per printer are set up on the web; here their recipe is kept as it is.
+  const plated = !!product?.plates?.length;
+  const draft: Pick<Product, 'filaments' | 'printer_ids' | 'print_minutes' | 'plates' | 'extra_cost'> = plated
+    ? { filaments: product!.filaments, printer_ids: product!.printer_ids, print_minutes: product!.print_minutes, plates: product!.plates, extra_cost: num(extraCost) }
+    : {
+        filaments: recipe.flatMap((row) => (row.filament_id && num(row.grams) > 0 ? [{ filament_id: row.filament_id, grams: num(row.grams) }] : [])),
+        printer_ids: printerIds,
+        print_minutes: Math.round(num(hours) * 60 + num(minutes)),
+        plates: [],
+        extra_cost: num(extraCost),
+      };
   const cost = productCost(draft, filaments, printers, profile?.kwh_price ?? 0);
 
   const setRow = (index: number, change: Partial<RecipeRow>) =>
@@ -93,7 +99,7 @@ export default function ProductFormScreen() {
 
   function submit() {
     if (!name.trim()) return setError('Ponle nombre al producto.');
-    if (recipe.some((row) => row.filament_id && num(row.grams) <= 0)) return setError('Indica cuántos gramos consume cada filamento.');
+    if (!plated && recipe.some((row) => row.filament_id && num(row.grams) <= 0)) return setError('Indica cuántos gramos consume cada filamento.');
     save(write);
   }
 
@@ -129,6 +135,15 @@ export default function ProductFormScreen() {
       <Field label="SKU o clave" value={sku} onChangeText={setSku} autoCapitalize="characters" maxLength={40} />
       <Field label="Descripción" value={description} onChangeText={setDescription} multiline maxLength={500} />
 
+      {plated ? (
+        <Card>
+          <Heading>Placas por impresora</Heading>
+          <Muted>
+            {`Tiene ${product!.plates.length} ${product!.plates.length === 1 ? 'placa' : 'placas'} en ${product!.printer_ids.length} ${product!.printer_ids.length === 1 ? 'impresora' : 'impresoras'}. Sus filamentos, gramos y tiempos se editan desde la web.`}
+          </Muted>
+        </Card>
+      ) : (
+        <>
       <Heading>Filamento por pieza</Heading>
       {recipe.map((row, index) => (
         <Row key={index} style={{ alignItems: 'flex-end' }}>
@@ -178,6 +193,8 @@ export default function ProductFormScreen() {
         />
       ) : (
         <Muted>Da de alta tus impresoras en Más → Impresoras para sumar luz y desgaste al costo.</Muted>
+      )}
+        </>
       )}
       <Field
         label="Otros costos por pieza"

@@ -146,6 +146,10 @@ create table if not exists public.products (
 create index if not exists products_user_idx on public.products (user_id);
 -- Embalaje con el que se envía una pieza; entra al precio "con envío".
 alter table public.products add column if not exists packaging_id uuid references public.packaging (id) on delete set null;
+-- Placas por impresora: una pieza puede salir en varias placas y cada impresora tiene las suyas.
+-- [{"printer_id": uuid, "name": "Placa 1", "minutes": int, "grams": {"<filament_id>": number}}]
+-- filaments, print_minutes y printer_ids se guardan también, como promedio entre impresoras.
+alter table public.products add column if not exists plates jsonb not null default '[]';
 
 create table if not exists public.print_jobs (
   id uuid primary key default gen_random_uuid(),
