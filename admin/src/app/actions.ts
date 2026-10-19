@@ -74,14 +74,20 @@ export async function deleteStoreProduct(form: FormData) {
 
 const back = (key: "listo" | "error", message: string): never => redirect(`/suscripciones?${key}=${encodeURIComponent(message)}`);
 
+/** Like must(), but a database error goes back to the page as a message instead of breaking it. */
+function ok<T>(result: { data: T; error: { message: string } | null }): T {
+  if (result.error) back("error", `La base de datos respondió: ${result.error.message}`);
+  return result.data;
+}
+
 /** Gives a plan to an account without charging it: for a while, until a date or for life. */
 export async function grantSubscription(form: FormData) {
   await requireAdmin();
   const email = text(form, "email").toLowerCase();
-  const users = must(await admin().from("admin_users").select("id, email").ilike("email", email.replace(/[%_\\]/g, ""))) as { id: string; email: string }[];
+  const users = ok(await admin().from("admin_users").select("id, email").ilike("email", email.replace(/[%_\\]/g, ""))) as { id: string; email: string }[];
   const user = users.find((item) => item.email.toLowerCase() === email) ?? back("error", `No hay ninguna cuenta con el correo ${email}.`);
   const plan =
-    (must(await admin().from("plans").select("id, name").eq("id", text(form, "plan")).maybeSingle()) as { id: string; name: string } | null) ??
+    (ok(await admin().from("plans").select("id, name").eq("id", text(form, "plan")).maybeSingle()) as { id: string; name: string } | null) ??
     back("error", "Ese plan no existe.");
 
   const duration = text(form, "duration");
@@ -101,7 +107,7 @@ export async function grantSubscription(form: FormData) {
 
   const now = new Date().toISOString();
   // Only one hand-given plan at a time.
-  must(
+  ok(
     await admin()
       .from("subscriptions")
       .update({ status: "cancelled", paid_until: now, updated_at: now })
@@ -109,7 +115,7 @@ export async function grantSubscription(form: FormData) {
       .eq("source", "admin")
       .eq("status", "authorized"),
   );
-  must(
+  ok(
     await admin()
       .from("subscriptions")
       .insert({
@@ -134,7 +140,7 @@ export async function grantSubscription(form: FormData) {
 export async function cancelSubscription(form: FormData) {
   await requireAdmin();
   const now = new Date().toISOString();
-  must(
+  ok(
     await admin()
       .from("subscriptions")
       .update({ status: "cancelled", paid_until: now, updated_at: now })
