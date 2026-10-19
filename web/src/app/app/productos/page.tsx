@@ -101,10 +101,17 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         Descripción
         <textarea className="input" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} />
       </label>
-      <label className="label sm:col-span-2">
+      {/* Only the button opens the files: a label around the whole field caught clicks meant for other fields. */}
+      <div className="label sm:col-span-2">
         Foto
-        <input type="file" accept="image/*" className="input" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />
-      </label>
+        <div className="flex flex-wrap items-center gap-3 font-normal">
+          <input id="product-photo" type="file" accept="image/*" className="sr-only" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />
+          <label htmlFor="product-photo" className="btn cursor-pointer">
+            {photo || product?.image_path ? "Cambiar foto" : "Elegir foto"}
+          </label>
+          <span className="text-sm text-muted">{photo ? photo.name : product?.image_path ? "Ya tiene foto" : "Sin foto"}</span>
+        </div>
+      </div>
 
       <fieldset className="flex flex-col gap-2 sm:col-span-2">
         <legend className="mb-1 text-sm font-semibold">Filamento por pieza</legend>
