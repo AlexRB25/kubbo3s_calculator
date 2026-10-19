@@ -1228,3 +1228,42 @@ create trigger materials_initial_stock after insert on public.materials
 drop trigger if exists products_initial_stock on public.products;
 create trigger products_initial_stock after insert on public.products
   for each row execute function public.initial_stock_as_count();
+
+-- ───────────────────────── Catálogo de filamentos Kubbo ─────────────────────────
+-- Filamentos precargados por Kubbo3D desde el panel admin (marca, material, color, foto, datos).
+-- Al dar de alta un filamento el usuario elige uno y solo completa lo suyo (costo, proveedor…).
+
+create table if not exists public.filament_catalog (
+  id uuid primary key default gen_random_uuid(),
+  brand text not null default '',
+  material text not null check (char_length(material) between 1 and 60),
+  -- Nombre del color como lo vende la marca: "Verde bosque", "Gris espacial"…
+  color_name text not null default '',
+  color_hex text not null default '#9A9AA8',
+  image_url text,
+  -- Peso neto de un rollo, en gramos.
+  spool_g numeric(10,2) not null default 1000 check (spool_g > 0),
+  -- Precio de referencia por kg en México (lo que normalmente cuesta).
+  reference_price_kg numeric(10,2) not null default 0 check (reference_price_kg >= 0),
+  nozzle_temp text not null default '',
+  bed_temp text not null default '',
+  notes text not null default '',
+  active boolean not null default true,
+  sort int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists filament_catalog_list_idx on public.filament_catalog (active, brand, material, color_name);
+
+-- Todos lo leen; solo el panel admin (llave secreta) lo escribe.
+alter table public.filament_catalog enable row level security;
+revoke insert, update, delete on public.filament_catalog from anon, authenticated;
+drop policy if exists filament_catalog_read on public.filament_catalog;
+create policy filament_catalog_read on public.filament_catalog for select to anon, authenticated using (active);
+
+-- El filamento del usuario guarda su foto y, si salió del catálogo, de cuál.
+alter table public.filaments add column if not exists image_url text;
+alter table public.filaments add column if not exists catalog_id uuid references public.filament_catalog (id) on delete set null;
+
+-- Fotos del catálogo: públicas; las sube el panel admin.
+insert into storage.buckets (id, name, public) values ('catalog', 'catalog', true)
+on conflict (id) do nothing;

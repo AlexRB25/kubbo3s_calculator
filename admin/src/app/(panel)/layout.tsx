@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/reportes", label: "Reportes de problemas" },
   { href: "/tienda", label: "Tienda: productos" },
   { href: "/ajustes", label: "Tienda: ajustes" },
+  { href: "/filamentos", label: "Catálogo de filamentos" },
 ];
 
 // Every page here reads live data with the admin's session: never prerender them at build time.

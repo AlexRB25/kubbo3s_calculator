@@ -5,13 +5,23 @@ import { useState } from "react";
 import { createUpload } from "@/app/actions";
 import { browserClient } from "@/lib/supabase/browser";
 
-const publicUrl = (path: string) => `${process.env.PB_SUPABASE_URL}/storage/v1/object/public/store/${path}`;
+const publicUrl = (bucket: string, path: string) => `${process.env.PB_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 
 /**
  * Photos of a store product. Files go straight from the browser to Supabase Storage and their
  * public URLs travel with the form as repeated `images` fields; the first one is the cover.
  */
-export function ImagesInput({ defaultValue }: { defaultValue: string[] }) {
+export function ImagesInput({
+  defaultValue,
+  bucket = "store",
+  single = false,
+}: {
+  defaultValue: string[];
+  /** Public bucket the photos go to. */
+  bucket?: "store" | "catalog";
+  /** Only one photo: a new one replaces it. */
+  single?: boolean;
+}) {
   const [urls, setUrls] = useState(defaultValue);
   const [status, setStatus] = useState("");
 
@@ -20,13 +30,13 @@ export function ImagesInput({ defaultValue }: { defaultValue: string[] }) {
     try {
       for (const file of Array.from(files)) {
         setStatus(`Subiendo ${file.name}…`);
-        const { path, token } = await createUpload(file.name);
-        const { error } = await browserClient().storage.from("store").uploadToSignedUrl(path, token, file, {
+        const { path, token } = await createUpload(file.name, bucket);
+        const { error } = await browserClient().storage.from(bucket).uploadToSignedUrl(path, token, file, {
           contentType: file.type,
           cacheControl: "31536000",
         });
         if (error) throw new Error(error.message);
-        setUrls((current) => [...current, publicUrl(path)]);
+        setUrls((current) => (single ? [publicUrl(bucket, path)] : [...current, publicUrl(bucket, path)]));
       }
       setStatus("");
     } catch (reason) {
@@ -36,7 +46,7 @@ export function ImagesInput({ defaultValue }: { defaultValue: string[] }) {
 
   return (
     <div className="label">
-      Fotos (la primera es la portada)
+      {single ? "Foto" : "Fotos (la primera es la portada)"}
       <div className="flex flex-wrap gap-3">
         {urls.map((url, index) => (
           <div key={url} className="flex flex-col gap-1">
@@ -57,8 +67,8 @@ export function ImagesInput({ defaultValue }: { defaultValue: string[] }) {
           </div>
         ))}
         <label className="btn size-28 flex-col text-center text-xs">
-          + Agregar fotos
-          <input type="file" accept="image/*" multiple className="sr-only" onChange={(event) => handleFiles(event.target.files)} />
+          {single ? (urls.length ? "Cambiar foto" : "+ Agregar foto") : "+ Agregar fotos"}
+          <input type="file" accept="image/*" multiple={!single} className="sr-only" onChange={(event) => handleFiles(event.target.files)} />
         </label>
       </div>
       {status && <span role="status">{status}</span>}

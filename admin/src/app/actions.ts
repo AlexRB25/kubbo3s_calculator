@@ -28,11 +28,12 @@ export async function signOut() {
 
 // ── Tienda: productos y categorías ──
 
-/** One-time permission for the browser to upload a photo straight to the `store` bucket. */
-export async function createUpload(fileName: string) {
+/** One-time permission for the browser to upload a photo straight to a public bucket (store or catalog). */
+export async function createUpload(fileName: string, bucket: "store" | "catalog" = "store") {
   await requireAdmin();
+  if (bucket !== "store" && bucket !== "catalog") throw new Error("Bucket no válido.");
   const extension = fileName.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-  const upload = await admin().storage.from("store").createSignedUploadUrl(`${crypto.randomUUID()}.${extension}`);
+  const upload = await admin().storage.from(bucket).createSignedUploadUrl(`${crypto.randomUUID()}.${extension}`);
   if (upload.error) throw new Error(upload.error.message);
   return { path: upload.data.path, token: upload.data.token };
 }
@@ -67,6 +68,37 @@ export async function deleteStoreProduct(form: FormData) {
   must(await admin().from("store_products").delete().eq("id", text(form, "id")));
   revalidatePath("/tienda");
   redirect("/tienda");
+}
+
+// ── Catálogo de filamentos ──
+
+export async function saveCatalogFilament(form: FormData) {
+  await requireAdmin();
+  const id = text(form, "id");
+  const row = {
+    brand: text(form, "brand"),
+    material: text(form, "material"),
+    color_name: text(form, "color_name"),
+    color_hex: text(form, "color_hex") || "#9A9AA8",
+    image_url: form.getAll("images").map(String).filter(Boolean)[0] ?? null,
+    spool_g: number(form, "spool_g") || 1000,
+    reference_price_kg: number(form, "reference_price_kg"),
+    nozzle_temp: text(form, "nozzle_temp"),
+    bed_temp: text(form, "bed_temp"),
+    notes: text(form, "notes"),
+    sort: number(form, "sort"),
+    active: flag(form, "active"),
+  };
+  must(id ? await admin().from("filament_catalog").update(row).eq("id", id) : await admin().from("filament_catalog").insert(row));
+  revalidatePath("/filamentos");
+  redirect("/filamentos");
+}
+
+export async function deleteCatalogFilament(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("filament_catalog").delete().eq("id", text(form, "id")));
+  revalidatePath("/filamentos");
+  redirect("/filamentos");
 }
 
 export async function saveStoreCategory(form: FormData) {

@@ -42,6 +42,25 @@ export type Filament = {
   avg_cost_per_g: number;
   low_stock_g: number;
   notes: string;
+  /** Photo of the spool (an upload of the user, or the one of the Kubbo catalog). */
+  image_url: string | null;
+  /** The Kubbo catalog filament it was created from. */
+  catalog_id: string | null;
+};
+
+/** A filament Kubbo3D preloads for everyone to pick (table filament_catalog). */
+export type CatalogFilament = {
+  id: string;
+  brand: string;
+  material: string;
+  color_name: string;
+  color_hex: string;
+  image_url: string | null;
+  spool_g: number;
+  reference_price_kg: number;
+  nozzle_temp: string;
+  bed_temp: string;
+  notes: string;
 };
 
 export type Channel = {

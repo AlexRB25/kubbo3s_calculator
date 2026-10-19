@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { PurchaseForm } from "@/components/app/PurchaseForm";
 import { CountForm, StockHistory } from "@/components/app/StockDialogs";
-import { Empty, FieldsForm, Modal, PageHeader, Stat, TableCard, type FieldDef } from "@/components/app/ui";
+import { FilamentForm } from "@/components/app/FilamentForm";
+import { Empty, Modal, PageHeader, Stat, TableCard } from "@/components/app/ui";
 import { costPerGram, filamentName } from "@/lib/costs";
 import { useData } from "@/lib/data";
 import { money, weight } from "@/lib/format";
 import { filamentItem, preciseMoney } from "@/lib/inventory";
-import { supabase } from "@/lib/supabase";
 import type { Filament } from "@/lib/types";
 
 export default function FilamentsPage() {
@@ -18,21 +18,6 @@ export default function FilamentsPage() {
   const [counting, setCounting] = useState<Filament | null>(null);
   const [history, setHistory] = useState<Filament | null>(null);
 
-  const supplierOptions = suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }));
-  const fields: FieldDef[] = [
-    { name: "material", label: "Material", required: true, placeholder: "PLA, PETG, ABS, TPU…" },
-    { name: "color", label: "Color", placeholder: "Negro mate" },
-    { name: "brand", label: "Marca" },
-    { name: "color_hex", label: "Color en las listas", type: "color" },
-    // Stock is typed only when the filament is new; later it moves with purchases, prints and arqueos.
-    ...(editing === "new"
-      ? [{ name: "stock_g", label: "Existencia inicial (g)", type: "number" as const, hint: "Lo que ya tienes; queda en el historial como existencia inicial." }]
-      : []),
-    { name: "cost_per_kg", label: "Costo de referencia por kg ($)", type: "number", hint: "Lo que normalmente cuesta. El costo real por gramo sale de tus compras." },
-    { name: "low_stock_g", label: "Avisarme al bajar de (g)", type: "number" },
-    { name: "supplier_id", label: "Proveedor", type: "select", options: supplierOptions, none: "Sin proveedor" },
-    { name: "notes", label: "Notas", type: "textarea", placeholder: "Temperaturas, secado…" },
-  ];
   const totalGrams = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0);
   const totalValue = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0) * costPerGram(filament), 0);
   const current = editing === "new" ? undefined : (editing ?? undefined);
@@ -74,8 +59,21 @@ export default function FilamentsPage() {
                 {filaments.map((filament) => (
                   <tr key={filament.id}>
                     <td>
-                      <span className="mr-2 inline-block size-4 rounded-full border border-line align-middle" style={{ background: filament.color_hex }} />
-                      {filamentName(filament)}
+                      <span className="flex items-center gap-3">
+                        <span className="relative size-10 shrink-0 overflow-hidden rounded-lg border border-line" style={{ background: filament.color_hex }}>
+                          {filament.image_url && (
+                            // eslint-disable-next-line @next/next/no-img-element -- public photo of the spool
+                            <img src={filament.image_url} alt="" className="absolute inset-0 size-full object-cover" />
+                          )}
+                        </span>
+                        <span>
+                          {filamentName(filament)}
+                          <span className="flex items-center gap-1 text-xs text-muted">
+                            <span className="inline-block size-3 rounded-full border border-line" style={{ background: filament.color_hex }} />
+                            {filament.color || "Sin nombre de color"}
+                          </span>
+                        </span>
+                      </span>
                     </td>
                     <td className="text-muted">{suppliers.find((supplier) => supplier.id === filament.supplier_id)?.name ?? "—"}</td>
                     <td className="num text-muted">{filament.cost_per_kg > 0 ? money(filament.cost_per_kg) : "—"}</td>
@@ -115,19 +113,8 @@ export default function FilamentsPage() {
       )}
 
       {editing && (
-        <Modal title={current ? filamentName(current) : "Nuevo filamento"} onClose={() => setEditing(null)}>
-          <FieldsForm
-            fields={fields}
-            initial={current ?? { material: "PLA", color_hex: "#ffffff", low_stock_g: 200 }}
-            onDone={() => setEditing(null)}
-            onSubmit={(values) => {
-              // The stock is not edited here: it is corrected with an arqueo, which stays in the history.
-              if (current) delete values.stock_g;
-              return current ? supabase().from("filaments").update(values).eq("id", current.id) : supabase().from("filaments").insert(values);
-            }}
-            onDelete={current ? () => supabase().from("filaments").delete().eq("id", current.id) : undefined}
-            deleteConfirm="El historial se conserva, pero los productos que usan este filamento dejarán de sumar su costo. ¿Eliminar?"
-          />
+        <Modal title={current ? filamentName(current) : "Nuevo filamento"} onClose={() => setEditing(null)} wide>
+          <FilamentForm filament={current} onDone={() => setEditing(null)} />
         </Modal>
       )}
 
