@@ -147,9 +147,14 @@ create index if not exists products_user_idx on public.products (user_id);
 -- Embalaje con el que se envía una pieza; entra al precio "con envío".
 alter table public.products add column if not exists packaging_id uuid references public.packaging (id) on delete set null;
 -- Placas por impresora: una pieza puede salir en varias placas y cada impresora tiene las suyas.
--- [{"printer_id": uuid, "name": "Placa 1", "minutes": int, "grams": {"<filament_id>": number}}]
--- filaments, print_minutes y printer_ids se guardan también, como promedio entre impresoras.
+-- [{"printer_id": uuid, "name": "Placa 1", "minutes": int, "grams": {"<filament_id>": number},
+--   "parts": {"<part_id>": piezas que salen en la placa}}]
+-- filaments y print_minutes guardan lo que toca a un producto en la combinación de placas más cara.
 alter table public.products add column if not exists plates jsonb not null default '[]';
+-- Piezas que forman el producto: [{"id": text, "name": "Brazo", "needed": 2}].
+alter table public.products add column if not exists parts jsonb not null default '[]';
+-- Piezas impresas que todavía no completan un producto: {"<part_id>": cantidad}.
+alter table public.products add column if not exists part_stock jsonb not null default '{}';
 
 create table if not exists public.print_jobs (
   id uuid primary key default gen_random_uuid(),
@@ -168,6 +173,9 @@ create table if not exists public.print_jobs (
   check (good_quantity <= quantity),
   check (status = 'done' or good_quantity = 0)
 );
+-- Placa que se mandó a imprimir (quantity = veces): {"name": "Placa 2", "parts": {"<part_id>": cantidad}}.
+-- Sus piezas buenas entran como piezas sueltas y se arman productos cuando se completan.
+alter table public.print_jobs add column if not exists plate jsonb;
 create index if not exists print_jobs_user_idx on public.print_jobs (user_id, created_at desc);
 create index if not exists print_jobs_created_at_idx on public.print_jobs (created_at);
 
@@ -218,6 +226,8 @@ begin
       generated always as (quantity * unit_price - fees - shipping_cost - packaging_cost - quantity * unit_cost) stored;
   end if;
 end $$;
+-- Precio de lista del canal al vender: con el precio real da el descuento que se hizo.
+alter table public.sales add column if not exists list_price numeric(12,2) check (list_price >= 0);
 
 create table if not exists public.maintenance (
   id uuid primary key default gen_random_uuid(),
@@ -352,16 +362,97 @@ create or replace trigger job_filament_moves_stock
   after insert or update or delete on public.print_job_filaments
   for each row execute function public.job_filament_moves_stock();
 
--- Piezas buenas que entran a existencias y minutos que acumula la impresora.
+-- Piezas sueltas de un producto que se imprime por placas: suma (o quita) las de una placa
+-- `times` veces y arma los productos que ya se completan. Si al quitar faltan piezas, desarma
+-- los productos necesarios. Armar y desarmar quedan en el historial como ajustes.
+create or replace function public.move_parts(p_product uuid, p_parts jsonb, p_times int) returns void
+language plpgsql set search_path = '' as $$
+declare
+  v_parts jsonb;
+  v_loose jsonb;
+  v_part jsonb;
+  v_key text;
+  v_have numeric;
+  v_need numeric;
+  v_build int;
+  v_undo int := 0;
+begin
+  if p_product is null or p_times = 0 or p_parts is null then
+    return;
+  end if;
+  select parts, part_stock into v_parts, v_loose from public.products where id = p_product for update;
+  if not found then
+    return;
+  end if;
+  v_loose := coalesce(v_loose, '{}'::jsonb);
+  for v_key in select jsonb_object_keys(p_parts) loop
+    v_loose := jsonb_set(v_loose, array[v_key],
+      to_jsonb(coalesce((v_loose ->> v_key)::numeric, 0) + coalesce((p_parts ->> v_key)::numeric, 0) * p_times));
+  end loop;
+
+  if jsonb_array_length(coalesce(v_parts, '[]'::jsonb)) > 0 then
+    -- Productos que se completan con lo suelto, o que hay que desarmar si algo quedó en negativo.
+    v_build := null;
+    for v_part in select * from jsonb_array_elements(v_parts) loop
+      v_need := greatest(coalesce((v_part ->> 'needed')::numeric, 1), 1);
+      v_have := coalesce((v_loose ->> (v_part ->> 'id'))::numeric, 0);
+      v_build := least(coalesce(v_build, floor(v_have / v_need)::int), floor(v_have / v_need)::int);
+      if v_have < 0 then
+        v_undo := greatest(v_undo, ceil(-v_have / v_need)::int);
+      end if;
+    end loop;
+    if v_undo > 0 then
+      v_build := -v_undo;
+    end if;
+    if coalesce(v_build, 0) <> 0 then
+      for v_part in select * from jsonb_array_elements(v_parts) loop
+        v_need := greatest(coalesce((v_part ->> 'needed')::numeric, 1), 1);
+        v_loose := jsonb_set(v_loose, array[v_part ->> 'id'],
+          to_jsonb(coalesce((v_loose ->> (v_part ->> 'id'))::numeric, 0) - v_need * v_build));
+      end loop;
+    end if;
+  end if;
+
+  update public.products set part_stock = v_loose where id = p_product;
+  if coalesce(v_build, 0) > 0 then
+    insert into public.inventory_adjustments (item_type, item_id, delta, note)
+    values ('product', p_product, v_build, 'Armado con piezas impresas');
+  elsif coalesce(v_build, 0) < 0 then
+    insert into public.inventory_adjustments (item_type, item_id, delta, note)
+    values ('product', p_product, v_build, 'Desarmado: se corrigió o quitó una impresión');
+  end if;
+end $$;
+-- Solo sirve dentro del trigger de impresiones: una llamada directa la frena stock_only_by_moves.
+revoke execute on function public.move_parts(uuid, jsonb, int) from public, anon;
+grant execute on function public.move_parts(uuid, jsonb, int) to authenticated;
+
+-- Piezas buenas que entran a existencias y minutos que acumula la impresora. Una placa suma sus
+-- piezas sueltas; una impresión sin placa suma productos completos.
 create or replace function public.print_job_moves_stock() returns trigger
 language plpgsql set search_path = '' as $$
+declare
+  -- Si solo cambian notas o tiempo, las piezas no se mueven (ni se arma o desarma nada).
+  v_same boolean := tg_op = 'UPDATE'
+    and (old.product_id, old.plate, old.good_quantity) is not distinct from (new.product_id, new.plate, new.good_quantity);
 begin
   if tg_op <> 'INSERT' then
-    update public.products set stock = stock - old.good_quantity where id = old.product_id;
+    if v_same then
+      null;
+    elsif old.plate is null then
+      update public.products set stock = stock - old.good_quantity where id = old.product_id;
+    else
+      perform public.move_parts(old.product_id, old.plate -> 'parts', -old.good_quantity);
+    end if;
     update public.printers set print_minutes = print_minutes - old.minutes where id = old.printer_id;
   end if;
   if tg_op <> 'DELETE' then
-    update public.products set stock = stock + new.good_quantity where id = new.product_id;
+    if v_same then
+      null;
+    elsif new.plate is null then
+      update public.products set stock = stock + new.good_quantity where id = new.product_id;
+    else
+      perform public.move_parts(new.product_id, new.plate -> 'parts', new.good_quantity);
+    end if;
     update public.printers set print_minutes = print_minutes + new.minutes where id = new.printer_id;
   end if;
   return null;
@@ -437,6 +528,8 @@ create or replace trigger maintenance_adds_expense
 
 -- Crea (p_id null) o corrige una impresión junto con su consumo de filamento, en una sola
 -- transacción. p_filaments: [{"filament_id": uuid, "grams": number}]
+-- Versión anterior, sin placa.
+drop function if exists public.save_print(uuid, uuid, text, uuid, int, int, text, int, text, jsonb);
 create or replace function public.save_print(
   p_id uuid,
   p_product uuid,
@@ -447,16 +540,17 @@ create or replace function public.save_print(
   p_status text,
   p_minutes int,
   p_notes text,
-  p_filaments jsonb
+  p_filaments jsonb,
+  p_plate jsonb default null
 ) returns uuid
 language plpgsql set search_path = '' as $$
 declare
   v_id uuid := p_id;
 begin
   if p_id is null then
-    insert into public.print_jobs (product_id, product_name, printer_id, quantity, good_quantity, status, minutes, notes, finished_at)
+    insert into public.print_jobs (product_id, product_name, printer_id, quantity, good_quantity, status, minutes, notes, finished_at, plate)
     values (p_product, p_name, p_printer, p_quantity, p_good, p_status, p_minutes, coalesce(p_notes, ''),
-            case when p_status <> 'printing' then now() end)
+            case when p_status <> 'printing' then now() end, p_plate)
     returning id into v_id;
   else
     update public.print_jobs set
@@ -468,6 +562,7 @@ begin
       status = p_status,
       minutes = p_minutes,
       notes = coalesce(p_notes, ''),
+      plate = p_plate,
       finished_at = case when p_status = 'printing' then null else coalesce(finished_at, now()) end
     where id = p_id;
     if not found then
@@ -479,15 +574,16 @@ begin
 
   insert into public.print_job_filaments (job_id, filament_id, filament_name, grams, cost)
   select v_id, f.id, concat_ws(' ', f.material, nullif(f.color, ''), nullif(f.brand, '')),
-         x.grams, round(x.grams * f.cost_per_kg / 1000, 2)
+         -- Costo real de las compras; el de referencia mientras no hay compras.
+         x.grams, round(x.grams * case when f.avg_cost_per_g > 0 then f.avg_cost_per_g else f.cost_per_kg / 1000 end, 2)
   from jsonb_to_recordset(coalesce(p_filaments, '[]'::jsonb)) as x (filament_id uuid, grams numeric)
   join public.filaments f on f.id = x.filament_id
   where x.grams > 0;
 
   return v_id;
 end $$;
-revoke execute on function public.save_print(uuid, uuid, text, uuid, int, int, text, int, text, jsonb) from public, anon;
-grant execute on function public.save_print(uuid, uuid, text, uuid, int, int, text, int, text, jsonb) to authenticated;
+revoke execute on function public.save_print(uuid, uuid, text, uuid, int, int, text, int, text, jsonb, jsonb) from public, anon;
+grant execute on function public.save_print(uuid, uuid, text, uuid, int, int, text, int, text, jsonb, jsonb) to authenticated;
 
 -- ───────────────────────── Imágenes de producto ─────────────────────────
 -- Bucket público (las URL no se pueden adivinar); cada usuario solo escribe en su carpeta <user_id>/.
@@ -1146,7 +1242,7 @@ create or replace view public.inventory_moves with (security_invoker = true) as
     from public.print_job_filaments f join public.print_jobs j on j.id = f.job_id where f.filament_id is not null
   union all
   select j.id, 'product', j.product_id, 'production', j.good_quantity, null, coalesce(j.finished_at, j.created_at), j.notes, null
-    from public.print_jobs j where j.product_id is not null and j.good_quantity > 0
+    from public.print_jobs j where j.product_id is not null and j.good_quantity > 0 and j.plate is null
   union all
   select s.id, 'product', s.product_id, 'sale', -s.quantity, s.quantity * s.unit_price, s.sold_at, s.channel_name, null
     from public.sales s where s.product_id is not null
@@ -1176,6 +1272,11 @@ begin
   elsif new.stock is distinct from old.stock then
     raise exception using errcode = 'P0001',
       message = 'La existencia solo cambia con compras, impresiones, ventas o un arqueo. Usa «Arquear» para corregirla.';
+  elsif tg_table_name = 'products' then
+    -- Las piezas sueltas solo las mueven las impresiones por placa.
+    if new.part_stock is distinct from old.part_stock then
+      raise exception using errcode = 'P0001', message = 'Las piezas sueltas solo cambian al imprimir placas.';
+    end if;
   end if;
   return new;
 end $$;

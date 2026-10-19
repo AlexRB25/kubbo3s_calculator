@@ -87,8 +87,14 @@ export type Packaging = {
 
 export type FilamentUse = { filament_id: string; grams: number };
 
-/** One build plate of a piece on one printer: its time and the grams of each filament the product uses (0 if it is not on this plate). */
-export type Plate = { printer_id: string; name: string; minutes: number; grams: Record<string, number> };
+/** A piece the product is made of, and how many of it one product takes. */
+export type Part = { id: string; name: string; needed: number };
+
+/**
+ * One build plate on one printer: its time, the grams of each filament the product uses (0 if it
+ * is not on this plate) and how many of each piece it prints. Without `parts` it prints one whole product.
+ */
+export type Plate = { printer_id: string; name: string; minutes: number; grams: Record<string, number>; parts?: Record<string, number> };
 
 export type Product = {
   id: string;
@@ -102,8 +108,12 @@ export type Product = {
   /** Grams of each filament one piece takes. */
   filaments: FilamentUse[];
   printer_ids: string[];
-  /** Plates on each printer; filaments, print_minutes and printer_ids are their average. */
+  /** Pieces it is made of; empty for a single piece. */
+  parts: Part[];
+  /** Plates on each printer; filaments and print_minutes are what falls on one product in the dearest way. */
   plates: Plate[];
+  /** Printed pieces that do not complete a product yet, by part id. */
+  part_stock: Record<string, number>;
   /** Selling price by channel id. */
   prices: Record<string, number>;
   /** Packaging it ships in; counts toward the "with shipping" price. */
@@ -123,6 +133,8 @@ export type PrintJob = {
   minutes: number;
   notes: string;
   created_at: string;
+  /** Plate printed `quantity` times; its good prints add loose pieces. Null when whole products were printed. */
+  plate: { name: string; parts: Record<string, number> } | null;
   print_job_filaments: { filament_id: string | null; filament_name: string; grams: number; cost: number }[];
 };
 
@@ -138,6 +150,8 @@ export type Sale = {
   shipping_cost: number;
   unit_cost: number;
   packaging_cost: number;
+  /** The channel price when it was sold; with unit_price it tells the discount. */
+  list_price: number | null;
   profit: number;
   notes: string;
   sold_at: string;

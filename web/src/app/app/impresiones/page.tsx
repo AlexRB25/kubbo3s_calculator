@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Empty, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { filamentName, recipeFor } from "@/lib/costs";
+import { filamentName, partsOf, plateParts, productsFrom } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { day, duration, num, weight } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import type { PrintJob, PrintStatus, Product } from "@/lib/types";
+import type { Plate, PrintJob, PrintStatus, Product } from "@/lib/types";
 
 type UseRow = { filament_id: string; grams: string };
 
@@ -19,6 +19,18 @@ const STATUS: Record<PrintStatus, { label: string; tone: string }> = {
 const recipeRows = (product: Product | undefined): UseRow[] =>
   product?.filaments.length ? product.filaments.map((use) => ({ filament_id: use.filament_id, grams: "" })) : [{ filament_id: "", grams: "" }];
 
+const plateRows = (plate: Plate): UseRow[] => {
+  const rows = Object.entries(plate.grams).flatMap(([filament_id, grams]) => (grams > 0 ? [{ filament_id, grams: "" }] : []));
+  return rows.length ? rows : [{ filament_id: "", grams: "" }];
+};
+
+/** "10 Brazo, 1 Cuerpo" */
+const piecesLabel = (pieces: Record<string, number>, product: Product) =>
+  partsOf(product)
+    .filter((part) => (pieces[part.id] ?? 0) > 0)
+    .map((part) => `${pieces[part.id]} ${part.name}`)
+    .join(", ");
+
 /**
  * Sends something to print, or corrects / finishes an existing print (`job`). Empty fields fall
  * back to what the product's recipe says, shown as the placeholder.
@@ -29,6 +41,12 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
 
   const [productId, setProductId] = useState(job?.product_id ?? "");
   const product = products.find((item) => item.id === productId);
+  // Products set up by plates print one plate at a time: quantity is how many times.
+  const plated = !!product?.plates?.length;
+  const [plateIndex, setPlateIndex] = useState(() =>
+    job?.plate && product ? product.plates.findIndex((plate) => plate.printer_id === job.printer_id && plate.name === job.plate!.name) : -1,
+  );
+  const plate = plated && plateIndex >= 0 ? product!.plates[plateIndex] : undefined;
   const [customName, setCustomName] = useState(job && !job.product_id ? job.product_name : "");
   const [printerId, setPrinterId] = useState(job?.printer_id ?? "");
   const [quantity, setQuantity] = useState(String(job?.quantity ?? 1));
@@ -43,14 +61,17 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
   );
 
   const pieces = Math.max(Math.round(num(quantity)), 0);
-  // What the product takes on the chosen printer: the sum of its plates there.
-  const recipe = product ? recipeFor(product, printerId) : { filaments: [], minutes: 0 };
+  const recipe = plate
+    ? { filaments: Object.entries(plate.grams).map(([filament_id, grams]) => ({ filament_id, grams })), minutes: plate.minutes }
+    : { filaments: product?.filaments ?? [], minutes: product?.print_minutes ?? 0 };
+  const platePieces = plate && product ? plateParts(plate, partsOf(product)) : null;
   const recipeGrams = (filamentId: string) => (recipe.filaments.find((use) => use.filament_id === filamentId)?.grams ?? 0) * pieces;
   const recipeMinutes = recipe.minutes * pieces;
 
   function chooseProduct(next: string) {
     const chosen = products.find((item) => item.id === next);
     setProductId(next);
+    setPlateIndex(-1);
     setRows(recipeRows(chosen));
     if (chosen?.printer_ids.length && !chosen.printer_ids.includes(printerId)) setPrinterId(chosen.printer_ids[0]);
   }
@@ -63,6 +84,7 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
     const name = product?.name ?? customName.trim();
     if (!name) return setError("Elige un producto o escribe qué vas a imprimir.");
     if (pieces < 1) return setError("Indica cuántas piezas son.");
+    if (plated && !plate && !job?.plate) return setError("Elige qué placa vas a imprimir.");
     const goodPieces = status === "done" ? (good === "" ? pieces : Math.round(num(good))) : 0;
     if (goodPieces > pieces) return setError("No pueden salir más piezas buenas de las que mandaste a imprimir.");
 
@@ -81,6 +103,8 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
           p_filaments: rows.flatMap((row) =>
             row.filament_id ? [{ filament_id: row.filament_id, grams: row.grams === "" ? recipeGrams(row.filament_id) : num(row.grams) }] : [],
           ),
+          // A plate that was renamed or removed from the product keeps what it printed.
+          p_plate: plate && platePieces ? { name: plate.name, parts: platePieces } : plated ? (job?.plate ?? null) : null,
         }),
       onDone,
     );
@@ -105,9 +129,49 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
           <input className="input" value={customName} onChange={(event) => setCustomName(event.target.value)} maxLength={80} />
         </label>
       )}
+      {plated && product && (
+        <label className="label sm:col-span-2">
+          Placa
+          <select
+            className="input"
+            value={plateIndex}
+            onChange={(event) => {
+              const index = Number(event.target.value);
+              setPlateIndex(index);
+              if (index >= 0) {
+                setPrinterId(product.plates[index].printer_id);
+                setRows(plateRows(product.plates[index]));
+              }
+            }}
+          >
+            <option value={-1}>{job?.plate ? `${job.plate.name} (ya no está en el producto)` : "Elegir…"}</option>
+            {product.plates.map((item, index) => (
+              <option key={index} value={index}>
+                {item.name} · {printers.find((printer) => printer.id === item.printer_id)?.name ?? "Impresora borrada"} — {piecesLabel(plateParts(item, partsOf(product)), product)}
+              </option>
+            ))}
+          </select>
+          <span className="font-normal">
+            {piecesLabel(product.part_stock ?? {}, product)
+              ? `Tienes ${product.stock} armados y sueltas: ${piecesLabel(product.part_stock, product)}.`
+              : `Tienes ${product.stock} armados y ninguna pieza suelta.`}
+          </span>
+        </label>
+      )}
       <label className="label">
-        Piezas
+        {plated ? "Veces que la imprimes" : "Piezas"}
         <input className="input" type="number" min={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+        {platePieces && product && pieces > 0 && (
+          <span className="font-normal">
+            Salen {piecesLabel(Object.fromEntries(Object.entries(platePieces).map(([id, count]) => [id, count * pieces])), product)}.
+            {(() => {
+              const total = { ...(product.part_stock ?? {}) };
+              for (const [id, count] of Object.entries(platePieces)) total[id] = (total[id] ?? 0) + count * pieces;
+              const ready = productsFrom(total, partsOf(product));
+              return ready > 0 ? ` Con lo suelto armas ${ready} ${ready === 1 ? "producto" : "productos"}.` : " Todavía no completan un producto.";
+            })()}
+          </span>
+        )}
       </label>
       <label className="label">
         Tiempo (min)
@@ -116,7 +180,7 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
       </label>
       <label className="label">
         Impresora
-        <select className="input" value={printerId} onChange={(event) => setPrinterId(event.target.value)}>
+        <select className="input" value={printerId} onChange={(event) => setPrinterId(event.target.value)} disabled={!!plate}>
           <option value="">Sin impresora</option>
           {printers.map((printer) => (
             <option key={printer.id} value={printer.id}>
@@ -137,9 +201,13 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
       </label>
       {status === "done" && (
         <label className="label">
-          Piezas buenas
+          {plated ? "Placas que salieron bien" : "Piezas buenas"}
           <input className="input" type="number" min={0} value={good} onChange={(event) => setGood(event.target.value)} placeholder={String(pieces)} />
-          {product && <span className="font-normal">Entran al stock del producto.</span>}
+          {product && (
+            <span className="font-normal">
+              {plated ? "Sus piezas entran como sueltas y se arman productos cuando se completan." : "Entran al stock del producto."}
+            </span>
+          )}
         </label>
       )}
 
@@ -247,7 +315,7 @@ export default function PrintsPage() {
                 <tr key={job.id}>
                   <td className="whitespace-nowrap text-muted">{day(job.created_at)}</td>
                   <td>
-                    {job.quantity} × {job.product_name}
+                    {job.quantity} × {job.plate ? `${job.plate.name} de ${job.product_name}` : job.product_name}
                   </td>
                   <td className="text-muted">{printers.find((printer) => printer.id === job.printer_id)?.name ?? "—"}</td>
                   <td className="num">{weight(job.print_job_filaments.reduce((total, use) => total + use.grams, 0))}</td>
@@ -269,7 +337,7 @@ export default function PrintsPage() {
       )}
 
       {editing && (
-        <Modal wide title={editing === "new" ? "Mandar a imprimir" : `${editing.quantity} × ${editing.product_name}`} onClose={() => setEditing(null)}>
+        <Modal wide title={editing === "new" ? "Mandar a imprimir" : `${editing.quantity} × ${editing.plate ? `${editing.plate.name} de ` : ""}${editing.product_name}`} onClose={() => setEditing(null)}>
           <PrintForm job={editing === "new" ? undefined : editing} onDone={() => setEditing(null)} />
         </Modal>
       )}

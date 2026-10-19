@@ -29,7 +29,9 @@ export default function NewSaleScreen() {
   const channel = channels.find((item) => item.id === channelId);
   const pieces = Math.max(Math.round(num(quantity)), 0);
   const listPrice = product?.prices[channelId] ?? 0;
-  const unitPrice = price === '' ? listPrice : num(price);
+  // What it really sold for; the channel price is only a reference to tell the discount.
+  const unitPrice = num(price);
+  const discount = listPrice > 0 && price !== '' ? listPrice - unitPrice : 0;
   const autoFees = channelFees(channel, unitPrice, pieces);
   const totalFees = fees === '' ? autoFees : num(fees);
   const shipped = delivery === 'shipped';
@@ -45,7 +47,7 @@ export default function NewSaleScreen() {
     const name = product?.name ?? customName.trim();
     if (!name) return setError('Elige un producto o escribe qué vendiste.');
     if (pieces < 1) return setError('Indica cuántas piezas vendiste.');
-    if (unitPrice <= 0) return setError('Indica el precio de venta.');
+    if (price === '' || unitPrice <= 0) return setError('Indica en cuánto lo vendiste.');
     save(() =>
       supabase.from('sales').insert({
         product_id: productId,
@@ -54,6 +56,7 @@ export default function NewSaleScreen() {
         channel_name: channel?.name ?? '',
         quantity: pieces,
         unit_price: unitPrice,
+        list_price: listPrice > 0 ? listPrice : null,
         fees: totalFees,
         shipping_cost: totalShipping,
         packaging_cost: totalPackaging,
@@ -92,14 +95,23 @@ export default function NewSaleScreen() {
         <Field style={{ flex: 1 }} label="Piezas" numeric value={quantity} onChangeText={setQuantity} />
         <Field
           style={{ flex: 1 }}
-          label="Precio por pieza"
+          label="¿En cuánto lo vendiste?"
           unit="$"
           numeric
           value={price}
           onChangeText={setPrice}
-          placeholder={listPrice ? listPrice.toFixed(2) : '0'}
+          placeholder="0"
         />
       </Row>
+      {listPrice > 0 && (
+        <Muted>
+          {discount > 0
+            ? `Descuento de ${money(discount)} (${Math.round((discount / listPrice) * 100)}%) sobre tu precio de lista de ${money(listPrice)}.`
+            : discount < 0
+              ? `${money(-discount)} arriba de tu precio de lista de ${money(listPrice)}.`
+              : `Tu precio de lista es ${money(listPrice)} por pieza.`}
+        </Muted>
+      )}
       <Field label="Comisiones" unit="$" numeric value={fees} onChangeText={setFees} placeholder={autoFees.toFixed(2)} />
       <Chips
         label="Entrega"
@@ -138,12 +150,13 @@ export default function NewSaleScreen() {
       <Field label="Notas" value={notes} onChangeText={setNotes} maxLength={200} placeholder="Número de pedido, cliente…" />
 
       <Card>
-        <Line label={`${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
+        {discount > 0 && <Line label="Descuento" value={`− ${money(pieces * discount)}`} />}
+        <Line label={`Vendiste ${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
         <Line label="Comisiones" value={`− ${money(totalFees)}`} />
         <Line label="Envío" value={`− ${money(totalShipping)}`} />
         <Line label="Embalaje" value={`− ${money(totalPackaging)}`} />
         <Line label={`Costo de producción (${money(unitCost)} c/u)`} value={`− ${money(pieces * unitCost)}`} />
-        <Line strong label="Ganancia" value={money(profit)} />
+        <Line strong label={profit >= 0 ? 'Ganancia' : 'Pérdida'} value={money(profit)} />
       </Card>
 
       <ErrorText>{error}</ErrorText>

@@ -15,8 +15,9 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const [customName, setCustomName] = useState("");
   const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
-  // Empty fields use the automatic value shown as placeholder.
+  // What it really sold for; the channel price is only a reference to tell the discount.
   const [price, setPrice] = useState("");
+  // Empty fields below use the automatic value shown as placeholder.
   const [fees, setFees] = useState("");
   const [delivery, setDelivery] = useState<"shipped" | "pickup">("shipped");
   const [shipping, setShipping] = useState("");
@@ -28,7 +29,9 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const channel = channels.find((item) => item.id === channelId);
   const pieces = Math.max(Math.round(num(quantity)), 0);
   const listPrice = product?.prices[channelId] ?? 0;
-  const unitPrice = price === "" ? listPrice : num(price);
+  const unitPrice = num(price);
+  // Positive: sold below the list price; negative: above it.
+  const discount = listPrice > 0 && price !== "" ? listPrice - unitPrice : 0;
   const autoFees = channelFees(channel, unitPrice, pieces);
   const totalFees = fees === "" ? autoFees : num(fees);
   const shipped = delivery === "shipped";
@@ -45,7 +48,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
     const name = product?.name ?? customName.trim();
     if (!name) return setError("Elige un producto o escribe qué vendiste.");
     if (pieces < 1) return setError("Indica cuántas piezas vendiste.");
-    if (unitPrice <= 0) return setError("Indica el precio de venta.");
+    if (price === "" || unitPrice <= 0) return setError("Indica en cuánto lo vendiste.");
     save(
       () =>
         supabase()
@@ -57,6 +60,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
             channel_name: channel?.name ?? "",
             quantity: pieces,
             unit_price: unitPrice,
+            list_price: listPrice > 0 ? listPrice : null,
             fees: totalFees,
             shipping_cost: totalShipping,
             packaging_cost: totalPackaging,
@@ -110,8 +114,17 @@ function SaleForm({ onDone }: { onDone: () => void }) {
         <input className="input" type="number" min={1} value={quantity} onChange={(event) => setQuantity(event.target.value)} />
       </label>
       <label className="label">
-        Precio por pieza ($)
-        <input className="input" type="number" min={0} step="any" value={price} onChange={(event) => setPrice(event.target.value)} placeholder={listPrice ? listPrice.toFixed(2) : "0"} />
+        ¿En cuánto lo vendiste? (por pieza, $)
+        <input className="input" type="number" min={0} step="any" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0" required />
+        <span className="font-normal">
+          {listPrice <= 0
+            ? "Este producto no tiene precio de lista en este canal."
+            : discount > 0
+              ? `Descuento de ${money(discount)} (${Math.round((discount / listPrice) * 100)}%) sobre tu precio de lista de ${money(listPrice)}.`
+              : discount < 0
+                ? `${money(-discount)} arriba de tu precio de lista de ${money(listPrice)}.`
+                : `Tu precio de lista es ${money(listPrice)}.`}
+        </span>
       </label>
       <label className="label">
         Comisiones ($)
@@ -145,12 +158,14 @@ function SaleForm({ onDone }: { onDone: () => void }) {
       </p>
 
       <div className="flex flex-col gap-1 rounded-lg bg-ink p-3 sm:col-span-2">
-        <Line label={`${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
+        {discount > 0 && <Line label={`Precio de lista ${pieces} × ${money(listPrice)}`} value={money(pieces * listPrice)} />}
+        {discount > 0 && <Line label="Descuento" value={`− ${money(pieces * discount)}`} />}
+        <Line label={`Vendiste ${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
         <Line label="Comisiones" value={`− ${money(totalFees)}`} />
         <Line label="Envío" value={`− ${money(totalShipping)}`} />
         <Line label="Embalaje" value={`− ${money(totalPackaging)}`} />
         <Line label={`Costo de producción (${money(unitCost)} c/u)`} value={`− ${money(pieces * unitCost)}`} />
-        <Line strong label="Ganancia" value={money(profit)} />
+        <Line strong label={profit >= 0 ? "Ganancia" : "Pérdida"} value={money(profit)} />
       </div>
 
       {error && (
@@ -198,7 +213,7 @@ export default function SalesPage() {
                 <th className="num">Total</th>
                 <th className="num">Comisiones, envío y embalaje</th>
                 <th className="num">Costo</th>
-                <th className="num">Ganancia</th>
+                <th className="num">Ganancia o pérdida</th>
                 <th />
               </tr>
             </thead>
@@ -211,7 +226,12 @@ export default function SalesPage() {
                     {sale.notes && <div className="text-xs text-muted">{sale.notes}</div>}
                   </td>
                   <td className="text-muted">{sale.channel_name || "—"}</td>
-                  <td className="num">{money(sale.quantity * sale.unit_price)}</td>
+                  <td className="num">
+                    {money(sale.quantity * sale.unit_price)}
+                    {sale.list_price != null && sale.list_price > sale.unit_price && (
+                      <div className="text-xs text-warn">desc. {money(sale.quantity * (sale.list_price - sale.unit_price))}</div>
+                    )}
+                  </td>
                   <td className="num text-muted">{money(sale.fees + sale.shipping_cost + sale.packaging_cost)}</td>
                   <td className="num text-muted">{money(sale.quantity * sale.unit_cost)}</td>
                   <td className={`num font-semibold ${sale.profit >= 0 ? "text-money" : "text-bad"}`}>{money(sale.profit)}</td>
