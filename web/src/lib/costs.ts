@@ -225,14 +225,21 @@ export function shippingFor(channel: Channel, carriers: Carrier[], productGrams:
 }
 
 /**
- * Suggested price when shipping depends on the price itself (carriers that charge by price range):
- * worked out a few times until it settles.
+ * Suggested price with shipping: the same pesos of profit as the price without shipping, plus the
+ * shipping and what the channel takes of it (commission and taxes) — the profit is not asked of the
+ * shipping. When the carrier charges by the price range it is worked out a few times until it settles.
  */
 export function suggestedPriceWithShipping(cost: number, channel: Channel, marginPct: number, shippingAt: (price: number) => number) {
-  let price = suggestedPrice(cost, channel, marginPct, shippingAt(0));
-  for (let round = 0; round < 6; round++) {
-    const next = suggestedPrice(cost, channel, marginPct, shippingAt(price));
+  const plain = suggestedPrice(cost, channel, marginPct);
+  const profit = (plain * marginPct) / 100;
+  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100;
+  if (kept <= 0.01 || plain <= 0) return 0;
+  const priceFor = (shipping: number) => (cost + channel.fixed_fee + shipping + profit) / kept;
+  let price = priceFor(shippingAt(plain));
+  for (let round = 0; round < 8; round++) {
+    const next = priceFor(shippingAt(price));
     if (Math.abs(next - price) < 0.005) return next;
+    // Between two price ranges it could bounce: keep the higher, so the shipping is always covered.
     price = Math.max(price, next);
   }
   return price;

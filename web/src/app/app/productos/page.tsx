@@ -838,6 +838,7 @@ export default function ProductsPage() {
                           {price ? <TipLine label="Tu precio" value={money(price)} /> : null}
                           <TipLine label="Sugerido sin envío" value={money(suggestedPlain)} />
                           <TipLine label="Sugerido con envío" value={money(suggestedShipped)} />
+                          <p className="text-[11px] text-muted">Con envío ganas los mismos pesos que sin envío: se suma el envío y lo que el canal cobra sobre él.</p>
                           <TipLine label={`Comisión e impuestos (${(channel.commission_pct + Number(channel.tax_pct ?? 0)).toFixed(1)}%)`} value={`− ${money(channelFees(channel, at))}`} />
                           {quotes.length > 0 ? (
                             <>
