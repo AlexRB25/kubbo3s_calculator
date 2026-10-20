@@ -112,17 +112,19 @@ function CarrierForm({ carrier, onDone }: { carrier?: Carrier; onDone: () => voi
       )}
 
       <div className="overflow-x-auto">
-        <table className="table text-sm">
+        <table className="table w-max text-sm">
           <thead>
             <tr>
               <th>Peso hasta (kg)</th>
               {Array.from({ length: columns }, (_, column) => (
                 <th key={column} className="num">
                   {draft.prices.length ? (
-                    <span className="flex items-center justify-end gap-1">
-                      precio hasta $
+                    <span className="flex flex-col items-end gap-1">
+                      <span>precio hasta $</span>
+                      <span className="flex items-center gap-1">
                       <input
-                        className="input w-24 px-2 py-1 text-right"
+                        className="input px-2 py-1 text-right"
+                        style={{ width: "7rem", minWidth: "7rem" }}
                         type="number"
                         min={0}
                         step="any"
@@ -132,6 +134,7 @@ function CarrierForm({ carrier, onDone }: { carrier?: Carrier; onDone: () => voi
                       <button type="button" className="btn px-2 py-1 text-xs" aria-label="Quitar columna" onClick={() => removeColumn(column)}>
                         ✕
                       </button>
+                      </span>
                     </span>
                   ) : (
                     "Costo de envío ($)"
@@ -146,7 +149,8 @@ function CarrierForm({ carrier, onDone }: { carrier?: Carrier; onDone: () => voi
               <tr key={row}>
                 <td>
                   <input
-                    className="input w-24 px-2 py-1"
+                    className="input px-2 py-1"
+                    style={{ width: "6rem", minWidth: "6rem" }}
                     type="number"
                     min={0}
                     step="any"
@@ -157,7 +161,8 @@ function CarrierForm({ carrier, onDone }: { carrier?: Carrier; onDone: () => voi
                 {Array.from({ length: columns }, (_, column) => (
                   <td key={column} className="num">
                     <input
-                      className="input w-24 px-2 py-1 text-right"
+                      className="input px-2 py-1 text-right"
+                        style={{ width: "7rem", minWidth: "7rem" }}
                       type="number"
                       min={0}
                       step="any"
