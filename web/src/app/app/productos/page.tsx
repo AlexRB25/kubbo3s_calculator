@@ -4,8 +4,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { CategoryPicker } from "@/components/app/CategoryPicker";
+import { InfoTip, TipLine } from "@/components/app/InfoTip";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
 import {
+  channelFees,
   costPerGram,
   materialUnitCost,
   suppliesCost,
@@ -762,8 +764,6 @@ export default function ProductsPage() {
             <thead>
               <tr>
                 <th>Producto</th>
-                <th className="num">Filamento</th>
-                <th className="num">Tiempo</th>
                 <th className="num">Costo</th>
                 {channels.map((channel) => (
                   <th key={channel.id} className="num">
@@ -776,8 +776,13 @@ export default function ProductsPage() {
             </thead>
             <tbody>
               {shown.map((product) => {
-                const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules).total;
+                const breakdown = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules);
+                const cost = breakdown.total;
                 const photo = imageUrl(product.image_path);
+                const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
+                const box = packaging.find((item) => item.id === product.packaging_id);
+                const margin = profile?.margin_pct ?? 0;
+                const tone = (profit: number) => (profit >= 0 ? "text-money" : "text-bad");
                 return (
                   <tr key={product.id}>
                     <td>
@@ -800,44 +805,85 @@ export default function ProductsPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="num">
-                      {/* What one piece takes, without waste: its share of the plates it prints on. */}
-                      {product.filaments.length ? `${Math.round(product.filaments.reduce((total, use) => total + use.grams, 0) * 10) / 10} g` : "—"}
-                      {product.filaments.length > 1 && (
-                        <span className="block text-xs text-muted">
-                          {product.filaments
-                            .map((use) => {
-                              const filament = filaments.find((item) => item.id === use.filament_id);
-                              return `${filament ? filament.color || filament.material : "?"} ${Math.round(use.grams * 10) / 10} g`;
-                            })
-                            .join(" · ")}
-                        </span>
-                      )}
+                    <td className="num whitespace-nowrap">
+                      {money(cost)}
+                      <InfoTip label={`Desglose del costo de ${product.name}`}>
+                        <p className="font-semibold">Una pieza</p>
+                        <TipLine label="Filamento (sin merma)" value={grams ? `${Math.round(grams * 10) / 10} g` : "—"} />
+                        {product.filaments.length > 1 &&
+                          product.filaments.map((use) => {
+                            const filament = filaments.find((item) => item.id === use.filament_id);
+                            return <TipLine key={use.filament_id} label={`· ${filament ? filament.color || filament.material : "Filamento"}`} value={`${Math.round(use.grams * 10) / 10} g`} />;
+                          })}
+                        <TipLine label="Tiempo de impresión" value={duration(product.print_minutes)} />
+                        <p className="mt-1 font-semibold">Costo</p>
+                        <TipLine label={profile?.waste_rules?.length && product.plates?.length ? "Filamento (con merma)" : "Filamento"} value={money(breakdown.filament)} />
+                        <TipLine label="Luz" value={money(breakdown.electricity)} />
+                        <TipLine label="Desgaste de máquina" value={money(breakdown.machine)} />
+                        {(breakdown.supplies ?? 0) > 0 && <TipLine label="Insumos" value={money(breakdown.supplies ?? 0)} />}
+                        {breakdown.extra > 0 && <TipLine label="Otros" value={money(breakdown.extra)} />}
+                        <TipLine strong label="Costo por pieza" value={money(cost)} />
+                      </InfoTip>
                     </td>
-                    <td className="num text-muted">{duration(product.print_minutes)}</td>
-                    <td className="num">{money(cost)}</td>
                     {channels.map((channel) => {
                       const price = product.prices[channel.id];
-                      const box = packaging.find((item) => item.id === product.packaging_id);
-                      const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
                       const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
-                      const margin = profile?.margin_pct ?? 0;
+                      const suggestedPlain = suggestedPrice(cost, channel, margin);
+                      const suggestedShipped = suggestedPriceWithShipping(cost, channel, margin, shippingAt);
+                      const at = price || suggestedShipped;
+                      const quotes = shippingQuotes(channel, carriers, grams, box, at);
+                      const tip = (
+                        <InfoTip label={`Detalle en ${channel.name}`}>
+                          <p className="font-semibold">{channel.name}</p>
+                          {price ? <TipLine label="Tu precio" value={money(price)} /> : null}
+                          <TipLine label="Sugerido sin envío" value={money(suggestedPlain)} />
+                          <TipLine label="Sugerido con envío" value={money(suggestedShipped)} />
+                          <TipLine label={`Comisión e impuestos (${(channel.commission_pct + Number(channel.tax_pct ?? 0)).toFixed(1)}%)`} value={`− ${money(channelFees(channel, at))}`} />
+                          {quotes.length > 0 ? (
+                            <>
+                              <TipLine label={`Envío más barato · ${quotes[0].carrier.name}`} value={money(quotes[0].cost)} />
+                              {quotes.length > 1 && (
+                                <TipLine label={`Envío más caro · ${quotes[quotes.length - 1].carrier.name}`} value={money(quotes[quotes.length - 1].cost)} />
+                              )}
+                              <TipLine label="Peso que cobra" value={`${quotes[quotes.length - 1].kg.toFixed(2)} kg`} />
+                            </>
+                          ) : (
+                            <TipLine label="Envío del canal" value={money(channel.shipping_cost)} />
+                          )}
+                          {box && <TipLine label="Embalaje" value={money(box.cost)} />}
+                          {price ? (
+                            <>
+                              <TipLine
+                                strong
+                                label={`Ganas sin envío (${Math.round((unitProfit(price, cost, channel) / price) * 100)}%)`}
+                                value={money(unitProfit(price, cost, channel))}
+                                tone={tone(unitProfit(price, cost, channel))}
+                              />
+                              <TipLine
+                                label={`Ganas con envío (${Math.round((unitProfit(price, cost, channel, shippingAt(price)) / price) * 100)}%)`}
+                                value={money(unitProfit(price, cost, channel, shippingAt(price)))}
+                                tone={tone(unitProfit(price, cost, channel, shippingAt(price)))}
+                              />
+                            </>
+                          ) : (
+                            <p className="mt-1 text-muted">Sin precio en este canal: pon uno en Editar.</p>
+                          )}
+                        </InfoTip>
+                      );
                       if (!price) {
                         return (
-                          <td key={channel.id} className="num text-xs text-muted">
-                            sugerido {money(suggestedPrice(cost, channel, margin))}
-                            <div>con envío {money(suggestedPriceWithShipping(cost, channel, margin, shippingAt))}</div>
+                          <td key={channel.id} className="num whitespace-nowrap text-sm text-muted">
+                            sugerido {money(suggestedShipped)}
+                            {tip}
                           </td>
                         );
                       }
-                      const tone = (profit: number) => (profit >= 0 ? "text-money" : "text-bad");
-                      const plain = unitProfit(price, cost, channel);
                       const shipped = unitProfit(price, cost, channel, shippingAt(price));
                       return (
-                        <td key={channel.id} className="num">
+                        <td key={channel.id} className="num whitespace-nowrap">
                           {money(price)}
-                          <div className={`text-xs ${tone(plain)}`}>sin envío gana {money(plain)}</div>
-                          <div className={`text-xs ${tone(shipped)}`}>con envío gana {money(shipped)}</div>
+                          {tip}
+                          <div className={`text-xs ${tone(shipped)}`}>gana {money(shipped)} con envío</div>
                         </td>
                       );
                     })}
