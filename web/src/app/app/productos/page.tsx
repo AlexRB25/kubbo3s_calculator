@@ -762,6 +762,7 @@ export default function ProductsPage() {
             <thead>
               <tr>
                 <th>Producto</th>
+                <th className="num">Filamento</th>
                 <th className="num">Tiempo</th>
                 <th className="num">Costo</th>
                 {channels.map((channel) => (
@@ -798,6 +799,20 @@ export default function ProductsPage() {
                           )}
                         </div>
                       </div>
+                    </td>
+                    <td className="num">
+                      {/* What one piece takes, without waste: its share of the plates it prints on. */}
+                      {product.filaments.length ? `${Math.round(product.filaments.reduce((total, use) => total + use.grams, 0) * 10) / 10} g` : "—"}
+                      {product.filaments.length > 1 && (
+                        <span className="block text-xs text-muted">
+                          {product.filaments
+                            .map((use) => {
+                              const filament = filaments.find((item) => item.id === use.filament_id);
+                              return `${filament ? filament.color || filament.material : "?"} ${Math.round(use.grams * 10) / 10} g`;
+                            })
+                            .join(" · ")}
+                        </span>
+                      )}
                     </td>
                     <td className="num text-muted">{duration(product.print_minutes)}</td>
                     <td className="num">{money(cost)}</td>
