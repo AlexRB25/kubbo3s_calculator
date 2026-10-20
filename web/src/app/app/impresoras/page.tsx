@@ -19,10 +19,12 @@ const SERVICE_FIELDS: FieldDef[] = [
 ];
 
 export default function PrintersPage() {
-  const { printers, maintenance, jobs } = useData();
+  const { printers, maintenance, jobs, wear } = useData();
   const { error, save } = useSave();
   const [editing, setEditing] = useState<Printer | "new" | null>(null);
   const [servicing, setServicing] = useState<Printer | null>(null);
+  // The printer a payment into its wear fund is being recorded for.
+  const [paying, setPaying] = useState<Printer | null>(null);
   const current = editing === "new" ? undefined : (editing ?? undefined);
 
   return (
@@ -45,6 +47,15 @@ export default function PrintersPage() {
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {printers.map((printer) => {
           const history = maintenance.filter((record) => record.printer_id === printer.id);
+          const fund = wear.filter((entry) => entry.printer_id === printer.id);
+          const worn = fund.filter((entry) => entry.kind === "wear").reduce((total, entry) => total + Number(entry.amount), 0);
+          const paid = fund.filter((entry) => entry.kind === "payment").reduce((total, entry) => total + Number(entry.amount), 0);
+          const balance = paid - worn;
+          // Services, wear and payments, newest first.
+          const timeline = [
+            ...history.map((record) => ({ key: `m-${record.id}`, date: record.performed_at, record, entry: null })),
+            ...fund.map((entry) => ({ key: `w-${entry.id}`, date: entry.happened_at, record: null, entry })),
+          ].sort((a, b) => b.date.localeCompare(a.date));
           const printerJobs = jobs.filter((job) => job.printer_id === printer.id);
           const failed = printerJobs.filter((job) => job.status === "failed").length;
           return (
@@ -57,7 +68,10 @@ export default function PrintersPage() {
                     {printer.device_id && ` · ID ${printer.device_id}`}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn" onClick={() => setPaying(printer)}>
+                    Registrar aporte
+                  </button>
                   <button className="btn btn-primary" onClick={() => setServicing(printer)}>
                     Registrar servicio
                   </button>
@@ -78,11 +92,50 @@ export default function PrintersPage() {
                 {history[0]?.next_due && <Line strong label="Próximo mantenimiento" value={day(history[0].next_due)} />}
               </div>
 
-              <h3 className="text-sm font-semibold">Historial de mantenimientos y ajustes</h3>
-              {history.length === 0 && <p className="text-sm text-muted">Sin registros todavía.</p>}
+              <div className="flex flex-col gap-1 rounded-lg bg-ink p-3">
+                <p className="text-sm font-semibold">Fondo de desgaste</p>
+                <p className="text-xs text-muted">
+                  Cada impresión carga sus horas × {money(printer.hourly_cost)} por hora. Registra lo que vas apartando para la máquina (boquillas, refacciones, reemplazarla).
+                </p>
+                <Line label="Desgaste acumulado" value={`− ${money(worn)}`} />
+                <Line label="Aportado" value={money(paid)} />
+                <p className={`flex justify-between gap-4 border-t border-line pt-2 text-sm font-semibold ${balance < 0 ? "text-bad" : "text-money"}`}>
+                  <span>{balance < 0 ? "Debes al fondo" : "Saldo a favor"}</span>
+                  <span className="tabular-nums">{money(Math.abs(balance))}</span>
+                </p>
+              </div>
+
+              <h3 className="text-sm font-semibold">Historial: servicios, desgaste y aportes</h3>
+              {timeline.length === 0 && <p className="text-sm text-muted">Sin registros todavía.</p>}
               <ul className="flex flex-col gap-2">
-                {history.map((record) => (
-                  <li key={record.id} className="flex items-start justify-between gap-3 border-t border-line/60 pt-2 text-sm">
+                {timeline.map(({ key, record, entry }) =>
+                  entry ? (
+                    <li key={key} className="flex items-start justify-between gap-3 border-t border-line/60 pt-2 text-sm">
+                      <div>
+                        <p>{entry.kind === "wear" ? entry.note || "Desgaste" : entry.note || "Aporte al fondo"}</p>
+                        <p className="text-xs text-muted">
+                          {entry.kind === "wear" ? "Desgaste (automático)" : "Aporte"} · {day(entry.happened_at)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`tabular-nums ${entry.kind === "wear" ? "text-bad" : "text-money"}`}>
+                          {entry.kind === "wear" ? "− " : "+ "}
+                          {money(entry.amount)}
+                        </span>
+                        {entry.kind === "payment" && (
+                          <button
+                            className="btn btn-danger"
+                            onClick={() => {
+                              if (window.confirm("Se eliminará este aporte del fondo. ¿Eliminar?")) save(() => supabase().from("printer_wear").delete().eq("id", entry.id));
+                            }}
+                          >
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ) : record ? (
+                  <li key={key} className="flex items-start justify-between gap-3 border-t border-line/60 pt-2 text-sm">
                     <div>
                       <p>{record.title}</p>
                       <p className="text-xs text-muted">
@@ -102,7 +155,8 @@ export default function PrintersPage() {
                       Eliminar
                     </button>
                   </li>
-                ))}
+                  ) : null,
+                )}
               </ul>
             </article>
           );
@@ -112,6 +166,24 @@ export default function PrintersPage() {
       {editing && (
         <Modal title={current?.name ?? "Nueva impresora"} onClose={() => setEditing(null)}>
           <PrinterForm printer={current} onDone={() => setEditing(null)} />
+        </Modal>
+      )}
+
+      {paying && (
+        <Modal title={`Aporte al fondo de ${paying.name}`} onClose={() => setPaying(null)}>
+          <FieldsForm
+            fields={[
+              { name: "amount", label: "Monto ($)", type: "number", required: true, hint: "Lo que apartas para el desgaste de esta impresora." },
+              { name: "happened_at", label: "Fecha", type: "date", required: true },
+              { name: "note", label: "Nota", placeholder: "Aparté para boquillas, pagué la placa…" },
+            ]}
+            initial={{ happened_at: isoDay() }}
+            onDone={() => setPaying(null)}
+            onSubmit={(values) => {
+              if (!(Number(values.amount) > 0)) return Promise.resolve({ error: { message: "Escribe el monto del aporte." } });
+              return supabase().from("printer_wear").insert({ ...values, printer_id: paying.id, kind: "payment" });
+            }}
+          />
         </Modal>
       )}
 

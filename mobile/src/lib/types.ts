@@ -198,6 +198,21 @@ export type Maintenance = {
   next_due: string | null;
 };
 
+/**
+ * The wear fund of a printer: each print charges its wear (hours × wear per hour) and the user
+ * records what they set aside for it. Balance = payments − wear.
+ */
+export type PrinterWear = {
+  id: string;
+  printer_id: string;
+  kind: 'wear' | 'payment';
+  amount: number;
+  note: string;
+  /** The print that caused it (wear only). */
+  job_id: string | null;
+  happened_at: string;
+};
+
 export type ExpenseCategory = 'filament' | 'material' | 'parts' | 'electricity' | 'shipping' | 'packaging' | 'maintenance' | 'other';
 
 export type Expense = {

@@ -625,6 +625,19 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           {supplyCost > 0 && <Line label="Insumos" value={money(supplyCost)} />}
           <Line label="Otros" value={money(cost.extra - supplyCost)} />
           <Line strong label="Costo por producto (combinación más cara)" value={money(cost.total)} />
+          <p className="mt-1 text-xs text-muted">
+            Luz = horas de impresión × consumo de la impresora (watts) × precio del kWh. Desgaste = horas × el desgaste por hora de la impresora (lo que
+            costó ÷ su vida útil). Ambos por la parte de la placa que toca a cada pieza.
+          </p>
+          {!kwhPrice && (
+            <p className="text-xs text-warn">
+              La luz sale en $0 porque falta el precio del kWh: ponlo en{" "}
+              <Link href="/app/ajustes" className="underline">
+                Ajustes
+              </Link>{" "}
+              (viene en tu recibo de luz).
+            </p>
+          )}
         </div>
       </div>
 

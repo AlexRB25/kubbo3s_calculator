@@ -286,6 +286,27 @@ create table if not exists public.maintenance (
 );
 create index if not exists maintenance_user_idx on public.maintenance (user_id, performed_at desc);
 
+-- Fondo de desgaste de cada impresora: cada impresión le carga su desgaste (horas × desgaste por hora de
+-- la impresora) y el usuario registra lo que aparta para ella. Saldo = aportado − desgaste.
+create table if not exists public.printer_wear (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  printer_id uuid not null references public.printers (id) on delete cascade,
+  kind text not null check (kind in ('wear', 'payment')),
+  amount numeric(12,2) not null check (amount >= 0),
+  note text not null default '',
+  -- El desgaste viene de una impresión (y se ajusta o se borra con ella); los aportes no.
+  job_id uuid unique references public.print_jobs (id) on delete cascade,
+  happened_at date not null default current_date,
+  created_at timestamptz not null default now()
+);
+create index if not exists printer_wear_printer_idx on public.printer_wear (user_id, printer_id, happened_at desc);
+alter table public.printer_wear enable row level security;
+revoke all on public.printer_wear from anon;
+drop policy if exists own_rows on public.printer_wear;
+create policy own_rows on public.printer_wear for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
 -- Todo el dinero que sale. Una compra de filamento es un gasto con filament_id y grams;
 -- un mantenimiento con costo crea su gasto (maintenance_id).
 create table if not exists public.expenses (
@@ -526,6 +547,38 @@ end $$;
 create or replace trigger print_job_moves_stock
   after insert or update or delete on public.print_jobs
   for each row execute function public.print_job_moves_stock();
+
+-- Cada impresión carga su desgaste al fondo de su impresora; si se corrige, se recalcula, y si se
+-- borra, el desgaste se va con ella (job_id … on delete cascade).
+create or replace function public.print_job_wears_printer() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  delete from public.printer_wear where job_id = new.id;
+  if new.printer_id is not null and new.minutes > 0 then
+    insert into public.printer_wear (user_id, printer_id, kind, amount, note, job_id, happened_at)
+    select new.user_id, p.id, 'wear', round(new.minutes / 60.0 * p.hourly_cost, 2),
+           format('Desgaste: %s de %s', case when new.minutes >= 60 then round(new.minutes / 60.0, 1) || ' h' else new.minutes || ' min' end, new.product_name),
+           new.id, coalesce(new.finished_at, new.created_at)::date
+    from public.printers p
+    where p.id = new.printer_id and p.hourly_cost > 0;
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists print_job_wears_printer on public.print_jobs;
+create trigger print_job_wears_printer
+  after insert or update of printer_id, minutes, product_name, status on public.print_jobs
+  for each row execute function public.print_job_wears_printer();
+
+-- Impresiones de antes del fondo: su desgaste también cuenta.
+insert into public.printer_wear (user_id, printer_id, kind, amount, note, job_id, happened_at)
+select j.user_id, p.id, 'wear', round(j.minutes / 60.0 * p.hourly_cost, 2),
+       format('Desgaste: %s de %s', case when j.minutes >= 60 then round(j.minutes / 60.0, 1) || ' h' else j.minutes || ' min' end, j.product_name),
+       j.id, coalesce(j.finished_at, j.created_at)::date
+from public.print_jobs j
+join public.printers p on p.id = j.printer_id
+where j.minutes > 0 and p.hourly_cost > 0
+  and not exists (select 1 from public.printer_wear w where w.job_id = j.id);
 
 -- Piezas que salen al vender.
 create or replace function public.sale_moves_stock() returns trigger

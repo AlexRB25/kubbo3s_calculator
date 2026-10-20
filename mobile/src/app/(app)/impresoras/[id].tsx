@@ -10,7 +10,7 @@ import { useData, useSave } from '@/store/data';
 
 export default function PrinterScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { printers, maintenance, jobs } = useData();
+  const { printers, maintenance, jobs, wear } = useData();
   const { error, save } = useSave();
   const printer = printers.find((item) => item.id === id);
   if (!printer) return <Empty icon="print-outline" text="Esta impresora ya no existe." />;
@@ -37,6 +37,12 @@ export default function PrinterScreen() {
         <Line label="Consumo" value={`${printer.power_watts} W`} />
         <Line label="Desgaste por hora" value={money(printer.hourly_cost)} />
         <Line label="Gastado en mantenimiento" value={money(spent)} />
+        {(() => {
+          // Wear fund: payments minus the wear of each print.
+          const fund = wear.filter((entry) => entry.printer_id === printer.id);
+          const balance = fund.reduce((total, entry) => total + (entry.kind === 'payment' ? 1 : -1) * Number(entry.amount), 0);
+          return <Line strong label={balance < 0 ? 'Debes al fondo de desgaste' : 'Fondo de desgaste a favor'} value={money(Math.abs(balance))} />;
+        })()}
         {nextDue ? <Line strong label="Próximo mantenimiento" value={day(nextDue)} /> : null}
         {printer.notes ? <Muted>{printer.notes}</Muted> : null}
       </Card>
