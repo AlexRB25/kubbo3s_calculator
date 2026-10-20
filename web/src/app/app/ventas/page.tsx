@@ -64,6 +64,8 @@ function SaleForm({ onDone }: { onDone: () => void }) {
             fees: totalFees,
             shipping_cost: totalShipping,
             packaging_cost: totalPackaging,
+            // One package leaves stock with each shipped sale.
+            packaging_id: shipped ? (product?.packaging_id ?? null) : null,
             unit_cost: Math.round(unitCost * 100) / 100,
             notes: notes.trim(),
           }),

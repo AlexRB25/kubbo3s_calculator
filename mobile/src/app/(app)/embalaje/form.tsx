@@ -21,6 +21,8 @@ export default function PackagingFormScreen() {
   const [width, setWidth] = useState(field(item ? item.width_mm / 10 : 0));
   const [height, setHeight] = useState(field(item ? item.height_mm / 10 : 0));
   const [cost, setCost] = useState(field(item?.cost));
+  const [stock, setStock] = useState(field(item?.stock));
+  const [weight, setWeight] = useState(field(item?.weight_g));
   const [notes, setNotes] = useState(item?.notes ?? '');
 
   function submit() {
@@ -32,6 +34,8 @@ export default function PackagingFormScreen() {
       width_mm: num(width) * 10,
       height_mm: num(height) * 10,
       cost: num(cost),
+      stock: Math.round(num(stock)),
+      weight_g: num(weight),
       notes: notes.trim(),
     };
     save(() => (item ? supabase.from('packaging').update(row).eq('id', item.id) : supabase.from('packaging').insert(row)));
@@ -55,6 +59,18 @@ export default function PackagingFormScreen() {
         placeholder="0"
         hint="Incluye relleno, cinta o etiqueta si los usas con este empaque."
       />
+      <Row style={{ alignItems: 'flex-start' }}>
+        <Field
+          style={{ flex: 1 }}
+          label="Piezas que tienes"
+          numeric
+          value={stock}
+          onChangeText={setStock}
+          placeholder="0"
+          hint="Baja una con cada venta con envío."
+        />
+        <Field style={{ flex: 1 }} label="Peso del empaque" unit="g" numeric value={weight} onChangeText={setWeight} placeholder="0" hint="Vacío." />
+      </Row>
       <Field label="Notas" value={notes} onChangeText={setNotes} multiline maxLength={300} placeholder="Proveedor, para qué productos sirve…" />
 
       <ErrorText>{error}</ErrorText>

@@ -21,7 +21,14 @@ export default function PackagingScreen() {
           <ListItem
             key={item.id}
             title={packagingName(item)}
-            subtitle={[PACKAGING_KINDS.find((kind) => kind.value === item.kind)?.label, used ? `${used} productos` : ''].filter(Boolean).join(' · ')}
+            subtitle={[
+              PACKAGING_KINDS.find((kind) => kind.value === item.kind)?.label,
+              `${item.stock ?? 0} en existencia`,
+              item.weight_g > 0 ? `${Number(item.weight_g)} g` : '',
+              used ? `${used} productos` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             value={money(item.cost)}
             onPress={() => router.push({ pathname: '/embalaje/form', params: { id: item.id } })}
           />

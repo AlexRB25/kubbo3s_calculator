@@ -104,6 +104,9 @@ create table if not exists public.packaging (
   created_at timestamptz not null default now()
 );
 create index if not exists packaging_user_idx on public.packaging (user_id);
+-- Cuántos empaques hay (bajan uno por cada venta con envío) y cuánto pesa cada uno (para el envío).
+alter table public.packaging add column if not exists stock int not null default 0;
+alter table public.packaging add column if not exists weight_g numeric(10,1) not null default 0 check (weight_g >= 0);
 
 -- Mis archivos: modelos 3D (STL, OBJ, 3MF) e imágenes que cada usuario subió en las herramientas o en
 -- la calculadora, para volver a usarlos sin buscarlos en su computadora. Los archivos viven en el
@@ -261,6 +264,8 @@ begin
       generated always as (quantity * unit_price - fees - shipping_cost - packaging_cost - quantity * unit_cost) stored;
   end if;
 end $$;
+-- Empaque con el que se envió (sale de su existencia); vacío si no se envió.
+alter table public.sales add column if not exists packaging_id uuid references public.packaging (id) on delete set null;
 -- Precio de lista del canal al vender: con el precio real da el descuento que se hizo.
 alter table public.sales add column if not exists list_price numeric(12,2) check (list_price >= 0);
 
@@ -525,9 +530,12 @@ language plpgsql set search_path = '' as $$
 begin
   if tg_op <> 'INSERT' then
     update public.products set stock = stock + old.quantity where id = old.product_id;
+    -- Un empaque por venta enviada.
+    update public.packaging set stock = stock + 1 where id = old.packaging_id;
   end if;
   if tg_op <> 'DELETE' then
     update public.products set stock = stock - new.quantity where id = new.product_id;
+    update public.packaging set stock = stock - 1 where id = new.packaging_id;
   end if;
   return null;
 end $$;

@@ -95,6 +95,10 @@ export type Packaging = {
   width_mm: number;
   height_mm: number;
   cost: number;
+  /** How many there are: one goes with each shipped sale. */
+  stock: number;
+  /** Weight of the empty package, for the shipping weight. */
+  weight_g: number;
   notes: string;
 };
 

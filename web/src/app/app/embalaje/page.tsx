@@ -16,6 +16,8 @@ const FIELDS: FieldDef[] = [
   { name: "width", label: "Ancho (cm)", type: "number" },
   { name: "height", label: "Alto (cm)", type: "number" },
   { name: "cost", label: "Costo por pieza ($)", type: "number", hint: "Incluye relleno, cinta o etiqueta si los usas con este empaque." },
+  { name: "stock", label: "Piezas que tienes", type: "number", hint: "Baja una con cada venta con envío de un producto que lo usa." },
+  { name: "weight_g", label: "Peso del empaque (g)", type: "number", hint: "Vacío. Se suma al peso del producto para el envío." },
   { name: "notes", label: "Notas", type: "textarea", placeholder: "Proveedor, para qué productos sirve…" },
 ];
 
@@ -35,8 +37,8 @@ export default function PackagingPage() {
         </button>
       </PageHeader>
       <p className="text-sm text-muted">
-        Cajas, sobres y bolsas con su costo. Asígnalos a cada producto para calcular su precio con envío; en las ventas con
-        envío se descuentan solos.
+        Cajas, sobres y bolsas con su costo, cuántas tienes y lo que pesan. Asígnalos a cada producto para calcular su precio
+        y peso con envío; en las ventas con envío se descuentan solos.
       </p>
 
       {packaging.length === 0 ? (
@@ -49,6 +51,8 @@ export default function PackagingPage() {
                 <th>Embalaje</th>
                 <th>Tipo</th>
                 <th className="num">Productos</th>
+                <th className="num">Tienes</th>
+                <th className="num">Peso</th>
                 <th className="num">Costo</th>
                 <th />
               </tr>
@@ -62,6 +66,8 @@ export default function PackagingPage() {
                   </td>
                   <td className="text-muted">{PACKAGING_KINDS.find((kind) => kind.value === item.kind)?.label}</td>
                   <td className="num">{products.filter((product) => product.packaging_id === item.id).length}</td>
+                  <td className={`num font-semibold ${(item.stock ?? 0) <= 0 ? "text-bad" : ""}`}>{item.stock ?? 0}</td>
+                  <td className="num text-muted">{item.weight_g > 0 ? `${Number(item.weight_g)} g` : "—"}</td>
                   <td className="num">{money(item.cost)}</td>
                   <td className="num">
                     <button className="btn" onClick={() => setEditing(item)}>
@@ -79,7 +85,7 @@ export default function PackagingPage() {
         <Modal title={current?.name ?? "Nuevo embalaje"} onClose={() => setEditing(null)}>
           <FieldsForm
             fields={FIELDS}
-            initial={current ? toForm(current) : { kind: "box" }}
+            initial={current ? toForm(current) : { kind: "box", stock: 0, weight_g: 0 }}
             onDone={() => setEditing(null)}
             onSubmit={({ length, width, height, ...values }) => {
               const row = { ...values, length_mm: Number(length) * 10, width_mm: Number(width) * 10, height_mm: Number(height) * 10 };

@@ -629,6 +629,11 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         </select>
         <span className="font-normal">
           {packaging.length ? "Con envío se suma este embalaje y el envío del canal." : "Registra tus cajas, sobres y bolsas en Embalaje."}
+          {box && (() => {
+            // Shipping weight: the plastic of one product plus the empty package.
+            const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
+            return ` Peso para envío: ${Math.round(grams)} g del producto + ${Number(box.weight_g ?? 0)} g del empaque = ${Math.round(grams + Number(box.weight_g ?? 0))} g.${box.stock <= 0 ? " Ojo: no te quedan de este empaque." : ` Te quedan ${box.stock}.`}`;
+          })()}
         </span>
       </label>
 
