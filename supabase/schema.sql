@@ -368,6 +368,18 @@ create policy profiles_update_own on public.profiles for update to authenticated
 -- El usuario solo puede cambiar sus ajustes; el correo y las fechas los pone el servidor.
 revoke insert, update, delete on public.profiles from anon, authenticated;
 grant update (name, business_name, kwh_price, margin_pct) on public.profiles to authenticated;
+
+-- La ganancia deseada se mide sobre el precio de venta (vendo en 100, me quedan 50: 50 %), ya no sobre
+-- el costo. Una sola vez, los perfiles de antes pasan su porcentaje a su equivalente sobre la venta
+-- (100 % sobre el costo = 50 % sobre la venta), así sus precios sugeridos no cambian.
+alter table public.profiles add column if not exists margin_on_price boolean not null default false;
+update public.profiles
+set margin_pct = round(margin_pct * 100 / (100 + margin_pct), 2), margin_on_price = true
+where not margin_on_price;
+alter table public.profiles alter column margin_on_price set default true;
+alter table public.profiles alter column margin_pct set default 50;
+alter table public.profiles drop constraint if exists profiles_margin_pct_check;
+alter table public.profiles add constraint profiles_margin_pct_check check (margin_pct >= 0 and margin_pct < 95);
 revoke all on public.activity_days from anon, authenticated;
 
 do $$

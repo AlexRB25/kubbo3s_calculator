@@ -686,7 +686,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
             />
             <span className="font-normal">
               {price > 0
-                ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
+                ? `Ganas ${money(unitProfit(price, cost.total, channel))} (${Math.round((unitProfit(price, cost.total, channel) / price) * 100)}% de la venta) sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
                 : `Sugerido con envío: ${money(suggestedShipped)}`}
             </span>
             {quotes.length > 0 && (

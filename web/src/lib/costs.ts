@@ -234,11 +234,15 @@ export function unitProfit(price: number, cost: number, channel: Channel, shippi
   return price - channelFees(channel, price) - shipping - cost;
 }
 
-/** Price that leaves `marginPct` percent of the cost as profit once the channel and `shipping` are paid. */
+/**
+ * Price that leaves `marginPct` percent of the price itself as profit once the product, the
+ * channel's commission, taxes and fixed fee, and `shipping` are paid: sell at 100 with 50 of costs
+ * and the profit is 50 %. 0 when the channel and margin leave nothing to price with.
+ */
 export function suggestedPrice(cost: number, channel: Channel, marginPct: number, shipping = 0) {
-  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100;
-  if (kept <= 0) return 0;
-  return (cost * (1 + marginPct / 100) + channel.fixed_fee + shipping) / kept;
+  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100 - marginPct / 100;
+  if (kept <= 0.01) return 0;
+  return (cost + channel.fixed_fee + shipping) / kept;
 }
 
 /** "Caja chica · 20×15×10 cm"-style label: measures only when there are any. */

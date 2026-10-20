@@ -15,9 +15,9 @@ const FIELDS: FieldDef[] = [
   },
   {
     name: "margin_pct",
-    label: "Ganancia deseada sobre el costo (%)",
+    label: "Ganancia deseada sobre la venta (%)",
     type: "number",
-    hint: "Con 100%, el precio sugerido te deja de ganancia lo mismo que costó producir la pieza, ya pagadas comisión y envío.",
+    hint: "Lo que te queda del precio de venta ya pagados producción, comisiones e impuestos (el envío aparte). Vendes en $100, te cuesta $50: ganas 50%.",
   },
 ];
 
@@ -31,7 +31,11 @@ export default function SettingsPage() {
         <FieldsForm
           fields={FIELDS}
           initial={profile ?? undefined}
-          onSubmit={(values) => supabase().from("profiles").update(values).eq("id", profile!.id)}
+          onSubmit={(values) => {
+            const margin = Number(values.margin_pct);
+            if (!(margin >= 0 && margin < 95)) return Promise.resolve({ error: { message: "La ganancia sobre la venta va de 0% a 94%: con 100% no quedaría nada para pagar la pieza." } });
+            return supabase().from("profiles").update(values).eq("id", profile!.id);
+          }}
         />
       </div>
     </>
