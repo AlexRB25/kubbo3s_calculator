@@ -1664,3 +1664,105 @@ alter table public.printers add column if not exists initial_minutes int not nul
 -- Lo que costó la impresora y las horas de vida que se le calculan: dan el desgaste por hora.
 alter table public.printers add column if not exists purchase_price numeric(12,2) not null default 0 check (purchase_price >= 0);
 alter table public.printers add column if not exists life_hours int not null default 0 check (life_hours >= 0);
+
+-- ───────────────────────── Catálogo público del taller ─────────────────────────
+-- Cada usuario puede publicar sus productos como catálogo: en kubbo3d (/c/<dirección>) o en su propio
+-- dominio. Al abrir un producto se ven fotos, descripción, categorías y los enlaces a sus publicaciones
+-- en cada canal de venta (Mercado Libre, TikTok Shop…). Nunca se muestran costos, placas ni stock.
+
+-- Enlace de la publicación en cada canal: {"<channel_id>": "https://…"}.
+alter table public.products add column if not exists links jsonb not null default '{}';
+-- Si aparece en el catálogo.
+alter table public.products add column if not exists in_catalog boolean not null default true;
+
+create table if not exists public.catalogs (
+  user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  -- La dirección: kubbo3d…/c/<slug>.
+  slug text not null unique check (slug ~ '^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$'),
+  title text not null default '' check (char_length(title) <= 80),
+  about text not null default '' check (char_length(about) <= 1000),
+  whatsapp text not null default '' check (whatsapp ~ '^[0-9]{0,15}$'),
+  show_prices boolean not null default true,
+  published boolean not null default false,
+  -- Dominio propio (tienda.midominio.com). Solo responde cuando Kubbo3D lo conecta y lo marca verificado.
+  domain text check (domain is null or (char_length(domain) <= 253 and domain ~ '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$')),
+  domain_verified boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists catalogs_domain_idx on public.catalogs (domain) where domain_verified;
+
+alter table public.catalogs enable row level security;
+revoke all on public.catalogs from anon;
+drop policy if exists own_rows on public.catalogs;
+create policy own_rows on public.catalogs for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+-- El usuario no puede marcar su dominio como verificado: eso lo hace el panel admin (llave secreta).
+revoke insert, update on public.catalogs from authenticated;
+grant insert (slug, title, about, whatsapp, show_prices, published, domain) on public.catalogs to authenticated;
+grant update (slug, title, about, whatsapp, show_prices, published, domain) on public.catalogs to authenticated;
+
+-- Cambiar el dominio lo deja otra vez pendiente de conectar.
+create or replace function public.catalogs_touch()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at := now();
+  if tg_op = 'UPDATE' and new.domain is distinct from old.domain then
+    new.domain_verified := false;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists catalogs_touch on public.catalogs;
+create trigger catalogs_touch before update on public.catalogs
+  for each row execute function public.catalogs_touch();
+
+-- Lo que ve cualquiera del catálogo publicado, por su dirección o por su dominio verificado.
+create or replace function public.public_catalog(p_key text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'slug', c.slug,
+    'title', coalesce(nullif(c.title, ''), nullif(pr.business_name, ''), c.slug),
+    'about', c.about,
+    'whatsapp', c.whatsapp,
+    'show_prices', c.show_prices,
+    'domain', case when c.domain_verified then c.domain end,
+    'products', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', p.id,
+        'name', p.name,
+        'description', p.description,
+        'image_path', p.image_path,
+        'image_paths', p.image_paths,
+        'categories', p.categories,
+        'links', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'channel', ch.name,
+            'url', p.links ->> ch.id::text,
+            'price', case when c.show_prices and jsonb_typeof(p.prices -> ch.id::text) = 'number'
+                          and (p.prices ->> ch.id::text)::numeric > 0 then (p.prices ->> ch.id::text)::numeric end
+          ) order by ch.sort, ch.name)
+          from public.channels ch
+          where ch.user_id = c.user_id and coalesce(p.links ->> ch.id::text, '') ~ '^https?://'
+        ), '[]'::jsonb)
+      ) order by p.name)
+      from public.products p
+      where p.user_id = c.user_id and p.in_catalog
+    ), '[]'::jsonb)
+  )
+  from public.catalogs c
+  left join public.profiles pr on pr.id = c.user_id
+  where c.published
+    and (c.slug = lower(p_key) or (c.domain_verified and c.domain = lower(p_key)))
+  limit 1;
+$$;
+revoke all on function public.public_catalog(text) from public;
+grant execute on function public.public_catalog(text) to anon, authenticated;

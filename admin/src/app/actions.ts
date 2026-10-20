@@ -288,3 +288,22 @@ export async function saveStoreSettings(form: FormData) {
   );
   revalidatePath("/ajustes");
 }
+
+// ── Catálogos públicos: dominios propios ──
+
+/**
+ * Marks a user's own domain as connected (after adding it to the hosting project and checking its DNS),
+ * or disconnects it. Only a connected domain serves the catalog.
+ */
+export async function setCatalogDomain(form: FormData) {
+  await requireAdmin();
+  const result = await admin()
+    .from("catalogs")
+    .update({ domain_verified: flag(form, "verified") })
+    .eq("user_id", text(form, "user_id"));
+  if (result.error) {
+    const message = result.error.message.includes("catalogs_domain_idx") ? "Ese dominio ya está conectado a otro catálogo." : result.error.message;
+    redirect(`/catalogos?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/catalogos");
+}

@@ -130,6 +130,9 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
   );
+  // Where it is listed in each channel; the public catalog shows these as buttons.
+  const [links, setLinks] = useState<Record<string, string>>(product?.links ?? {});
+  const [inCatalog, setInCatalog] = useState(product?.in_catalog ?? true);
 
   const parts: Part[] = partRows.map((row, index) => ({
     id: row.id,
@@ -203,6 +206,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       ...draft,
       packaging_id: packagingId || null,
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
+      links: Object.fromEntries(
+        Object.entries(links).flatMap(([channel, link]) => (link.trim() && channels.some((item) => item.id === channel) ? [[channel, link.trim()]] : [])),
+      ),
+      in_catalog: inCatalog,
       // Stock is typed only for a new product; later prints, sales and arqueos move it.
       ...(product ? {} : { stock: Math.round(num(stock)) }),
     };
@@ -229,6 +236,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     }
     if (combos.missing.length) return setError(`Ninguna placa imprime: ${combos.missing.map((part) => part.name).join(", ")}.`);
     if (!dearest) return setError("Con estas placas no se completa un producto.");
+    const badLink = channels.find((channel) => (links[channel.id] ?? "").trim() && !/^https?:\/\/\S+\.\S+$/i.test(links[channel.id].trim()));
+    if (badLink) return setError(`El enlace de ${badLink.name} debe empezar con https:// (cópialo de tu publicación).`);
     save(write, onDone);
   }
 
@@ -254,7 +263,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       </label>
       <label className="label sm:col-span-2">
         Descripción
-        <textarea className="input" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} />
+        <textarea className="input" rows={3} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} />
+        <span className="font-normal">Se muestra en tu catálogo al abrir el producto.</span>
       </label>
       <div className="label sm:col-span-2">
         Categorías
@@ -707,9 +717,24 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
             {channel.carrier_ids?.length > 0 && quotes.length === 0 && (
               <span className="font-normal text-warn">Ninguna paquetería de este canal tiene tarifa para este peso: se usa el envío fijo del canal.</span>
             )}
+            <input
+              className="input mt-1"
+              type="url"
+              inputMode="url"
+              value={links[channel.id] ?? ""}
+              onChange={(event) => setLinks({ ...links, [channel.id]: event.target.value })}
+              placeholder={`Enlace de tu publicación en ${channel.name} (opcional)`}
+              aria-label={`Enlace de tu publicación en ${channel.name}`}
+              maxLength={500}
+            />
           </label>
         );
       })}
+
+      <label className="flex items-center gap-2 text-sm sm:col-span-2">
+        <input type="checkbox" checked={inCatalog} onChange={(event) => setInCatalog(event.target.checked)} />
+        Mostrar en mi catálogo público (con sus fotos, descripción, categorías y los enlaces de arriba)
+      </label>
 
       {error && (
         <p role="alert" className="error sm:col-span-2">

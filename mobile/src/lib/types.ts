@@ -173,6 +173,24 @@ export type Product = {
   prices: Record<string, number>;
   /** Packaging it ships in; counts toward the "with shipping" price. */
   packaging_id: string | null;
+  /** Link to its listing in each channel, by channel id; shown in the public catalog. */
+  links: Record<string, string>;
+  /** Whether it shows in the public catalog. */
+  in_catalog: boolean;
+};
+
+/** The user's public catalog: kubbo3d…/c/<slug>, or their own domain once Kubbo3D connects it. */
+export type Catalog = {
+  user_id: string;
+  slug: string;
+  title: string;
+  about: string;
+  /** Digits only, with country code (52…). */
+  whatsapp: string;
+  show_prices: boolean;
+  published: boolean;
+  domain: string | null;
+  domain_verified: boolean;
 };
 
 export type PrintStatus = 'printing' | 'done' | 'failed';
