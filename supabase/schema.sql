@@ -92,6 +92,10 @@ create index if not exists channels_user_idx on public.channels (user_id);
 -- Impuestos que se van del precio de venta en ese canal (retenciones de IVA e ISR de la plataforma, o los
 -- que pague el vendedor): se descuentan como la comisión.
 alter table public.channels add column if not exists tax_pct numeric(6,2) not null default 0 check (tax_pct >= 0 and tax_pct < 100);
+-- Los impuestos uno por uno: [{"name": "IVA retenido", "pct": 8, "net": true}] (net = sobre el precio sin
+-- IVA, como las retenciones de Mercado Libre). tax_pct guarda su suma como parte del precio.
+alter table public.channels add column if not exists taxes jsonb not null default '[]';
+alter table public.channels alter column tax_pct type numeric(8,4);
 
 -- Material de embalaje (cajas, sobres, bolsas…) con medidas y costo por unidad.
 create table if not exists public.packaging (

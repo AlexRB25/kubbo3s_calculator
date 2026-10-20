@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
-import { Button, confirmDelete, ErrorText, Field, Screen } from '@/components/ui';
+import { Button, confirmDelete, ErrorText, Field, Muted, Screen } from '@/components/ui';
 import { field, num } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
@@ -25,7 +25,8 @@ export default function ChannelFormScreen() {
     const row = {
       name: name.trim(),
       commission_pct: num(commission),
-      tax_pct: num(tax),
+      // A list of taxes made on the web keeps its total.
+      ...(channel?.taxes?.length ? {} : { tax_pct: num(tax) }),
       fixed_fee: num(fixedFee),
       shipping_cost: num(shipping),
       ...(channel ? {} : { sort: channels.length + 1 }),
@@ -45,6 +46,11 @@ export default function ChannelFormScreen() {
         placeholder="0"
         hint="Porcentaje del precio que se queda la plataforma."
       />
+      {channel?.taxes?.length ? (
+        <Muted>
+          {`Impuestos: ${channel.taxes.map((tax) => `${tax.name} ${tax.pct}%${tax.net ? ' (sin IVA)' : ''}`).join(' + ')} = ${Number(channel.tax_pct).toFixed(2)}% del precio. Se editan desde la web.`}
+        </Muted>
+      ) : (
       <Field
         label="Impuestos"
         unit="%"
@@ -54,6 +60,7 @@ export default function ChannelFormScreen() {
         placeholder="0"
         hint="Retenciones de IVA e ISR de la plataforma o los que pagas tú. Se descuentan como la comisión."
       />
+      )}
       <Field
         label="Cargo fijo por pieza"
         unit="$"

@@ -1,24 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { FieldsForm, Modal, PageHeader, TableCard, type FieldDef } from "@/components/app/ui";
+import { ChannelForm } from "@/components/app/ChannelForm";
+import { Modal, PageHeader, TableCard } from "@/components/app/ui";
 import { useData } from "@/lib/data";
 import { money } from "@/lib/format";
-import { supabase } from "@/lib/supabase";
 import type { Channel } from "@/lib/types";
-
-const FIELDS: FieldDef[] = [
-  { name: "name", label: "Nombre", required: true, wide: true, placeholder: "Mercado Libre" },
-  { name: "commission_pct", label: "Comisión (%)", type: "number", hint: "Porcentaje del precio que se queda la plataforma." },
-  {
-    name: "tax_pct",
-    label: "Impuestos (%)",
-    type: "number",
-    hint: "Lo que se va en impuestos de cada venta: retenciones de IVA e ISR de la plataforma o los que pagas tú. Se descuenta como la comisión.",
-  },
-  { name: "fixed_fee", label: "Cargo fijo por pieza ($)", type: "number", hint: "Por ejemplo, el costo fijo en publicaciones de precio bajo." },
-  { name: "shipping_cost", label: "Envío que pagas por venta ($)", type: "number", hint: "0 si lo paga el comprador." },
-];
 
 export default function ChannelsPage() {
   const { channels } = useData();
@@ -54,7 +41,10 @@ export default function ChannelsPage() {
               <tr key={channel.id}>
                 <td>{channel.name}</td>
                 <td className="num">{channel.commission_pct}%</td>
-                <td className="num">{channel.tax_pct ?? 0}%</td>
+                <td className="num">
+                  {Number(channel.tax_pct ?? 0).toFixed(2)}%
+                  {channel.taxes?.length > 0 && <span className="block text-xs text-muted">{channel.taxes.map((tax) => `${tax.name} ${tax.pct}%`).join(" + ")}</span>}
+                </td>
                 <td className="num">{money(channel.fixed_fee)}</td>
                 <td className="num">{money(channel.shipping_cost)}</td>
                 <td className="num">
@@ -70,20 +60,7 @@ export default function ChannelsPage() {
 
       {editing && (
         <Modal title={current?.name ?? "Nuevo canal"} onClose={() => setEditing(null)}>
-          <FieldsForm
-            fields={FIELDS}
-            initial={current}
-            onDone={() => setEditing(null)}
-            onSubmit={(values) => {
-              if (Number(values.commission_pct) + Number(values.tax_pct ?? 0) >= 100)
-                return Promise.resolve({ error: { message: "Comisión más impuestos deben sumar menos de 100%." } });
-              return current
-                ? supabase().from("channels").update(values).eq("id", current.id)
-                : supabase().from("channels").insert({ ...values, sort: channels.length + 1 });
-            }}
-            onDelete={current ? () => supabase().from("channels").delete().eq("id", current.id) : undefined}
-            deleteConfirm="Las ventas ya registradas conservan el nombre del canal. ¿Eliminar?"
-          />
+          <ChannelForm channel={current} count={channels.length} onDone={() => setEditing(null)} />
         </Modal>
       )}
     </>

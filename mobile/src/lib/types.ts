@@ -76,12 +76,17 @@ export type CatalogFilament = {
   notes: string;
 };
 
+/** One tax of a sales channel. `net`: it applies to the price without VAT (price ÷ 1.16). */
+export type ChannelTax = { name: string; pct: number; net?: boolean };
+
 export type Channel = {
   id: string;
   name: string;
   commission_pct: number;
-  /** Taxes that go out of the price in this channel (withholdings, the seller's own), in %. */
+  /** Taxes that go out of the price in this channel (withholdings, the seller's own), in % of the price: the sum of `taxes`. */
   tax_pct: number;
+  /** The taxes one by one. */
+  taxes: ChannelTax[];
   fixed_fee: number;
   shipping_cost: number;
   sort: number;
