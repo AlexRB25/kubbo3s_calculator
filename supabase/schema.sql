@@ -367,7 +367,10 @@ create policy profiles_update_own on public.profiles for update to authenticated
 
 -- El usuario solo puede cambiar sus ajustes; el correo y las fechas los pone el servidor.
 revoke insert, update, delete on public.profiles from anon, authenticated;
-grant update (name, business_name, kwh_price, margin_pct) on public.profiles to authenticated;
+-- Merma por placa: cuánto filamento de más se cotiza según las piezas que lleva la placa (más piezas,
+-- más riesgo). [{"max_pieces": 15, "pct": 25}, {"max_pieces": 30, "pct": 50}…]; arriba del último, el último.
+alter table public.profiles add column if not exists waste_rules jsonb not null default '[]';
+grant update (name, business_name, kwh_price, margin_pct, waste_rules) on public.profiles to authenticated;
 
 -- La ganancia deseada se mide sobre el precio de venta (vendo en 100, me quedan 50: 50 %), ya no sobre
 -- el costo. Una sola vez, los perfiles de antes pasan su porcentaje a su equivalente sobre la venta

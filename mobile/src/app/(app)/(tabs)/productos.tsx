@@ -27,7 +27,7 @@ export default function ProductsScreen() {
           key={product.id}
           left={<ProductThumb path={product.image_path} />}
           title={product.name}
-          subtitle={`Costo ${money(productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials).total)}`}
+          subtitle={`Costo ${money(productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules).total)}`}
           value={String(product.stock)}
           valueHint="en stock"
           tone={product.stock <= 0 ? 'bad' : undefined}

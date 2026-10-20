@@ -23,7 +23,7 @@ export default function InventoryPage() {
 
   const raw: Item[] = [...filaments.map(filamentItem), ...materials.map(materialItem)];
   const finished: Item[] = products.map((product) => {
-    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials).total;
+    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules).total;
     return {
       type: "product" as const,
       id: product.id,

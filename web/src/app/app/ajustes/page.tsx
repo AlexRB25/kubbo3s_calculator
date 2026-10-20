@@ -1,5 +1,6 @@
 "use client";
 
+import { WasteRules } from "@/components/app/WasteRules";
 import { FieldsForm, PageHeader, type FieldDef } from "@/components/app/ui";
 import { useData } from "@/lib/data";
 import { supabase } from "@/lib/supabase";
@@ -38,6 +39,7 @@ export default function SettingsPage() {
           }}
         />
       </div>
+      <WasteRules />
     </>
   );
 }

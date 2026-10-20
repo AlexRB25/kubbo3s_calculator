@@ -13,6 +13,7 @@ import {
   packagingName,
   plateCombos,
   piecesOnPlate,
+  wastePct,
   plateCost,
   productCost,
   shippingFor,
@@ -153,6 +154,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     filaments,
     printers,
     kwhPrice,
+    profile?.waste_rules,
   );
   const dearest = combos.dearest;
   const cost = dearest?.cost ?? { filament: 0, electricity: 0, machine: 0, extra: extra + supplyCost, total: extra + supplyCost };
@@ -485,10 +487,12 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                       <span className="text-sm text-muted">
                         {saved &&
                           (() => {
-                            const total = plateCost(saved, printer, filaments, kwhPrice).total;
                             const count = piecesOnPlate(saved, parts);
+                            const waste = wastePct(profile?.waste_rules, count);
+                            const total = plateCost(saved, printer, filaments, kwhPrice, waste).total;
+                            const extraNote = waste > 0 ? ` · incluye ${waste}% de merma en filamento` : "";
                             return count > 0
-                              ? `Imprimirla cuesta ${money(total)} · ${money(total / count)} por pieza (${count} ${count === 1 ? "pieza" : "piezas"})`
+                              ? `Imprimirla cuesta ${money(total)} · ${money(total / count)} por pieza (${count} ${count === 1 ? "pieza" : "piezas"})${extraNote}`
                               : `Imprimirla cuesta ${money(total)}`;
                           })()}
                       </span>
@@ -771,7 +775,7 @@ export default function ProductsPage() {
             </thead>
             <tbody>
               {shown.map((product) => {
-                const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials).total;
+                const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules).total;
                 const photo = imageUrl(product.image_path);
                 return (
                   <tr key={product.id}>

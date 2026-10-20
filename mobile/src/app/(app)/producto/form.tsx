@@ -70,7 +70,7 @@ export default function ProductFormScreen() {
         plates: [],
         extra_cost: num(extraCost),
       };
-  const cost = productCost({ ...draft, materials: product?.materials }, filaments, printers, profile?.kwh_price ?? 0, materials);
+  const cost = productCost({ ...draft, materials: product?.materials }, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules);
 
   const setRow = (index: number, change: Partial<RecipeRow>) =>
     setRecipe(recipe.map((row, position) => (position === index ? { ...row, ...change } : row)));

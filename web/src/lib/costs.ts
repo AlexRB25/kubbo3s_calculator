@@ -1,4 +1,4 @@
-import type { Carrier, Channel, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, Printer, Product } from './types';
+import type { Carrier, Channel, WasteRule, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, Printer, Product } from './types';
 
 export type CostBreakdown = {
   filament: number;
@@ -52,9 +52,17 @@ export type Combo = {
 };
 
 /** What printing a plate once costs on its printer: filament, electricity and wear. */
-export function plateCost(plate: Plate, printer: Printer, filaments: Filament[], kwhPrice: number) {
-  const uses = Object.entries(plate.grams).map(([filament_id, grams]) => ({ filament_id, grams: Number(grams) || 0 }));
+export function plateCost(plate: Plate, printer: Printer, filaments: Filament[], kwhPrice: number, waste = 0) {
+  // The filament is quoted with the waste of the plate (the user's rule by pieces on it).
+  const uses = Object.entries(plate.grams).map(([filament_id, grams]) => ({ filament_id, grams: (Number(grams) || 0) * (1 + waste / 100) }));
   return breakdown(uses, plate.minutes, [printer], filaments, kwhPrice, 0);
+}
+
+/** Extra filament (%) the user quotes for a plate of `pieces` pieces; above the last rule, the last one. */
+export function wastePct(rules: WasteRule[] | undefined, pieces: number) {
+  const sorted = [...(rules ?? [])].filter((rule) => rule.max_pieces > 0).sort((a, b) => a.max_pieces - b.max_pieces);
+  if (!sorted.length || pieces <= 0) return 0;
+  return Number((sorted.find((rule) => pieces <= rule.max_pieces) ?? sorted[sorted.length - 1]).pct) || 0;
 }
 
 /** Pieces a plate prints in all (of every kind). */
@@ -64,14 +72,14 @@ export function piecesOnPlate(plate: Plate, parts: Part[]) {
 
 type Option = { plate: Plate; printer: Printer; pieces: Record<string, number>; count: number; detail: CostBreakdown };
 
-function optionsOf(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number): Option[] {
+function optionsOf(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number, waste: WasteRule[] = []): Option[] {
   const parts = partsOf(product);
   return (product.plates ?? []).flatMap((plate) => {
     const printer = printers.find((item) => item.id === plate.printer_id);
     const pieces = plateParts(plate, parts);
     const count = piecesOnPlate(plate, parts);
     if (!printer || count <= 0) return [];
-    return [{ plate, printer, pieces, count, detail: plateCost(plate, printer, filaments, kwhPrice) }];
+    return [{ plate, printer, pieces, count, detail: plateCost(plate, printer, filaments, kwhPrice, wastePct(waste, count)) }];
   });
 }
 
@@ -109,9 +117,9 @@ function choose(options: Option[], parts: Part[], extra: number, dearer: boolean
 }
 
 /** The dearest and the cheapest way to print the product from its plates (null when they cannot complete it). */
-export function plateCombos(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number) {
+export function plateCombos(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number, waste: WasteRule[] = []) {
   const parts = partsOf(product);
-  const options = optionsOf(product, filaments, printers, kwhPrice);
+  const options = optionsOf(product, filaments, printers, kwhPrice, waste);
   const missing = parts.filter((part) => !options.some((option) => (option.pieces[part.id] ?? 0) > 0));
   if (!options.length || missing.length) return { dearest: null, cheapest: null, missing };
   return { dearest: choose(options, parts, product.extra_cost, true), cheapest: choose(options, parts, product.extra_cost, false), missing };
@@ -128,11 +136,12 @@ export function productCost(
   printers: Printer[],
   kwhPrice: number,
   materials: Material[] = [],
+  waste: WasteRule[] = [],
 ): CostBreakdown {
   const supplies = suppliesCost(product.materials, materials);
   const withSupplies = (cost: CostBreakdown): CostBreakdown => ({ ...cost, supplies, total: cost.total + supplies });
   if (product.plates?.length) {
-    const combo = choose(optionsOf(product, filaments, printers, kwhPrice), partsOf(product), product.extra_cost, true);
+    const combo = choose(optionsOf(product, filaments, printers, kwhPrice, waste), partsOf(product), product.extra_cost, true);
     if (combo) return withSupplies(combo.cost);
   }
   const assigned = printers.filter((printer) => product.printer_ids.includes(printer.id));

@@ -7,7 +7,12 @@ export type Profile = {
   business_name: string;
   kwh_price: number;
   margin_pct: number;
+  /** Extra filament quoted per plate by how many pieces it carries (waste, failed pieces). */
+  waste_rules: WasteRule[];
 };
+
+/** Plates of up to `max_pieces` pieces are quoted with `pct` % more filament. */
+export type WasteRule = { max_pieces: number; pct: number };
 
 export type Supplier = {
   id: string;
