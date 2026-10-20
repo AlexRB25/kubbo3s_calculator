@@ -19,7 +19,7 @@ type RecipeRow = { filament_id: string | null; grams: string };
 export default function ProductFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { session } = useSession();
-  const { products, filaments, printers, channels, profile, packaging } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials } = useData();
   const { busy, error, setError, save } = useSave();
   const product = products.find((item) => item.id === id);
 
@@ -70,7 +70,7 @@ export default function ProductFormScreen() {
         plates: [],
         extra_cost: num(extraCost),
       };
-  const cost = productCost(draft, filaments, printers, profile?.kwh_price ?? 0);
+  const cost = productCost({ ...draft, materials: product?.materials }, filaments, printers, profile?.kwh_price ?? 0, materials);
 
   const setRow = (index: number, change: Partial<RecipeRow>) =>
     setRecipe(recipe.map((row, position) => (position === index ? { ...row, ...change } : row)));

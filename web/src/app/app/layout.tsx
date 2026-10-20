@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/app/inventario", label: "Inventario" },
   { href: "/app/productos", label: "Productos" },
   { href: "/app/filamento", label: "Filamento" },
+  { href: "/app/insumos", label: "Insumos" },
   { href: "/app/impresiones", label: "Impresiones" },
   { href: "/app/ventas", label: "Ventas" },
   { href: "/app/gastos", label: "Gastos" },

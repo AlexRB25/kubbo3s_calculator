@@ -100,6 +100,9 @@ export type Packaging = {
 
 export type FilamentUse = { filament_id: string; grams: number };
 
+/** How many units of a supply (LED, bulb, screw…) one product takes. */
+export type MaterialUse = { material_id: string; quantity: number };
+
 /** A piece the product is made of, and how many of it one product takes. */
 export type Part = { id: string; name: string; needed: number };
 
@@ -121,6 +124,8 @@ export type Product = {
   /** Grams of each filament one piece takes. */
   filaments: FilamentUse[];
   printer_ids: string[];
+  /** Supplies one product takes (LEDs, bulbs, screws…): their cost adds to the product's. */
+  materials: MaterialUse[];
   /** More photos after the cover (`image_path`), in order. */
   image_paths: string[];
   /** Categories it belongs to (several allowed): from the Kubbo3D list or typed by the user. */

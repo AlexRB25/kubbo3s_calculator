@@ -160,6 +160,9 @@ alter table public.products add column if not exists part_stock jsonb not null d
 alter table public.products add column if not exists categories text[] not null default '{}';
 -- Más fotos además de la portada (image_path), en orden.
 alter table public.products add column if not exists image_paths text[] not null default '{}';
+-- Insumos que lleva cada producto (LEDs, focos, tornillos…): [{"material_id": uuid, "quantity": number}].
+-- Su costo se suma al del producto y se descuentan del inventario al producirlo.
+alter table public.products add column if not exists materials jsonb not null default '[]';
 create index if not exists products_categories_idx on public.products using gin (categories);
 
 -- Catálogo de categorías de impresión 3D: Kubbo3D lo mantiene desde el panel admin.
@@ -394,6 +397,24 @@ create or replace trigger job_filament_moves_stock
   after insert or update or delete on public.print_job_filaments
   for each row execute function public.job_filament_moves_stock();
 
+-- Insumos de `p_count` productos: salen del inventario (o regresan, con un número negativo) como
+-- ajustes con nota, así quedan en el historial de cada insumo.
+create or replace function public.consume_materials(p_product uuid, p_count int, p_note text) returns void
+language plpgsql set search_path = '' as $$
+begin
+  if p_product is null or coalesce(p_count, 0) = 0 then
+    return;
+  end if;
+  insert into public.inventory_adjustments (item_type, item_id, delta, note)
+  select 'material', m.id, -(x.quantity * p_count), p_note
+  from public.products p
+  cross join lateral jsonb_to_recordset(p.materials) as x (material_id uuid, quantity numeric)
+  join public.materials m on m.id = x.material_id
+  where p.id = p_product and x.quantity > 0;
+end $$;
+revoke execute on function public.consume_materials(uuid, int, text) from public, anon;
+grant execute on function public.consume_materials(uuid, int, text) to authenticated;
+
 -- Piezas sueltas de un producto que se imprime por placas: suma (o quita) las de una placa
 -- `times` veces y arma los productos que ya se completan. Si al quitar faltan piezas, desarma
 -- los productos necesarios. Armar y desarmar quedan en el historial como ajustes.
@@ -449,9 +470,11 @@ begin
   if coalesce(v_build, 0) > 0 then
     insert into public.inventory_adjustments (item_type, item_id, delta, note)
     values ('product', p_product, v_build, 'Armado con piezas impresas');
+    perform public.consume_materials(p_product, v_build, 'Usado al armar productos');
   elsif coalesce(v_build, 0) < 0 then
     insert into public.inventory_adjustments (item_type, item_id, delta, note)
     values ('product', p_product, v_build, 'Desarmado: se corrigió o quitó una impresión');
+    perform public.consume_materials(p_product, v_build, 'Devuelto: se desarmaron productos');
   end if;
 end $$;
 -- Solo sirve dentro del trigger de impresiones: una llamada directa la frena stock_only_by_moves.
@@ -472,6 +495,7 @@ begin
       null;
     elsif old.plate is null then
       update public.products set stock = stock - old.good_quantity where id = old.product_id;
+      perform public.consume_materials(old.product_id, -old.good_quantity, 'Devuelto: se corrigió o quitó una impresión');
     else
       perform public.move_parts(old.product_id, old.plate -> 'parts', -old.good_quantity);
     end if;
@@ -482,6 +506,7 @@ begin
       null;
     elsif new.plate is null then
       update public.products set stock = stock + new.good_quantity where id = new.product_id;
+      perform public.consume_materials(new.product_id, new.good_quantity, 'Usado en una impresión');
     else
       perform public.move_parts(new.product_id, new.plate -> 'parts', new.good_quantity);
     end if;

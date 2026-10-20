@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { PurchaseForm } from "@/components/app/PurchaseForm";
 import { CountForm, StockHistory } from "@/components/app/StockDialogs";
-import { Empty, FieldsForm, Modal, PageHeader, Stat, TableCard, type FieldDef } from "@/components/app/ui";
+import { materialFields } from "@/components/app/MaterialFields";
+import { Empty, FieldsForm, Modal, PageHeader, Stat, TableCard } from "@/components/app/ui";
 import { productCost } from "@/lib/costs";
 import { useData } from "@/lib/data";
 import { money, weight } from "@/lib/format";
@@ -22,7 +23,7 @@ export default function InventoryPage() {
 
   const raw: Item[] = [...filaments.map(filamentItem), ...materials.map(materialItem)];
   const finished: Item[] = products.map((product) => {
-    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0).total;
+    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials).total;
     return {
       type: "product" as const,
       id: product.id,
@@ -40,27 +41,6 @@ export default function InventoryPage() {
   const value = (items: Item[]) => items.reduce((total, item) => total + Math.max(item.stock, 0) * item.unitCost, 0);
   const shown = tab === "raw" ? raw : finished;
 
-  const materialFields: FieldDef[] = [
-    { name: "name", label: "Nombre", required: true, wide: true, placeholder: "Imán de neodimio 6×2, resina estándar gris…" },
-    { name: "category", label: "Tipo", placeholder: "Imanes, resina, tornillería, pintura…" },
-    {
-      name: "unit",
-      label: "Se cuenta en",
-      type: "select",
-      required: true,
-      options: [
-        { value: "pza", label: "Piezas" },
-        { value: "g", label: "Gramos" },
-        { value: "ml", label: "Mililitros" },
-      ],
-    },
-    // Stock is only typed once, when the material is new; later it moves with purchases and arqueos.
-    ...(editing === "new" ? [{ name: "stock", label: "Existencia inicial", type: "number" as const, hint: "Lo que ya tienes; queda en el historial como existencia inicial." }] : []),
-    { name: "cost_per_unit", label: "Costo de referencia por unidad ($)", type: "number", hint: "Lo que normalmente cuesta. El costo real sale de tus compras." },
-    { name: "low_stock", label: "Avisarme al bajar de", type: "number" },
-    { name: "supplier_id", label: "Proveedor", type: "select", options: suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name })), none: "Sin proveedor" },
-    { name: "notes", label: "Notas", type: "textarea", wide: true },
-  ];
   const currentMaterial = editing === "new" ? undefined : (editing ?? undefined);
   const tabClass = "rounded-lg px-4 py-2 text-sm font-semibold text-muted hover:bg-raised aria-selected:bg-brand aria-selected:text-ink";
 
@@ -192,7 +172,7 @@ export default function InventoryPage() {
       {editing && (
         <Modal title={currentMaterial ? currentMaterial.name : "Nuevo material"} onClose={() => setEditing(null)} wide>
           <FieldsForm
-            fields={materialFields}
+            fields={materialFields(suppliers, editing === "new")}
             initial={currentMaterial ?? { unit: "pza", stock: 0, cost_per_unit: 0, low_stock: 0 }}
             onDone={() => setEditing(null)}
             onSubmit={(values) => {

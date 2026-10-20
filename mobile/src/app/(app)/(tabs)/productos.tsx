@@ -8,7 +8,7 @@ import { money } from '@/lib/format';
 import { useData } from '@/store/data';
 
 export default function ProductsScreen() {
-  const { products, filaments, printers, profile } = useData();
+  const { products, filaments, printers, profile, materials } = useData();
   const [query, setQuery] = useState('');
   const needle = query.trim().toLowerCase();
   const visible = needle
@@ -27,7 +27,7 @@ export default function ProductsScreen() {
           key={product.id}
           left={<ProductThumb path={product.image_path} />}
           title={product.name}
-          subtitle={`Costo ${money(productCost(product, filaments, printers, profile?.kwh_price ?? 0).total)}`}
+          subtitle={`Costo ${money(productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials).total)}`}
           value={String(product.stock)}
           valueHint="en stock"
           tone={product.stock <= 0 ? 'bad' : undefined}

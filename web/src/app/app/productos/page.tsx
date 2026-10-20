@@ -7,6 +7,8 @@ import { CategoryPicker } from "@/components/app/CategoryPicker";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
 import {
   costPerGram,
+  materialUnitCost,
+  suppliesCost,
   filamentName,
   packagingName,
   plateCombos,
@@ -88,7 +90,7 @@ function ComboCard({ title, hint, combo, parts }: { title: string; hint: string;
 
 function ProductForm({ product, onDone }: { product?: Product; onDone: () => void }) {
   const { session } = useSession();
-  const { filaments, printers, channels, profile, packaging } = useData();
+  const { filaments, printers, channels, profile, packaging, materials } = useData();
   const { busy, error, setError, save } = useSave();
   const kwhPrice = profile?.kwh_price ?? 0;
 
@@ -96,6 +98,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const [sku, setSku] = useState(product?.sku ?? "");
   const [description, setDescription] = useState(product?.description ?? "");
   const [categories, setCategories] = useState<string[]>(product?.categories ?? []);
+  // Supplies the product takes (LEDs, bulbs, screws…), from Insumos.
+  const [supplies, setSupplies] = useState<{ material_id: string; quantity: string }[]>(
+    product?.materials?.length ? product.materials.map((use) => ({ material_id: use.material_id, quantity: String(use.quantity) })) : [],
+  );
   const [extraCost, setExtraCost] = useState(field(product?.extra_cost));
   const [stock, setStock] = useState(String(product?.stock ?? 0));
   // Photos in order (the first is the cover): saved ones by path, new ones as files to upload on save.
@@ -132,16 +138,18 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     })),
   );
   const extra = num(extraCost);
+  const savedSupplies = supplies.flatMap((row) => (row.material_id && num(row.quantity) > 0 ? [{ material_id: row.material_id, quantity: num(row.quantity) }] : []));
+  const supplyCost = suppliesCost(savedSupplies, materials);
 
   // React Compiler memoizes this: the search only runs again when plates, pieces or costs change.
   const combos = plateCombos(
-    { plates: savedPlates, parts, extra_cost: extra, filaments: [], printer_ids: [], print_minutes: 0 },
+    { plates: savedPlates, parts, extra_cost: extra + supplyCost, filaments: [], printer_ids: [], print_minutes: 0 },
     filaments,
     printers,
     kwhPrice,
   );
   const dearest = combos.dearest;
-  const cost = dearest?.cost ?? { filament: 0, electricity: 0, machine: 0, extra, total: extra };
+  const cost = dearest?.cost ?? { filament: 0, electricity: 0, machine: 0, extra: extra + supplyCost, total: extra + supplyCost };
 
   const draft = {
     parts,
@@ -151,6 +159,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     filaments: (dearest?.filaments ?? []).map((use) => ({ filament_id: use.filament_id, grams: Math.round(use.grams * 100) / 100 })),
     print_minutes: Math.round(dearest?.minutes ?? 0),
     extra_cost: extra,
+    materials: savedSupplies,
   };
 
   const setPlate = (printerId: string, index: number, change: Partial<PlateRow>) =>
@@ -495,10 +504,72 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         })}
       </fieldset>
 
+      <fieldset className="flex flex-col gap-2 sm:col-span-2">
+        <legend className="mb-1 text-sm font-semibold">Insumos que lleva</legend>
+        <p className="text-xs text-muted">
+          LEDs, focos, tornillos, imanes… y cuántos lleva cada producto. Su costo se suma solo y se descuentan de tus{" "}
+          <Link href="/app/insumos" className="text-brand hover:underline">
+            Insumos
+          </Link>{" "}
+          al producirlo.
+        </p>
+        {supplies.map((row, index) => {
+          const material = materials.find((item) => item.id === row.material_id);
+          return (
+            <div key={index} className="flex items-end gap-2">
+              <label className="label flex-1">
+                Insumo
+                <select
+                  className="input"
+                  value={row.material_id}
+                  onChange={(event) => setSupplies(supplies.map((item, position) => (position === index ? { ...item, material_id: event.target.value } : item)))}
+                >
+                  <option value="">Elegir…</option>
+                  {materials.map((item) => (
+                    <option key={item.id} value={item.id} disabled={item.id !== row.material_id && supplies.some((other) => other.material_id === item.id)}>
+                      {item.name} · {money(materialUnitCost(item))} c/u · quedan {Number(item.stock)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="label w-32">
+                Por producto
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={row.quantity}
+                  onChange={(event) => setSupplies(supplies.map((item, position) => (position === index ? { ...item, quantity: event.target.value } : item)))}
+                  placeholder="1"
+                />
+              </label>
+              <span className="w-24 pb-3 text-right text-sm text-muted">{material ? money(materialUnitCost(material) * num(row.quantity)) : ""}</span>
+              <button type="button" className="btn" aria-label="Quitar insumo" onClick={() => setSupplies(supplies.filter((_, position) => position !== index))}>
+                ✕
+              </button>
+            </div>
+          );
+        })}
+        {materials.length ? (
+          <button type="button" className="btn self-start" onClick={() => setSupplies([...supplies, { material_id: "", quantity: "1" }])}>
+            + Agregar insumo
+          </button>
+        ) : (
+          <p className="text-sm text-muted">
+            Primero da de alta tus insumos en{" "}
+            <Link href="/app/insumos" className="text-brand hover:underline">
+              Insumos
+            </Link>
+            .
+          </p>
+        )}
+      </fieldset>
+
       <label className="label">
         Otros costos por producto ($)
         <input className="input" type="number" min={0} step="any" value={extraCost} onChange={(event) => setExtraCost(event.target.value)} placeholder="0" />
-        <span className="font-normal">Tornillos, imanes, etiquetas… El embalaje para envío va aparte.</span>
+        <span className="font-normal">Lo que no llevas en Insumos: etiquetas, mano de obra… El embalaje para envío va aparte.</span>
       </label>
       {product ? (
         <div className="label">
@@ -540,7 +611,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           <Line label="Filamento" value={money(cost.filament)} />
           <Line label="Luz" value={money(cost.electricity)} />
           <Line label="Desgaste de máquina" value={money(cost.machine)} />
-          <Line label="Otros" value={money(cost.extra)} />
+          {supplyCost > 0 && <Line label="Insumos" value={money(supplyCost)} />}
+          <Line label="Otros" value={money(cost.extra - supplyCost)} />
           <Line strong label="Costo por producto (combinación más cara)" value={money(cost.total)} />
         </div>
       </div>
@@ -605,7 +677,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
 }
 
 export default function ProductsPage() {
-  const { products, filaments, printers, channels, profile, packaging } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   // Only the products of one category; "" = all.
   const [category, setCategory] = useState("");
@@ -651,7 +723,7 @@ export default function ProductsPage() {
             </thead>
             <tbody>
               {shown.map((product) => {
-                const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0).total;
+                const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials).total;
                 const photo = imageUrl(product.image_path);
                 return (
                   <tr key={product.id}>

@@ -8,7 +8,7 @@ import { day, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 
 function SaleForm({ onDone }: { onDone: () => void }) {
-  const { products, channels, filaments, printers, profile, packaging } = useData();
+  const { products, channels, filaments, printers, profile, packaging, materials } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [productId, setProductId] = useState("");
@@ -40,7 +40,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   // One package per sale, whatever the number of pieces.
   const autoPackaging = shipped ? (packaging.find((item) => item.id === product?.packaging_id)?.cost ?? 0) : 0;
   const totalPackaging = shipped && packagingCost !== "" ? num(packagingCost) : autoPackaging;
-  const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0).total : num(customCost);
+  const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials).total : num(customCost);
   const profit = pieces * unitPrice - totalFees - totalShipping - totalPackaging - pieces * unitCost;
 
   function submit(event: React.FormEvent) {

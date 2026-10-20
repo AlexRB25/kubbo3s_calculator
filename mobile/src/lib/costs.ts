@@ -1,10 +1,12 @@
-import type { Channel, Filament, FilamentUse, Packaging, Part, Plate, Printer, Product } from './types';
+import type { Channel, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, Printer, Product } from './types';
 
 export type CostBreakdown = {
   filament: number;
   electricity: number;
   machine: number;
   extra: number;
+  /** Supplies (LEDs, bulbs, screws…) one product takes; included in total. */
+  supplies?: number;
   total: number;
 };
 
@@ -208,13 +210,34 @@ export function plateCombos(product: Recipe, filaments: Filament[], printers: Pr
  * prices always cover the worst case. Older products without plates use one recipe and the
  * average electricity and wear of their printers.
  */
-export function productCost(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number): CostBreakdown {
+export function productCost(
+  product: Recipe & { materials?: MaterialUse[] },
+  filaments: Filament[],
+  printers: Printer[],
+  kwhPrice: number,
+  materials: Material[] = [],
+): CostBreakdown {
+  const supplies = suppliesCost(product.materials, materials);
+  const withSupplies = (cost: CostBreakdown): CostBreakdown => ({ ...cost, supplies, total: cost.total + supplies });
   if (product.plates?.length) {
     const combo = dearest(optionsOf(product, filaments, printers, kwhPrice), partsOf(product), product.extra_cost);
-    if (combo) return combo.cost;
+    if (combo) return withSupplies(combo.cost);
   }
   const assigned = printers.filter((printer) => product.printer_ids.includes(printer.id));
-  return breakdown(product.filaments, product.print_minutes, assigned, filaments, kwhPrice, product.extra_cost);
+  return withSupplies(breakdown(product.filaments, product.print_minutes, assigned, filaments, kwhPrice, product.extra_cost));
+}
+
+/** What one unit of a supply costs: from its purchases, or the reference while it has none. */
+export function materialUnitCost(material: Pick<Material, 'avg_cost_per_unit' | 'cost_per_unit'>) {
+  return material.avg_cost_per_unit > 0 ? Number(material.avg_cost_per_unit) : Number(material.cost_per_unit);
+}
+
+/** The supplies one product takes, at their unit cost. */
+export function suppliesCost(uses: MaterialUse[] | undefined, materials: Material[]) {
+  return (uses ?? []).reduce((total, use) => {
+    const material = materials.find((item) => item.id === use.material_id);
+    return total + (material ? materialUnitCost(material) * use.quantity : 0);
+  }, 0);
 }
 
 /** Commission the channel keeps on a sale (shipping is counted apart). */

@@ -8,6 +8,7 @@ import type {
   Expense,
   Filament,
   Maintenance,
+  Material,
   Packaging,
   PrintJob,
   Printer,
@@ -29,6 +30,8 @@ type Tables = {
   maintenance: Maintenance[];
   expenses: Expense[];
   packaging: Packaging[];
+  /** Supplies (LEDs, bulbs, screws…) and other raw materials. */
+  materials: Material[];
 };
 
 type DataState = Tables & {
@@ -50,6 +53,7 @@ const EMPTY: Tables = {
   maintenance: [],
   expenses: [],
   packaging: [],
+  materials: [],
 };
 
 /** History tables load their most recent rows; older ones stay in the database. */
@@ -66,7 +70,7 @@ export function useData(): DataState {
 type Loaded = { tables: Tables; error?: undefined } | { tables?: undefined; error: string };
 
 async function fetchTables(userId: string): Promise<Loaded> {
-  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging] = await Promise.all([
+  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
     supabase.from('suppliers').select('*').order('name'),
     supabase.from('printers').select('*').order('name'),
@@ -82,9 +86,10 @@ async function fetchTables(userId: string): Promise<Loaded> {
     supabase.from('maintenance').select('*').order('performed_at', { ascending: false }).limit(HISTORY_LIMIT),
     supabase.from('expenses').select('*').order('spent_at', { ascending: false }).limit(HISTORY_LIMIT),
     supabase.from('packaging').select('*').order('name'),
+    supabase.from('materials').select('*').order('name'),
   ]);
 
-  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging].find(
+  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials].find(
     (result) => result.error,
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
@@ -101,6 +106,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       maintenance: maintenance.data ?? [],
       expenses: expenses.data ?? [],
       packaging: packaging.data ?? [],
+      materials: materials.data ?? [],
     },
   };
 }
