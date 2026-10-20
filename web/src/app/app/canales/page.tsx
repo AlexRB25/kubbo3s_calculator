@@ -8,7 +8,7 @@ import { money } from "@/lib/format";
 import type { Channel } from "@/lib/types";
 
 export default function ChannelsPage() {
-  const { channels } = useData();
+  const { channels, carriers } = useData();
   const [editing, setEditing] = useState<Channel | "new" | null>(null);
   const current = editing === "new" ? undefined : (editing ?? undefined);
 
@@ -46,7 +46,14 @@ export default function ChannelsPage() {
                   {channel.taxes?.length > 0 && <span className="block text-xs text-muted">{channel.taxes.map((tax) => `${tax.name} ${tax.pct}%`).join(" + ")}</span>}
                 </td>
                 <td className="num">{money(channel.fixed_fee)}</td>
-                <td className="num">{money(channel.shipping_cost)}</td>
+                <td className="num">
+                  {channel.carrier_ids?.length
+                    ? carriers
+                        .filter((carrier) => channel.carrier_ids.includes(carrier.id))
+                        .map((carrier) => carrier.name)
+                        .join(", ") || money(channel.shipping_cost)
+                    : money(channel.shipping_cost)}
+                </td>
                 <td className="num">
                   <button className="btn" onClick={() => setEditing(channel)}>
                     Editar

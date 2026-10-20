@@ -79,6 +79,21 @@ export type CatalogFilament = {
 /** One tax of a sales channel. `net`: it applies to the price without VAT (price ÷ 1.16). */
 export type ChannelTax = { name: string; pct: number; net?: boolean };
 
+/**
+ * A carrier and its rates: a row per weight (upper limit in kg) and, when it charges by the price of
+ * the product too, a column per price (upper limit in $). It bills the larger of the real weight and
+ * the volumetric one (length × width × height in cm ÷ divisor).
+ */
+export type Carrier = {
+  id: string;
+  name: string;
+  divisor: number;
+  weights: number[];
+  prices: number[];
+  rates: (number | null)[][];
+  notes: string;
+};
+
 export type Channel = {
   id: string;
   name: string;
@@ -87,6 +102,8 @@ export type Channel = {
   tax_pct: number;
   /** The taxes one by one. */
   taxes: ChannelTax[];
+  /** Carriers this channel ships with; empty = its fixed shipping_cost. */
+  carrier_ids: string[];
   fixed_fee: number;
   shipping_cost: number;
   sort: number;

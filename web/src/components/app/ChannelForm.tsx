@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useSave } from "@/lib/data";
+import Link from "next/link";
+import { useData, useSave } from "@/lib/data";
 import { field, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import type { Channel, ChannelTax } from "@/lib/types";
@@ -26,6 +27,8 @@ type TaxRow = { name: string; pct: string; net: boolean };
  */
 export function ChannelForm({ channel, count, onDone }: { channel?: Channel; count: number; onDone: () => void }) {
   const { busy, error, setError, save } = useSave();
+  const { carriers } = useData();
+  const [carrierIds, setCarrierIds] = useState<string[]>(channel?.carrier_ids ?? []);
   const [name, setName] = useState(channel?.name ?? "");
   const [commission, setCommission] = useState(field(channel?.commission_pct));
   const [fixedFee, setFixedFee] = useState(field(channel?.fixed_fee));
@@ -54,6 +57,7 @@ export function ChannelForm({ channel, count, onDone }: { channel?: Channel; cou
       taxes: saved,
       fixed_fee: num(fixedFee),
       shipping_cost: num(shipping),
+      carrier_ids: carrierIds.filter((id) => carriers.some((carrier) => carrier.id === id)),
     };
     save(
       () => (channel ? supabase().from("channels").update(row).eq("id", channel.id) : supabase().from("channels").insert({ ...row, sort: count + 1 })),
@@ -126,10 +130,42 @@ export function ChannelForm({ channel, count, onDone }: { channel?: Channel; cou
         )}
       </fieldset>
 
+      <fieldset className="flex flex-col gap-2 sm:col-span-2">
+        <legend className="mb-1 text-sm font-semibold">Paqueterías con las que envía</legend>
+        {carriers.length ? (
+          <>
+            <div className="flex flex-wrap gap-3">
+              {carriers.map((carrier) => (
+                <label key={carrier.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={carrierIds.includes(carrier.id)}
+                    onChange={(event) => setCarrierIds(event.target.checked ? [...carrierIds, carrier.id] : carrierIds.filter((id) => id !== carrier.id))}
+                  />
+                  {carrier.name}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted">
+              Cada producto cotiza con ellas según su peso y la caja de su embalaje: te muestra el envío más caro y el más barato, y su precio con envío usa el más
+              caro.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-muted">
+            Agrega tus paqueterías y sus tarifas en{" "}
+            <Link href="/app/paqueterias" className="text-brand hover:underline">
+              Paqueterías
+            </Link>
+            .
+          </p>
+        )}
+      </fieldset>
+
       <label className="label">
-        Envío que pagas por venta ($)
+        {carrierIds.length ? "Envío fijo (si ninguna paquetería cotiza) ($)" : "Envío que pagas por venta ($)"}
         <input className="input" type="number" min={0} step="any" value={shipping} onChange={(event) => setShipping(event.target.value)} placeholder="0" />
-        <span className="font-normal">0 si lo paga el comprador.</span>
+        <span className="font-normal">{carrierIds.length ? "Se usa solo cuando ninguna paquetería tiene tarifa para ese peso." : "0 si lo paga el comprador."}</span>
       </label>
 
       {error && (

@@ -2,7 +2,7 @@
 
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from "react";
 import { supabase } from "./supabase";
-import type { Channel, Expense, Filament, Maintenance, Material, Packaging, PrintJob, Printer, Product, Profile, Sale, Supplier, PrinterWear} from "./types";
+import type { Carrier, Channel, Expense, Filament, Maintenance, Material, Packaging, PrintJob, Printer, Product, Profile, Sale, Supplier, PrinterWear} from "./types";
 
 // Web twin of mobile/src/store/data.tsx: same tables, same queries, same Supabase project.
 
@@ -20,6 +20,7 @@ type Tables = {
   packaging: Packaging[];
   materials: Material[];
   wear: PrinterWear[];
+  carriers: Carrier[];
 };
 
 type DataState = Tables & {
@@ -43,6 +44,7 @@ const EMPTY: Tables = {
   packaging: [],
   materials: [],
   wear: [],
+  carriers: [],
 };
 
 /** History tables load their most recent rows; older ones stay in the database. */
@@ -60,7 +62,7 @@ type Loaded = { tables: Tables; error?: undefined } | { tables?: undefined; erro
 
 async function fetchTables(userId: string): Promise<Loaded> {
   const db = supabase();
-  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear] = await Promise.all([
+  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers] = await Promise.all([
     db.from("profiles").select("*").eq("id", userId).maybeSingle(),
     db.from("suppliers").select("*").order("name"),
     db.from("printers").select("*").order("name"),
@@ -78,9 +80,10 @@ async function fetchTables(userId: string): Promise<Loaded> {
     db.from("packaging").select("*").order("name"),
     db.from("materials").select("*").order("name"),
     db.from("printer_wear").select("*").order("happened_at", { ascending: false }).order("created_at", { ascending: false }).limit(HISTORY_LIMIT),
+    db.from("carriers").select("*").order("name"),
   ]);
 
-  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear].find(
+  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers].find(
     (result) => result.error,
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
@@ -99,6 +102,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       packaging: packaging.data ?? [],
       materials: materials.data ?? [],
       wear: wear.data ?? [],
+      carriers: carriers.data ?? [],
     },
   };
 }

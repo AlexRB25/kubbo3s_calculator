@@ -7,7 +7,7 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { costPerGram, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
+import { costPerGram, filamentName, packagingName, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { field, money, num, weight } from '@/lib/format';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
 import type { Product } from '@/lib/types';
@@ -19,7 +19,7 @@ type RecipeRow = { filament_id: string | null; grams: string };
 export default function ProductFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { session } = useSession();
-  const { products, filaments, printers, channels, profile, packaging, materials } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
   const { busy, error, setError, save } = useSave();
   const product = products.find((item) => item.id === id);
 
@@ -264,7 +264,10 @@ export default function ProductFormScreen() {
       {channels.map((channel) => {
         const price = num(prices[channel.id] ?? '');
         const margin = profile?.margin_pct ?? 0;
-        const shipping = shippingCost(channel, box);
+        // Quoted with the channel's carriers for this weight and box.
+        const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
+        const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
+        const shipping = shippingAt(price > 0 ? price : suggestedPriceWithShipping(cost.total, channel, margin, shippingAt));
         return (
           <Field
             key={channel.id}
@@ -277,7 +280,7 @@ export default function ProductFormScreen() {
             hint={
               price > 0
                 ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
-                : `Sugerido con envío: ${money(suggestedPrice(cost.total, channel, margin, shipping))}`
+                : `Sugerido con envío: ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))}`
             }
           />
         );

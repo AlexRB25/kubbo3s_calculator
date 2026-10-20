@@ -2,14 +2,14 @@ import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { Button, Card, Chips, ErrorText, Field, Line, Muted, Row, Screen, Select } from '@/components/ui';
-import { channelFees, productCost } from '@/lib/costs';
+import { channelFees, productCost, shippingQuotes } from '@/lib/costs';
 import { money, num } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
 
 export default function NewSaleScreen() {
   const { producto } = useLocalSearchParams<{ producto?: string }>();
-  const { products, channels, filaments, printers, profile, packaging, materials } = useData();
+  const { products, channels, filaments, printers, profile, packaging, materials, carriers } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [productId, setProductId] = useState<string | null>(producto ?? null);
@@ -35,7 +35,11 @@ export default function NewSaleScreen() {
   const autoFees = channelFees(channel, unitPrice, pieces);
   const totalFees = fees === '' ? autoFees : num(fees);
   const shipped = delivery === 'shipped';
-  const autoShipping = shipped ? (channel?.shipping_cost ?? 0) : 0;
+  // The dearest carrier of the channel for the product's weight and box, at the price it sold for.
+  const box = packaging.find((item) => item.id === product?.packaging_id);
+  const grams = (product?.filaments ?? []).reduce((total, use) => total + use.grams, 0);
+  const quotes = shipped && channel && product ? shippingQuotes(channel, carriers, grams, box, unitPrice) : [];
+  const autoShipping = shipped ? (quotes.length ? quotes[quotes.length - 1].cost : (channel?.shipping_cost ?? 0)) : 0;
   const totalShipping = shipped && shipping !== '' ? num(shipping) : autoShipping;
   // One package per sale, whatever the number of pieces.
   const autoPackaging = shipped ? (packaging.find((item) => item.id === product?.packaging_id)?.cost ?? 0) : 0;

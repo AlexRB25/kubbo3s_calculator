@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { channelFees, productCost } from "@/lib/costs";
+import { channelFees, productCost, shippingQuotes } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { day, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 
 function SaleForm({ onDone }: { onDone: () => void }) {
-  const { products, channels, filaments, printers, profile, packaging, materials } = useData();
+  const { products, channels, filaments, printers, profile, packaging, materials, carriers } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [productId, setProductId] = useState("");
@@ -21,6 +21,8 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const [fees, setFees] = useState("");
   const [delivery, setDelivery] = useState<"shipped" | "pickup">("shipped");
   const [shipping, setShipping] = useState("");
+  // Carrier the order went with ("" = the dearest of the channel).
+  const [carrierId, setCarrierId] = useState("");
   const [packagingCost, setPackagingCost] = useState("");
   const [customCost, setCustomCost] = useState("");
   const [notes, setNotes] = useState("");
@@ -35,7 +37,12 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const autoFees = channelFees(channel, unitPrice, pieces);
   const totalFees = fees === "" ? autoFees : num(fees);
   const shipped = delivery === "shipped";
-  const autoShipping = shipped ? (channel?.shipping_cost ?? 0) : 0;
+  // Quoted with the channel's carriers for the product's weight and box, at the price it sold for.
+  const box = packaging.find((item) => item.id === product?.packaging_id);
+  const grams = (product?.filaments ?? []).reduce((total, use) => total + use.grams, 0);
+  const quotes = shipped && channel && product ? shippingQuotes(channel, carriers, grams, box, unitPrice) : [];
+  const quote = quotes.find((item) => item.carrier.id === carrierId) ?? quotes[quotes.length - 1];
+  const autoShipping = shipped ? (quote ? quote.cost : (channel?.shipping_cost ?? 0)) : 0;
   const totalShipping = shipped && shipping !== "" ? num(shipping) : autoShipping;
   // One package per sale, whatever the number of pieces.
   const autoPackaging = shipped ? (packaging.find((item) => item.id === product?.packaging_id)?.cost ?? 0) : 0;
@@ -141,6 +148,19 @@ function SaleForm({ onDone }: { onDone: () => void }) {
       </label>
       {shipped && (
         <>
+          {quotes.length > 0 && (
+            <label className="label">
+              Paquetería
+              <select className="input" value={quote?.carrier.id ?? ""} onChange={(event) => setCarrierId(event.target.value)}>
+                {quotes.map((item) => (
+                  <option key={item.carrier.id} value={item.carrier.id}>
+                    {item.carrier.name} · {money(item.cost)}
+                  </option>
+                ))}
+              </select>
+              <span className="font-normal">Cotizado con {quote?.kg.toFixed(2)} kg (peso del producto y su caja, o el volumétrico si es mayor).</span>
+            </label>
+          )}
           <label className="label">
             Envío que pagaste ($)
             <input className="input" type="number" min={0} step="any" value={shipping} onChange={(event) => setShipping(event.target.value)} placeholder={autoShipping.toFixed(2)} />

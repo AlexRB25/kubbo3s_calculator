@@ -97,6 +97,30 @@ alter table public.channels add column if not exists tax_pct numeric(6,2) not nu
 alter table public.channels add column if not exists taxes jsonb not null default '[]';
 alter table public.channels alter column tax_pct type numeric(8,4);
 
+-- Paqueterías: tarifas de envío por peso (y, si la paquetería lo cobra así, por precio del producto).
+-- weights: límite superior de cada renglón en kg; prices: límite superior de cada columna en pesos (vacío
+-- = una sola columna); rates[renglón][columna]: lo que cobra. Se cobra por el peso mayor entre el
+-- físico y el volumétrico (largo × ancho × alto en cm ÷ divisor).
+create table if not exists public.carriers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 80),
+  divisor numeric(10,2) not null default 5000 check (divisor > 0),
+  weights numeric[] not null default '{}',
+  prices numeric[] not null default '{}',
+  rates jsonb not null default '[]',
+  notes text not null default '',
+  created_at timestamptz not null default now()
+);
+create index if not exists carriers_user_idx on public.carriers (user_id);
+alter table public.carriers enable row level security;
+revoke all on public.carriers from anon;
+drop policy if exists own_rows on public.carriers;
+create policy own_rows on public.carriers for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+-- Con qué paqueterías envía cada canal (Mercado Libre con su tabla, venta directa con DHL o Estafeta…).
+alter table public.channels add column if not exists carrier_ids uuid[] not null default '{}';
+
 -- Material de embalaje (cajas, sobres, bolsas…) con medidas y costo por unidad.
 create table if not exists public.packaging (
   id uuid primary key default gen_random_uuid(),

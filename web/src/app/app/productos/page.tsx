@@ -15,7 +15,9 @@ import {
   piecesOnPlate,
   plateCost,
   productCost,
-  shippingCost,
+  shippingFor,
+  shippingQuotes,
+  suggestedPriceWithShipping,
   suggestedPrice,
   unitProfit,
   type Combo,
@@ -94,7 +96,7 @@ function ComboCard({ title, hint, combo }: { title: string; hint: string; combo:
 
 function ProductForm({ product, onDone }: { product?: Product; onDone: () => void }) {
   const { session } = useSession();
-  const { filaments, printers, channels, profile, packaging, materials } = useData();
+  const { filaments, printers, channels, profile, packaging, materials, carriers } = useData();
   const { busy, error, setError, save } = useSave();
   const kwhPrice = profile?.kwh_price ?? 0;
 
@@ -664,7 +666,12 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       {channels.map((channel) => {
         const price = num(prices[channel.id] ?? "");
         const margin = profile?.margin_pct ?? 0;
-        const shipping = shippingCost(channel, box);
+        // Shipping is quoted with the channel's carriers for this weight and box (and price, when they charge by it).
+        const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
+        const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
+        const suggestedShipped = suggestedPriceWithShipping(cost.total, channel, margin, shippingAt);
+        const quotes = shippingQuotes(channel, carriers, grams, box, price > 0 ? price : suggestedShipped);
+        const shipping = shippingAt(price > 0 ? price : suggestedShipped);
         return (
           <label key={channel.id} className="label">
             Precio en {channel.name} ($)
@@ -680,8 +687,20 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
             <span className="font-normal">
               {price > 0
                 ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
-                : `Sugerido con envío: ${money(suggestedPrice(cost.total, channel, margin, shipping))}`}
+                : `Sugerido con envío: ${money(suggestedShipped)}`}
             </span>
+            {quotes.length > 0 && (
+              <span className="font-normal">
+                {quotes.length === 1
+                  ? `Envío con ${quotes[0].carrier.name}: ${money(quotes[0].cost)}`
+                  : `Envío más barato: ${money(quotes[0].cost)} (${quotes[0].carrier.name}) · más caro: ${money(quotes[quotes.length - 1].cost)} (${quotes[quotes.length - 1].carrier.name})`}
+                {` · cobra ${quotes[quotes.length - 1].kg.toFixed(2)} kg`}
+                {box ? "" : " (sin caja asignada: solo el peso del producto)"}
+              </span>
+            )}
+            {channel.carrier_ids?.length > 0 && quotes.length === 0 && (
+              <span className="font-normal text-warn">Ninguna paquetería de este canal tiene tarifa para este peso: se usa el envío fijo del canal.</span>
+            )}
           </label>
         );
       })}
@@ -706,7 +725,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
 }
 
 export default function ProductsPage() {
-  const { products, filaments, printers, channels, profile, packaging, materials } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   // Only the products of one category; "" = all.
   const [category, setCategory] = useState("");
@@ -780,19 +799,21 @@ export default function ProductsPage() {
                     <td className="num">{money(cost)}</td>
                     {channels.map((channel) => {
                       const price = product.prices[channel.id];
-                      const shipping = shippingCost(channel, packaging.find((item) => item.id === product.packaging_id));
+                      const box = packaging.find((item) => item.id === product.packaging_id);
+                      const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
+                      const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
                       const margin = profile?.margin_pct ?? 0;
                       if (!price) {
                         return (
                           <td key={channel.id} className="num text-xs text-muted">
                             sugerido {money(suggestedPrice(cost, channel, margin))}
-                            <div>con envío {money(suggestedPrice(cost, channel, margin, shipping))}</div>
+                            <div>con envío {money(suggestedPriceWithShipping(cost, channel, margin, shippingAt))}</div>
                           </td>
                         );
                       }
                       const tone = (profit: number) => (profit >= 0 ? "text-money" : "text-bad");
                       const plain = unitProfit(price, cost, channel);
-                      const shipped = unitProfit(price, cost, channel, shipping);
+                      const shipped = unitProfit(price, cost, channel, shippingAt(price));
                       return (
                         <td key={channel.id} className="num">
                           {money(price)}

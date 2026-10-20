@@ -1,4 +1,4 @@
-import type { Channel, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, Printer, Product } from './types';
+import type { Carrier, Channel, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, Printer, Product } from './types';
 
 export type CostBreakdown = {
   filament: number;
@@ -164,6 +164,69 @@ export function channelFees(channel: Channel | undefined, unitPrice: number, qua
  */
 export function shippingCost(channel: Channel, packaging: Packaging | undefined) {
   return channel.shipping_cost + (packaging?.cost ?? 0);
+}
+
+/**
+ * Weight a package ships at, in kg: the plastic of the product plus the empty package, or its
+ * volumetric weight (length × width × height in cm ÷ divisor) when that is larger.
+ */
+export function shippingWeight(productGrams: number, packaging: Packaging | undefined, divisor: number) {
+  const physical = (productGrams + Number(packaging?.weight_g ?? 0)) / 1000;
+  const cm = packaging ? [packaging.length_mm, packaging.width_mm, packaging.height_mm].map((value) => Number(value) / 10) : [];
+  const volumetric = cm.length && cm.every((value) => value > 0) ? (cm[0] * cm[1] * cm[2]) / divisor : 0;
+  return Math.max(physical, volumetric);
+}
+
+/** What a carrier charges for `kg` sold at `price`; null when it has no rate for that weight. */
+export function carrierRate(carrier: Carrier, kg: number, price: number): number | null {
+  const row = carrier.weights.findIndex((limit) => kg <= Number(limit) + 1e-9);
+  if (row < 0) return null;
+  let column = 0;
+  if (carrier.prices.length) {
+    column = carrier.prices.findIndex((limit) => price <= Number(limit) + 1e-9);
+    // Above the last price column: the last one (its table usually ends open-ended).
+    if (column < 0) column = carrier.prices.length - 1;
+  }
+  const value = carrier.rates[row]?.[column];
+  return value === null || value === undefined || Number.isNaN(Number(value)) ? null : Number(value);
+}
+
+export type ShippingQuote = { carrier: Carrier; cost: number; kg: number };
+
+/** What each carrier of the channel charges to send the product at `price`, cheapest first. */
+export function shippingQuotes(channel: Channel, carriers: Carrier[], productGrams: number, packaging: Packaging | undefined, price: number): ShippingQuote[] {
+  return carriers
+    .filter((carrier) => channel.carrier_ids?.includes(carrier.id))
+    .flatMap((carrier) => {
+      const kg = shippingWeight(productGrams, packaging, Number(carrier.divisor) || 5000);
+      const cost = carrierRate(carrier, kg, price);
+      return cost === null ? [] : [{ carrier, cost, kg }];
+    })
+    .sort((a, b) => a.cost - b.cost);
+}
+
+/**
+ * Shipping of one sale: the dearest carrier of the channel (so prices always cover it), or the
+ * channel's fixed shipping when it has no carriers, plus the package.
+ */
+export function shippingFor(channel: Channel, carriers: Carrier[], productGrams: number, packaging: Packaging | undefined, price: number) {
+  const quotes = shippingQuotes(channel, carriers, productGrams, packaging, price);
+  const carrierCost = channel.carrier_ids?.length && quotes.length ? quotes[quotes.length - 1].cost : channel.shipping_cost;
+  return carrierCost + (packaging?.cost ?? 0);
+}
+
+/**
+ * Suggested price when shipping depends on the price itself (carriers that charge by price range):
+ * worked out a few times until it settles.
+ */
+export function suggestedPriceWithShipping(cost: number, channel: Channel, marginPct: number, shippingAt: (price: number) => number) {
+  let price = suggestedPrice(cost, channel, marginPct, shippingAt(0));
+  for (let round = 0; round < 6; round++) {
+    const next = suggestedPrice(cost, channel, marginPct, shippingAt(price));
+    if (Math.abs(next - price) < 0.005) return next;
+    price = Math.max(price, next);
+  }
+  return price;
 }
 
 /** What is left from selling one piece at `price` after commission, `shipping` and production. */

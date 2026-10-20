@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
 import type {
+  Carrier,
   Channel,
   Expense,
   Filament,
@@ -35,6 +36,8 @@ type Tables = {
   materials: Material[];
   /** Wear fund of the printers: wear of each print and the payments into it. */
   wear: PrinterWear[];
+  /** Carriers and their rates, linked to the sales channels. */
+  carriers: Carrier[];
 };
 
 type DataState = Tables & {
@@ -58,6 +61,7 @@ const EMPTY: Tables = {
   packaging: [],
   materials: [],
   wear: [],
+  carriers: [],
 };
 
 /** History tables load their most recent rows; older ones stay in the database. */
@@ -74,7 +78,7 @@ export function useData(): DataState {
 type Loaded = { tables: Tables; error?: undefined } | { tables?: undefined; error: string };
 
 async function fetchTables(userId: string): Promise<Loaded> {
-  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear] = await Promise.all([
+  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
     supabase.from('suppliers').select('*').order('name'),
     supabase.from('printers').select('*').order('name'),
@@ -92,9 +96,10 @@ async function fetchTables(userId: string): Promise<Loaded> {
     supabase.from('packaging').select('*').order('name'),
     supabase.from('materials').select('*').order('name'),
     supabase.from('printer_wear').select('*').order('happened_at', { ascending: false }).limit(HISTORY_LIMIT),
+    supabase.from('carriers').select('*').order('name'),
   ]);
 
-  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear].find(
+  const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers].find(
     (result) => result.error,
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
@@ -113,6 +118,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       packaging: packaging.data ?? [],
       materials: materials.data ?? [],
       wear: wear.data ?? [],
+      carriers: carriers.data ?? [],
     },
   };
 }

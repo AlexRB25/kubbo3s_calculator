@@ -4,13 +4,13 @@ import { Text, View } from 'react-native';
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Card, Empty, Heading, Line, Muted, Row, Screen } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
-import { channelFees, costPerGram, filamentName, packagingName, productCost, shippingCost, suggestedPrice, unitProfit } from '@/lib/costs';
+import { channelFees, costPerGram, filamentName, packagingName, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { duration, money, weight } from '@/lib/format';
 import { useData } from '@/store/data';
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { products, filaments, printers, channels, profile, packaging, materials } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
   const product = products.find((item) => item.id === id);
   if (!product) return <Empty icon="cube-outline" text="Este producto ya no existe." />;
 
@@ -67,8 +67,11 @@ export default function ProductScreen() {
       <Heading>Venta por canal</Heading>
       {channels.map((channel) => {
         const price = product.prices[channel.id] ?? 0;
-        const shipping = shippingCost(channel, box);
-        const suggested = `Sugerido: ${money(suggestedPrice(cost.total, channel, margin))} sin envío · ${money(suggestedPrice(cost.total, channel, margin, shipping))} con envío`;
+        // Quoted with the channel's carriers for this weight and box.
+        const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
+        const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
+        const shipping = shippingAt(price || suggestedPriceWithShipping(cost.total, channel, margin, shippingAt));
+        const suggested = `Sugerido: ${money(suggestedPrice(cost.total, channel, margin))} sin envío · ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))} con envío`;
         if (!price) {
           return (
             <Card key={channel.id}>
