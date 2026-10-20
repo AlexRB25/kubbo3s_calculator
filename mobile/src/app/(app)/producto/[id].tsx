@@ -90,7 +90,7 @@ export default function ProductScreen() {
         return (
           <Card key={channel.id}>
             <Line strong label={channel.name} value={money(price)} />
-            <Line label={`Comisión (${channel.commission_pct}%${channel.fixed_fee ? ` + ${money(channel.fixed_fee)}` : ''})`} value={`− ${money(channelFees(channel, price))}`} />
+            <Line label={`Comisión (${channel.commission_pct}%${channel.tax_pct ? ` + ${channel.tax_pct}% imp.` : ''}${channel.fixed_fee ? ` + ${money(channel.fixed_fee)}` : ''})`} value={`− ${money(channelFees(channel, price))}`} />
             <Line label="Costo de la pieza" value={`− ${money(cost.total)}`} />
             {profitLine('Ganancia sin envío', withoutShipping)}
             <Line label="Envío del canal" value={`− ${money(channel.shipping_cost)}`} />

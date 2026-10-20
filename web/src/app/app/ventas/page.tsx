@@ -129,7 +129,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
         </span>
       </label>
       <label className="label">
-        Comisiones ($)
+        Comisiones e impuestos ($)
         <input className="input" type="number" min={0} step="any" value={fees} onChange={(event) => setFees(event.target.value)} placeholder={autoFees.toFixed(2)} />
       </label>
       <label className="label">
@@ -163,7 +163,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
         {discount > 0 && <Line label={`Precio de lista ${pieces} × ${money(listPrice)}`} value={money(pieces * listPrice)} />}
         {discount > 0 && <Line label="Descuento" value={`− ${money(pieces * discount)}`} />}
         <Line label={`Vendiste ${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
-        <Line label="Comisiones" value={`− ${money(totalFees)}`} />
+        <Line label="Comisiones e impuestos" value={`− ${money(totalFees)}`} />
         <Line label="Envío" value={`− ${money(totalShipping)}`} />
         <Line label="Embalaje" value={`− ${money(totalPackaging)}`} />
         <Line label={`Costo de producción (${money(unitCost)} c/u)`} value={`− ${money(pieces * unitCost)}`} />
@@ -213,7 +213,7 @@ export default function SalesPage() {
                 <th>Venta</th>
                 <th>Canal</th>
                 <th className="num">Total</th>
-                <th className="num">Comisiones, envío y embalaje</th>
+                <th className="num">Comisiones, impuestos, envío y embalaje</th>
                 <th className="num">Costo</th>
                 <th className="num">Ganancia o pérdida</th>
                 <th />

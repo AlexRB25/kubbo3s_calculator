@@ -14,15 +14,18 @@ export default function ChannelFormScreen() {
 
   const [name, setName] = useState(channel?.name ?? '');
   const [commission, setCommission] = useState(field(channel?.commission_pct));
+  const [tax, setTax] = useState(field(channel?.tax_pct));
   const [fixedFee, setFixedFee] = useState(field(channel?.fixed_fee));
   const [shipping, setShipping] = useState(field(channel?.shipping_cost));
 
   function submit() {
     if (!name.trim()) return setError('Ponle nombre al canal.');
     if (num(commission) < 0 || num(commission) >= 100) return setError('La comisión debe estar entre 0 y 99%.');
+    if (num(tax) < 0 || num(commission) + num(tax) >= 100) return setError('Comisión más impuestos deben sumar menos de 100%.');
     const row = {
       name: name.trim(),
       commission_pct: num(commission),
+      tax_pct: num(tax),
       fixed_fee: num(fixedFee),
       shipping_cost: num(shipping),
       ...(channel ? {} : { sort: channels.length + 1 }),
@@ -40,7 +43,16 @@ export default function ChannelFormScreen() {
         value={commission}
         onChangeText={setCommission}
         placeholder="0"
-        hint="Porcentaje del precio que se queda la plataforma (incluye impuestos retenidos si quieres contarlos)."
+        hint="Porcentaje del precio que se queda la plataforma."
+      />
+      <Field
+        label="Impuestos"
+        unit="%"
+        numeric
+        value={tax}
+        onChangeText={setTax}
+        placeholder="0"
+        hint="Retenciones de IVA e ISR de la plataforma o los que pagas tú. Se descuentan como la comisión."
       />
       <Field
         label="Cargo fijo por pieza"

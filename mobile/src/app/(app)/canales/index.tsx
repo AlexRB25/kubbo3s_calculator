@@ -18,7 +18,7 @@ export default function ChannelsScreen() {
           key={channel.id}
           title={channel.name}
           subtitle={`Cargo fijo ${money(channel.fixed_fee)} · envío ${money(channel.shipping_cost)}`}
-          value={`${channel.commission_pct}%`}
+          value={`${channel.commission_pct}%${channel.tax_pct ? ` + ${channel.tax_pct}% imp.` : ''}`}
           valueHint="comisión"
           onPress={() => router.push({ pathname: '/canales/form', params: { id: channel.id } })}
         />

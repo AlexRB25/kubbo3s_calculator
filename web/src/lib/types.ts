@@ -80,6 +80,8 @@ export type Channel = {
   id: string;
   name: string;
   commission_pct: number;
+  /** Taxes that go out of the price in this channel (withholdings, the seller's own), in %. */
+  tax_pct: number;
   fixed_fee: number;
   shipping_cost: number;
   sort: number;

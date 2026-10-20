@@ -89,6 +89,9 @@ create table if not exists public.channels (
   created_at timestamptz not null default now()
 );
 create index if not exists channels_user_idx on public.channels (user_id);
+-- Impuestos que se van del precio de venta en ese canal (retenciones de IVA e ISR de la plataforma, o los
+-- que pague el vendedor): se descuentan como la comisión.
+alter table public.channels add column if not exists tax_pct numeric(6,2) not null default 0 check (tax_pct >= 0 and tax_pct < 100);
 
 -- Material de embalaje (cajas, sobres, bolsas…) con medidas y costo por unidad.
 create table if not exists public.packaging (

@@ -114,7 +114,7 @@ export default function NewSaleScreen() {
               : `Tu precio de lista es ${money(listPrice)} por pieza.`}
         </Muted>
       )}
-      <Field label="Comisiones" unit="$" numeric value={fees} onChangeText={setFees} placeholder={autoFees.toFixed(2)} />
+      <Field label="Comisiones e impuestos" unit="$" numeric value={fees} onChangeText={setFees} placeholder={autoFees.toFixed(2)} />
       <Chips
         label="Entrega"
         options={[
@@ -154,7 +154,7 @@ export default function NewSaleScreen() {
       <Card>
         {discount > 0 && <Line label="Descuento" value={`− ${money(pieces * discount)}`} />}
         <Line label={`Vendiste ${pieces} × ${money(unitPrice)}`} value={money(pieces * unitPrice)} />
-        <Line label="Comisiones" value={`− ${money(totalFees)}`} />
+        <Line label="Comisiones e impuestos" value={`− ${money(totalFees)}`} />
         <Line label="Envío" value={`− ${money(totalShipping)}`} />
         <Line label="Embalaje" value={`− ${money(totalPackaging)}`} />
         <Line label={`Costo de producción (${money(unitCost)} c/u)`} value={`− ${money(pieces * unitCost)}`} />

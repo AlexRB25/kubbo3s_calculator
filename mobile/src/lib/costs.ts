@@ -240,10 +240,10 @@ export function suppliesCost(uses: MaterialUse[] | undefined, materials: Materia
   }, 0);
 }
 
-/** Commission the channel keeps on a sale (shipping is counted apart). */
+/** Commission and taxes that go out of a sale in the channel (shipping is counted apart). */
 export function channelFees(channel: Channel | undefined, unitPrice: number, quantity = 1) {
   if (!channel) return 0;
-  return quantity * ((unitPrice * channel.commission_pct) / 100 + channel.fixed_fee);
+  return quantity * ((unitPrice * (channel.commission_pct + (channel.tax_pct ?? 0))) / 100 + channel.fixed_fee);
 }
 
 /**
@@ -261,7 +261,7 @@ export function unitProfit(price: number, cost: number, channel: Channel, shippi
 
 /** Price that leaves `marginPct` percent of the cost as profit once the channel and `shipping` are paid. */
 export function suggestedPrice(cost: number, channel: Channel, marginPct: number, shipping = 0) {
-  const kept = 1 - channel.commission_pct / 100;
+  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100;
   if (kept <= 0) return 0;
   return (cost * (1 + marginPct / 100) + channel.fixed_fee + shipping) / kept;
 }
