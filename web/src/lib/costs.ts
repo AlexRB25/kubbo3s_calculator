@@ -40,13 +40,10 @@ function breakdown(uses: Product['filaments'], minutes: number, machines: Printe
   return { filament, electricity, machine, extra, total: filament + electricity + machine + extra };
 }
 
-/** One way of printing the product: which plates, how many times, and what it yields. */
+/** Where each piece of the product comes from, and what one product costs that way. */
 export type Combo = {
-  runs: { plate: Plate; printer: Printer; times: number }[];
-  /** Complete products the runs give. */
-  products: number;
-  /** Pieces left over once those products are assembled. */
-  leftovers: Record<string, number>;
+  /** For each piece: the plate it is printed on and what one of it costs there. */
+  choices: { part: Part; plate: Plate; printer: Printer; perPiece: number }[];
   /** What one product costs this way (extra costs included). */
   cost: CostBreakdown;
   /** Filament and machine time that fall on one product. */
@@ -60,140 +57,55 @@ export function plateCost(plate: Plate, printer: Printer, filaments: Filament[],
   return breakdown(uses, plate.minutes, [printer], filaments, kwhPrice, 0);
 }
 
-type Option = { plate: Plate; printer: Printer; pieces: Record<string, number>; cost: number; detail: CostBreakdown };
+/** Pieces a plate prints in all (of every kind). */
+export function piecesOnPlate(plate: Plate, parts: Part[]) {
+  return Object.values(plateParts(plate, parts)).reduce((total, count) => total + (Number(count) || 0), 0);
+}
+
+type Option = { plate: Plate; printer: Printer; pieces: Record<string, number>; count: number; detail: CostBreakdown };
 
 function optionsOf(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number): Option[] {
   const parts = partsOf(product);
   return (product.plates ?? []).flatMap((plate) => {
     const printer = printers.find((item) => item.id === plate.printer_id);
     const pieces = plateParts(plate, parts);
-    if (!printer || !parts.some((part) => (pieces[part.id] ?? 0) > 0)) return [];
-    const detail = plateCost(plate, printer, filaments, kwhPrice);
-    return [{ plate, printer, pieces, cost: detail.total, detail }];
+    const count = piecesOnPlate(plate, parts);
+    if (!printer || count <= 0) return [];
+    return [{ plate, printer, pieces, count, detail: plateCost(plate, printer, filaments, kwhPrice) }];
   });
 }
 
-function comboOf(options: Option[], times: number[], parts: Part[], extra: number): Combo {
-  const pieces: Record<string, number> = {};
+/**
+ * One product built from the plate each piece costs most (or least) on. A plate's cost is shared
+ * among the pieces it prints: a plate of $40 with 10 bases makes each base $4.
+ */
+function choose(options: Option[], parts: Part[], extra: number, dearer: boolean): Combo | null {
+  const choices: Combo["choices"] = [];
+  const sum = { filament: 0, electricity: 0, machine: 0 };
   const grams = new Map<string, number>();
   let minutes = 0;
-  const sum = { filament: 0, electricity: 0, machine: 0 };
-  options.forEach((option, index) => {
-    const count = times[index];
-    if (!count) return;
-    for (const [id, amount] of Object.entries(option.pieces)) pieces[id] = (pieces[id] ?? 0) + amount * count;
-    for (const [id, amount] of Object.entries(option.plate.grams)) grams.set(id, (grams.get(id) ?? 0) + (Number(amount) || 0) * count);
-    minutes += option.plate.minutes * count;
-    sum.filament += option.detail.filament * count;
-    sum.electricity += option.detail.electricity * count;
-    sum.machine += option.detail.machine * count;
-  });
-  const products = Math.max(productsFrom(pieces, parts), 1);
-  const leftovers = Object.fromEntries(
-    parts.map((part) => [part.id, (pieces[part.id] ?? 0) - productsFrom(pieces, parts) * part.needed]).filter(([, left]) => Number(left) > 0),
-  );
-  const filament = sum.filament / products;
-  const electricity = sum.electricity / products;
-  const machine = sum.machine / products;
-  return {
-    runs: options.flatMap((option, index) => (times[index] ? [{ plate: option.plate, printer: option.printer, times: times[index] }] : [])),
-    products: productsFrom(pieces, parts),
-    leftovers,
-    cost: { filament, electricity, machine, extra, total: filament + electricity + machine + extra },
-    filaments: [...grams].filter(([, amount]) => amount > 0).map(([filament_id, amount]) => ({ filament_id, grams: amount / products })),
-    minutes: minutes / products,
-  };
-}
-
-/** Explored combinations stop here, so a product with many plates never freezes the page. */
-const SEARCH_LIMIT = 60_000;
-
-/**
- * The most expensive way to get one product: among the sets of plates that complete it with
- * nothing to spare (removing any print would leave a piece missing), the one that costs most
- * per product it yields. This is the cost the product carries, so prices never fall short.
- */
-function dearest(options: Option[], parts: Part[], extra: number): Combo | null {
-  const covers = (times: number[]) =>
-    parts.every((part) => options.reduce((total, option, index) => total + (option.pieces[part.id] ?? 0) * times[index], 0) >= part.needed);
-  const limits = options.map((option) =>
-    Math.max(0, ...parts.map((part) => ((option.pieces[part.id] ?? 0) > 0 ? Math.ceil(part.needed / option.pieces[part.id]) : 0))),
-  );
-  let best: Combo | null = null;
-  let visited = 0;
-  const times = options.map(() => 0);
-  const walk = (index: number) => {
-    if (++visited > SEARCH_LIMIT) return;
-    if (index === options.length) {
-      if (!covers(times)) return;
-      // Minimal: taking away any single print breaks it.
-      for (let i = 0; i < times.length; i++) {
-        if (!times[i]) continue;
-        times[i]--;
-        const still = covers(times);
-        times[i]++;
-        if (still) return;
-      }
-      const combo = comboOf(options, times, parts, extra);
-      if (!best || combo.cost.total > best.cost.total) best = combo;
-      return;
-    }
-    for (let count = 0; count <= limits[index]; count++) {
-      times[index] = count;
-      walk(index + 1);
-    }
-    times[index] = 0;
-  };
-  walk(0);
-  return best;
-}
-
-/**
- * The cheapest way per product: for batches of 1 to 24 products, the plates that make the batch
- * for the least money, keeping the batch with the lowest cost per product (the smaller one on a tie).
- */
-function cheapest(options: Option[], parts: Part[], extra: number): Combo | null {
-  // Cheapest price of one piece of each kind, to bound the search.
-  const unit = Object.fromEntries(
-    parts.map((part) => [
-      part.id,
-      Math.min(...options.filter((option) => (option.pieces[part.id] ?? 0) > 0).map((option) => option.cost / option.pieces[part.id])),
-    ]),
-  );
-  if (parts.some((part) => !Number.isFinite(unit[part.id]))) return null;
-  let best: Combo | null = null;
-  for (let batch = 1; batch <= 24; batch++) {
-    const need = parts.map((part) => part.needed * batch);
-    const limits = options.map((option) =>
-      Math.max(0, ...parts.map((part, j) => ((option.pieces[part.id] ?? 0) > 0 ? Math.ceil(need[j] / option.pieces[part.id]) : 0))),
-    );
-    let bestCost = Infinity;
-    let bestTimes: number[] | null = null;
-    let visited = 0;
-    const times = options.map(() => 0);
-    const walk = (index: number, spent: number, missing: number[]) => {
-      if (++visited > SEARCH_LIMIT / 3) return;
-      const bound = Math.max(0, ...missing.map((left, j) => left * unit[parts[j].id]));
-      if (spent + bound >= bestCost - 1e-9) return;
-      if (missing.every((left) => left <= 0)) {
-        bestCost = spent;
-        bestTimes = [...times];
-        return;
-      }
-      if (index === options.length) return;
-      const option = options[index];
-      for (let count = limits[index]; count >= 0; count--) {
-        times[index] = count;
-        walk(index + 1, spent + option.cost * count, missing.map((left, j) => left - (option.pieces[parts[j].id] ?? 0) * count));
-      }
-      times[index] = 0;
-    };
-    walk(0, 0, need);
-    if (!bestTimes) continue;
-    const combo = comboOf(options, bestTimes, parts, extra);
-    if (!best || combo.cost.total < best.cost.total - 1e-9) best = combo;
+  for (const part of parts) {
+    const candidates = options.filter((option) => (option.pieces[part.id] ?? 0) > 0);
+    if (!candidates.length) return null;
+    const best = candidates.reduce((pick, option) => {
+      const better = dearer ? option.detail.total / option.count > pick.detail.total / pick.count : option.detail.total / option.count < pick.detail.total / pick.count;
+      return better ? option : pick;
+    });
+    // Share of the plate that falls on the pieces of this kind one product takes.
+    const share = part.needed / best.count;
+    sum.filament += best.detail.filament * share;
+    sum.electricity += best.detail.electricity * share;
+    sum.machine += best.detail.machine * share;
+    for (const [id, amount] of Object.entries(best.plate.grams)) grams.set(id, (grams.get(id) ?? 0) + (Number(amount) || 0) * share);
+    minutes += best.plate.minutes * share;
+    choices.push({ part, plate: best.plate, printer: best.printer, perPiece: best.detail.total / best.count });
   }
-  return best;
+  return {
+    choices,
+    cost: { ...sum, extra, total: sum.filament + sum.electricity + sum.machine + extra },
+    filaments: [...grams].filter(([, amount]) => amount > 0).map(([filament_id, amount]) => ({ filament_id, grams: amount })),
+    minutes,
+  };
 }
 
 /** The dearest and the cheapest way to print the product from its plates (null when they cannot complete it). */
@@ -202,13 +114,13 @@ export function plateCombos(product: Recipe, filaments: Filament[], printers: Pr
   const options = optionsOf(product, filaments, printers, kwhPrice);
   const missing = parts.filter((part) => !options.some((option) => (option.pieces[part.id] ?? 0) > 0));
   if (!options.length || missing.length) return { dearest: null, cheapest: null, missing };
-  return { dearest: dearest(options, parts, product.extra_cost), cheapest: cheapest(options, parts, product.extra_cost), missing };
+  return { dearest: choose(options, parts, product.extra_cost, true), cheapest: choose(options, parts, product.extra_cost, false), missing };
 }
 
 /**
- * What one piece costs to make. With plates, it is the most expensive way of printing it, so
- * prices always cover the worst case. Older products without plates use one recipe and the
- * average electricity and wear of their printers.
+ * What one piece costs to make. With plates, each piece costs its share of the plate it is printed
+ * on, taking the plate where it costs most, so prices always cover the worst case. Older products
+ * without plates use one recipe and the average electricity and wear of their printers.
  */
 export function productCost(
   product: Recipe & { materials?: MaterialUse[] },
@@ -220,7 +132,7 @@ export function productCost(
   const supplies = suppliesCost(product.materials, materials);
   const withSupplies = (cost: CostBreakdown): CostBreakdown => ({ ...cost, supplies, total: cost.total + supplies });
   if (product.plates?.length) {
-    const combo = dearest(optionsOf(product, filaments, printers, kwhPrice), partsOf(product), product.extra_cost);
+    const combo = choose(optionsOf(product, filaments, printers, kwhPrice), partsOf(product), product.extra_cost, true);
     if (combo) return withSupplies(combo.cost);
   }
   const assigned = printers.filter((printer) => product.printer_ids.includes(printer.id));

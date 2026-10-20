@@ -12,6 +12,7 @@ import {
   filamentName,
   packagingName,
   plateCombos,
+  piecesOnPlate,
   plateCost,
   productCost,
   shippingCost,
@@ -68,22 +69,25 @@ function platesOf(product: Product | undefined): Record<string, PlateRow[]> {
   return rows;
 }
 
-/** One way of printing it: which plates, how many times, what it yields and what each product costs. */
-function ComboCard({ title, hint, combo, parts }: { title: string; hint: string; combo: Combo; parts: Part[] }) {
-  const leftovers = Object.entries(combo.leftovers).map(([id, count]) => `${count} ${parts.find((part) => part.id === id)?.name ?? "piezas"}`);
+/** Where each piece comes from and what it costs there; the product costs the sum. */
+function ComboCard({ title, hint, combo }: { title: string; hint: string; combo: Combo }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-line p-3">
       <p className="text-sm font-semibold">
         {title} · {money(combo.cost.total)} por producto
       </p>
       <p className="text-xs text-muted">{hint}</p>
-      <p className="text-sm">
-        {combo.runs.map((run) => `${run.plate.name} en ${run.printer.name}${run.times > 1 ? ` ×${run.times}` : ""}`).join(" + ")}
-      </p>
-      <p className="text-sm text-muted">
-        Te da {combo.products} {combo.products === 1 ? "producto" : "productos"}
-        {leftovers.length > 0 && ` · sobran ${leftovers.join(", ")}`}
-      </p>
+      <ul className="flex flex-col gap-0.5 text-sm">
+        {combo.choices.map(({ part, plate, printer, perPiece }) => (
+          <li key={part.id} className="flex justify-between gap-3">
+            <span>
+              {part.needed > 1 ? `${part.needed} × ` : ""}
+              {part.name} <span className="text-muted">· {plate.name} en {printer.name}</span>
+            </span>
+            <span className="tabular-nums">{money(perPiece * part.needed)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -477,7 +481,14 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                     {usedIds.length === 0 && <p className="col-span-2 text-xs text-muted sm:col-span-4">Elige arriba los filamentos para anotar sus gramos.</p>}
                     <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 sm:col-span-4">
                       <span className="text-sm text-muted">
-                        {saved && `Imprimirla cuesta ${money(plateCost(saved, printer, filaments, kwhPrice).total)}`}
+                        {saved &&
+                          (() => {
+                            const total = plateCost(saved, printer, filaments, kwhPrice).total;
+                            const count = piecesOnPlate(saved, parts);
+                            return count > 0
+                              ? `Imprimirla cuesta ${money(total)} · ${money(total / count)} por pieza (${count} ${count === 1 ? "pieza" : "piezas"})`
+                              : `Imprimirla cuesta ${money(total)}`;
+                          })()}
                       </span>
                       {rows.length > 1 && (
                         <button
@@ -601,9 +612,9 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         )}
         {dearest && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <ComboCard title="Combinación más cara" hint="Es el costo que usa el producto, para que tus precios siempre alcancen." combo={dearest} parts={parts} />
+            <ComboCard title="Combinación más cara" hint="Cada pieza desde la placa donde sale más cara. Es el costo que usa el producto, para que tus precios siempre alcancen." combo={dearest} />
             {combos.cheapest && (
-              <ComboCard title="Combinación más barata" hint="Lo menos que te puede costar si imprimes en tandas." combo={combos.cheapest} parts={parts} />
+              <ComboCard title="Combinación más barata" hint="Cada pieza desde la placa donde sale más barata." combo={combos.cheapest} />
             )}
           </div>
         )}
