@@ -30,7 +30,8 @@ export function imageUrl(path: string | null) {
 
 /** Uploads a photo to the user's folder of the `products` bucket and returns its path. */
 export async function uploadProductImage(userId: string, file: File) {
-  const path = `${userId}/${Date.now()}.jpg`;
+  // Several photos can go up in the same millisecond: a random tail keeps their names apart.
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
   const { error } = await supabase().storage.from("products").upload(path, file, { contentType: file.type });
   return { path, error };
 }

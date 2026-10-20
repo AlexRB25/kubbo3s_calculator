@@ -121,6 +121,10 @@ export type Product = {
   /** Grams of each filament one piece takes. */
   filaments: FilamentUse[];
   printer_ids: string[];
+  /** More photos after the cover (`image_path`), in order. */
+  image_paths: string[];
+  /** Categories it belongs to (several allowed): from the Kubbo3D list or typed by the user. */
+  categories: string[];
   /** Pieces it is made of; empty for a single piece. */
   parts: Part[];
   /** Plates on each printer; filaments and print_minutes are what falls on one product in the dearest way. */

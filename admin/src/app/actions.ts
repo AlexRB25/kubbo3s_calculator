@@ -151,6 +151,24 @@ export async function cancelSubscription(form: FormData) {
   back("listo", "Suscripción cancelada.");
 }
 
+// ── Categorías de productos ──
+
+export async function saveProductCategory(form: FormData) {
+  await requireAdmin();
+  const id = text(form, "id");
+  const row = { name: text(form, "name"), sort: number(form, "sort"), active: flag(form, "active") };
+  must(id ? await admin().from("product_categories").update(row).eq("id", id) : await admin().from("product_categories").insert(row));
+  revalidatePath("/categorias");
+  redirect("/categorias");
+}
+
+export async function deleteProductCategory(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("product_categories").delete().eq("id", text(form, "id")));
+  revalidatePath("/categorias");
+  redirect("/categorias");
+}
+
 // ── Catálogo de impresoras ──
 
 export async function saveCatalogPrinter(form: FormData) {

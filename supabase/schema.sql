@@ -156,6 +156,38 @@ alter table public.products add column if not exists parts jsonb not null defaul
 -- Piezas impresas que todavía no completan un producto: {"<part_id>": cantidad}.
 alter table public.products add column if not exists part_stock jsonb not null default '{}';
 
+-- Categorías del producto (puede tener varias): las del catálogo de Kubbo3D o las que escriba el usuario.
+alter table public.products add column if not exists categories text[] not null default '{}';
+-- Más fotos además de la portada (image_path), en orden.
+alter table public.products add column if not exists image_paths text[] not null default '{}';
+create index if not exists products_categories_idx on public.products using gin (categories);
+
+-- Catálogo de categorías de impresión 3D: Kubbo3D lo mantiene desde el panel admin.
+create table if not exists public.product_categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique check (char_length(name) between 1 and 60),
+  sort int not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.product_categories enable row level security;
+revoke insert, update, delete on public.product_categories from anon, authenticated;
+drop policy if exists product_categories_read on public.product_categories;
+create policy product_categories_read on public.product_categories for select to anon, authenticated using (active);
+
+-- Categorías de arranque; las que ya existen no se tocan (se editan desde el panel admin).
+insert into public.product_categories (name, sort) values
+  ('Macetas', 1), ('Portalápices', 2), ('Juguetes', 3), ('Lámparas', 4), ('Llaveros', 5),
+  ('Figuras y coleccionables', 6), ('Articulados (flexi)', 7), ('Decoración', 8), ('Organizadores', 9),
+  ('Soportes (celular, audífonos, control)', 10), ('Cocina', 11), ('Baño', 12), ('Oficina y escritorio', 13),
+  ('Gaming', 14), ('Cosplay y props', 15), ('Joyería y accesorios', 16), ('Mascotas', 17), ('Jardín', 18),
+  ('Herramientas y repuestos', 19), ('Electrónica (cajas y carcasas)', 20), ('Automotriz', 21),
+  ('Miniaturas y juegos de mesa', 22), ('Fidget y antiestrés', 23), ('Educativo', 24), ('Infantil', 25),
+  ('Cortadores de galletas', 26), ('Moldes', 27), ('Letreros y logos', 28), ('Regalos personalizados', 29),
+  ('Bodas y eventos', 30), ('Navidad', 31), ('Halloween', 32), ('Día de Muertos', 33),
+  ('Maquetas y arquitectura', 34), ('Deportes', 35)
+on conflict (name) do nothing;
+
 create table if not exists public.print_jobs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,

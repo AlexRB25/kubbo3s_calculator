@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
@@ -26,6 +26,22 @@ export default function ProductFormScreen() {
   const [name, setName] = useState(product?.name ?? '');
   const [sku, setSku] = useState(product?.sku ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
+  const [categories, setCategories] = useState<string[]>(product?.categories ?? []);
+  const [newCategory, setNewCategory] = useState('');
+  // The 3D-printing categories Kubbo3D keeps up to date.
+  const [catalog, setCatalog] = useState<string[]>([]);
+  useEffect(() => {
+    let current = true;
+    supabase
+      .from('product_categories')
+      .select('name')
+      .order('sort')
+      .order('name')
+      .then(({ data }) => current && setCatalog((data ?? []).map((row: { name: string }) => row.name)));
+    return () => {
+      current = false;
+    };
+  }, []);
   const [hours, setHours] = useState(field(Math.floor((product?.print_minutes ?? 0) / 60)));
   const [minutes, setMinutes] = useState(field((product?.print_minutes ?? 0) % 60));
   const [extraCost, setExtraCost] = useState(field(product?.extra_cost));
@@ -81,6 +97,7 @@ export default function ProductFormScreen() {
       name: name.trim(),
       sku: sku.trim(),
       description: description.trim(),
+      categories,
       image_path: imagePath,
       ...draft,
       packaging_id: packagingId,
@@ -134,6 +151,25 @@ export default function ProductFormScreen() {
       <Field label="Nombre" value={name} onChangeText={setName} maxLength={80} />
       <Field label="SKU o clave" value={sku} onChangeText={setSku} autoCapitalize="characters" maxLength={40} />
       <Field label="Descripción" value={description} onChangeText={setDescription} multiline maxLength={500} />
+      <Chips
+        label="Categorías (puede tener varias)"
+        options={[...catalog, ...categories.filter((name) => !catalog.includes(name))].map((name) => ({ value: name, label: name }))}
+        value={categories}
+        onChange={(name) => setCategories(categories.includes(name) ? categories.filter((item) => item !== name) : [...categories, name])}
+      />
+      <Row style={{ alignItems: 'flex-end' }}>
+        <Field style={{ flex: 1 }} label="Otra categoría" value={newCategory} onChangeText={setNewCategory} maxLength={60} placeholder="Si no está en la lista" />
+        <Button
+          variant="secondary"
+          label="Agregar"
+          disabled={!newCategory.trim()}
+          onPress={() => {
+            const name = newCategory.trim();
+            if (name && !categories.includes(name)) setCategories([...categories, name]);
+            setNewCategory('');
+          }}
+        />
+      </Row>
 
       {plated ? (
         <Card>

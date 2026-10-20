@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
+import { CategoryPicker } from "@/components/app/CategoryPicker";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
 import {
   costPerGram,
@@ -94,9 +95,15 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const [name, setName] = useState(product?.name ?? "");
   const [sku, setSku] = useState(product?.sku ?? "");
   const [description, setDescription] = useState(product?.description ?? "");
+  const [categories, setCategories] = useState<string[]>(product?.categories ?? []);
   const [extraCost, setExtraCost] = useState(field(product?.extra_cost));
   const [stock, setStock] = useState(String(product?.stock ?? 0));
-  const [photo, setPhoto] = useState<File | null>(null);
+  // Photos in order (the first is the cover): saved ones by path, new ones as files to upload on save.
+  const [photos, setPhotos] = useState<{ key: string; path?: string; file?: File; url: string }[]>(() =>
+    [product?.image_path, ...(product?.image_paths ?? [])]
+      .filter((path): path is string => Boolean(path))
+      .map((path) => ({ key: path, path, url: imageUrl(path)! })),
+  );
   // Pieces the product is made of; each plate says how many of each it prints.
   const [partRows, setPartRows] = useState<PartRow[]>(() => partRowsOf(product));
   // Filaments the product uses; each plate says how many grams of each it takes.
@@ -157,17 +164,23 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   }
 
   async function write() {
-    let imagePath = product?.image_path ?? null;
-    if (photo) {
-      const upload = await uploadProductImage(session!.user.id, photo);
-      if (upload.error) return { error: { message: `No se pudo subir la foto: ${upload.error.message}` } };
-      imagePath = upload.path;
+    const paths: string[] = [];
+    for (const photo of photos) {
+      if (photo.path) {
+        paths.push(photo.path);
+        continue;
+      }
+      const upload = await uploadProductImage(session!.user.id, photo.file!);
+      if (upload.error) return { error: { message: `No se pudo subir ${photo.file!.name}: ${upload.error.message}` } };
+      paths.push(upload.path);
     }
     const row = {
       name: name.trim(),
       sku: sku.trim(),
       description: description.trim(),
-      image_path: imagePath,
+      categories,
+      image_path: paths[0] ?? null,
+      image_paths: paths.slice(1),
       ...draft,
       packaging_id: packagingId || null,
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
@@ -177,7 +190,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     const result = product
       ? await supabase().from("products").update(row).eq("id", product.id)
       : await supabase().from("products").insert(row);
-    if (!result.error && photo && product?.image_path) await supabase().storage.from("products").remove([product.image_path]);
+    // Photos taken out of the product leave the storage too.
+    const before = [product?.image_path, ...(product?.image_paths ?? [])].filter((path): path is string => Boolean(path));
+    const dropped = before.filter((path) => !paths.includes(path));
+    if (!result.error && dropped.length) await supabase().storage.from("products").remove(dropped);
     return result;
   }
 
@@ -201,7 +217,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     if (!window.confirm(`Se eliminará "${product!.name}". Sus impresiones y ventas se conservan en el historial.`)) return;
     save(async () => {
       const result = await supabase().from("products").delete().eq("id", product!.id);
-      if (!result.error && product!.image_path) await supabase().storage.from("products").remove([product!.image_path]);
+      const all = [product!.image_path, ...(product!.image_paths ?? [])].filter((path): path is string => Boolean(path));
+      if (!result.error && all.length) await supabase().storage.from("products").remove(all);
       return result;
     }, onDone);
   }
@@ -220,15 +237,59 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         Descripción
         <textarea className="input" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} />
       </label>
+      <div className="label sm:col-span-2">
+        Categorías
+        <span className="font-normal">Puede tener varias: una maceta también puede ser portalápices.</span>
+        <CategoryPicker value={categories} onChange={setCategories} />
+      </div>
       {/* Only the button opens the files: a label around the whole field caught clicks meant for other fields. */}
       <div className="label sm:col-span-2">
-        Foto
-        <div className="flex flex-wrap items-center gap-3 font-normal">
-          <input id="product-photo" type="file" accept="image/*" className="sr-only" onChange={(event) => setPhoto(event.target.files?.[0] ?? null)} />
-          <label htmlFor="product-photo" className="btn cursor-pointer">
-            {photo || product?.image_path ? "Cambiar foto" : "Elegir foto"}
+        Fotos
+        <span className="font-normal">La primera es la portada. Usa «Portada» para cambiarla.</span>
+        <div className="flex flex-wrap items-start gap-3 font-normal">
+          {photos.map((photo, index) => (
+            <div key={photo.key} className="flex w-24 flex-col gap-1">
+              <div className={`relative size-24 overflow-hidden rounded-lg border ${index === 0 ? "border-brand" : "border-line"}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- local previews and public product photos */}
+                <img src={photo.url} alt="" className="absolute inset-0 size-full object-cover" />
+                {index === 0 && <span className="absolute left-1 top-1 rounded bg-brand px-1.5 text-[10px] font-semibold text-on-brand">Portada</span>}
+              </div>
+              <div className="flex gap-1">
+                {index > 0 && (
+                  <button
+                    type="button"
+                    className="btn flex-1 px-1 py-0.5 text-[11px]"
+                    onClick={() => setPhotos([photo, ...photos.filter((_, position) => position !== index)])}
+                  >
+                    Portada
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn flex-1 px-1 py-0.5 text-[11px]"
+                  aria-label="Quitar foto"
+                  onClick={() => setPhotos(photos.filter((_, position) => position !== index))}
+                >
+                  Quitar
+                </button>
+              </div>
+            </div>
+          ))}
+          <input
+            id="product-photo"
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              setPhotos([...photos, ...files.map((file) => ({ key: `${file.name}-${file.size}-${Math.random()}`, file, url: URL.createObjectURL(file) }))]);
+              event.target.value = "";
+            }}
+          />
+          <label htmlFor="product-photo" className="btn flex size-24 cursor-pointer flex-col items-center justify-center text-center text-xs">
+            + Agregar fotos
           </label>
-          <span className="text-sm text-muted">{photo ? photo.name : product?.image_path ? "Ya tiene foto" : "Sin foto"}</span>
         </div>
       </div>
 
@@ -546,10 +607,24 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
 export default function ProductsPage() {
   const { products, filaments, printers, channels, profile, packaging } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
+  // Only the products of one category; "" = all.
+  const [category, setCategory] = useState("");
+  const used = [...new Set(products.flatMap((product) => product.categories ?? []))].sort((a, b) => a.localeCompare(b, "es"));
+  const shown = category ? products.filter((product) => product.categories?.includes(category)) : products;
 
   return (
     <>
       <PageHeader title="Productos">
+        {used.length > 0 && (
+          <select className="input w-auto" value={category} onChange={(event) => setCategory(event.target.value)} aria-label="Filtrar por categoría">
+            <option value="">Todas las categorías</option>
+            {used.map((name) => (
+              <option key={name} value={name}>
+                {name} ({products.filter((product) => product.categories?.includes(name)).length})
+              </option>
+            ))}
+          </select>
+        )}
         <button className="btn btn-primary" onClick={() => setEditing("new")}>
           Nuevo producto
         </button>
@@ -575,7 +650,7 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => {
+              {shown.map((product) => {
                 const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0).total;
                 const photo = imageUrl(product.image_path);
                 return (
@@ -588,6 +663,15 @@ export default function ProductsPage() {
                         <div>
                           {product.name}
                           {product.sku && <div className="text-xs text-muted">{product.sku}</div>}
+                          {product.categories?.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {product.categories.map((name) => (
+                                <span key={name} className="rounded-full border border-line px-2 py-0.5 text-[11px] text-muted">
+                                  {name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>

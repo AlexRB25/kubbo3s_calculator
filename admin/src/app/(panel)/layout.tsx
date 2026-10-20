@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/ajustes", label: "Tienda: ajustes" },
   { href: "/filamentos", label: "Catálogo de filamentos" },
   { href: "/impresoras", label: "Catálogo de impresoras" },
+  { href: "/categorias", label: "Categorías de productos" },
 ];
 
 // Every page here reads live data with the admin's session: never prerender them at build time.
