@@ -210,27 +210,26 @@ function CatalogSettings({ catalog, onSaved }: { catalog: Catalog | null; onSave
 
 function CatalogPreview({ catalog }: { catalog: Catalog | null }) {
   const { products, channels, profile } = useData();
-  const { busy, error, save } = useSave();
   const showPrices = catalog?.show_prices ?? true;
   const shown = products.filter((product) => product.in_catalog ?? true);
-  const hidden = products.filter((product) => !(product.in_catalog ?? true));
-  const toggle = (product: Product, value: boolean) => save(() => supabase().from("products").update({ in_catalog: value }).eq("id", product.id));
+  const hidden = products.length - shown.length;
 
   return (
     <section className="flex flex-col gap-4">
-      <h2>Vista previa</h2>
-      {error && (
-        <p role="alert" className="error">
-          {error}
+      <div>
+        <h2>Vista previa</h2>
+        <p className="text-sm text-muted">
+          Qué productos salen se elige en Productos, con el switch «Catálogo».
+          {hidden > 0 && ` ${hidden} ${hidden === 1 ? "producto está apagado" : "productos están apagados"}.`}
         </p>
-      )}
+      </div>
       <div className="flex flex-col gap-4 rounded-xl border border-line p-4">
         <div>
           <p className="text-xl font-black tracking-wide">{catalog?.title || profile?.business_name || "Mi taller 3D"}</p>
           {catalog?.about && <p className="mt-1 max-w-3xl whitespace-pre-line text-sm text-muted">{catalog.about}</p>}
         </div>
         {shown.length === 0 ? (
-          <Empty>Ningún producto está en el catálogo. Da de alta productos o márcalos abajo.</Empty>
+          <Empty>Ningún producto está en el catálogo. Da de alta productos o enciende su switch «Catálogo» en Productos.</Empty>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {shown.map((product) => {
@@ -241,29 +240,12 @@ function CatalogPreview({ catalog }: { catalog: Catalog | null }) {
                   <CatalogCard product={item} />
                   {item.links.length > 0 && <p className="text-xs text-muted">{item.links.map((link) => link.channel).join(" · ")}</p>}
                   {missing.length > 0 && <p className="text-xs text-warn">{missing.join(", ")}</p>}
-                  <button type="button" className="btn text-xs" disabled={busy} onClick={() => toggle(product, false)}>
-                    Quitar del catálogo
-                  </button>
                 </div>
               );
             })}
           </div>
         )}
       </div>
-      {hidden.length > 0 && (
-        <div className="card flex flex-col gap-2">
-          <h3 className="font-semibold">Fuera del catálogo</h3>
-          <ul className="flex flex-wrap gap-2">
-            {hidden.map((product) => (
-              <li key={product.id}>
-                <button type="button" className="btn text-sm" disabled={busy} onClick={() => toggle(product, true)}>
-                  + {product.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </section>
   );
 }

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { CategoryPicker } from "@/components/app/CategoryPicker";
 import { InfoTip, TipLine } from "@/components/app/InfoTip";
-import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
+import { Empty, Line, Modal, PageHeader, Switch, TableCard } from "@/components/app/ui";
 import {
   channelFees,
   costPerGram,
@@ -755,6 +755,23 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   );
 }
 
+/** Shows or hides the product in the public catalog (Mi catálogo). */
+function CatalogSwitch({ product }: { product: Product }) {
+  const { busy, error, save } = useSave();
+  const on = product.in_catalog ?? true;
+  return (
+    <span className="flex flex-col gap-1">
+      <Switch
+        checked={on}
+        disabled={busy}
+        label={on ? `Quitar ${product.name} del catálogo` : `Mostrar ${product.name} en el catálogo`}
+        onChange={(value) => save(() => supabase().from("products").update({ in_catalog: value }).eq("id", product.id))}
+      />
+      {error && <span className="text-xs text-bad">{error}</span>}
+    </span>
+  );
+}
+
 export default function ProductsPage() {
   const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
@@ -796,6 +813,7 @@ export default function ProductsPage() {
                   </th>
                 ))}
                 <th className="num">Stock</th>
+                <th>Catálogo</th>
                 <th />
               </tr>
             </thead>
@@ -914,6 +932,9 @@ export default function ProductsPage() {
                       );
                     })}
                     <td className={`num font-semibold ${product.stock <= 0 ? "text-bad" : ""}`}>{product.stock}</td>
+                    <td>
+                      <CatalogSwitch product={product} />
+                    </td>
                     <td className="num">
                       <button className="btn" onClick={() => setEditing(product)}>
                         Editar
