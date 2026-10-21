@@ -13,6 +13,7 @@ const SCREENS: { name: string; title: string; icon: IconName }[] = [
   { name: 'filamento', title: 'Filamento', icon: 'color-fill' },
   { name: 'impresiones', title: 'Impresiones', icon: 'print' },
   { name: 'ventas', title: 'Ventas', icon: 'cash' },
+  { name: 'herramientas', title: 'Herramientas', icon: 'construct' },
 ];
 
 export default function TabsLayout() {
