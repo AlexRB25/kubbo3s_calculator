@@ -23,6 +23,7 @@ const TOOLS: { slug: string; name: string; tagline: string; icon: IconName }[] =
   { slug: 'hueco', name: 'Huequito', tagline: 'Piezas huecas', icon: 'ellipse-outline' },
   { slug: 'alcancia', name: 'Alcancía', tagline: 'Alcancías', icon: 'wallet' },
   { slug: 'lampara', name: 'Lámpara', tagline: 'Lámparas', icon: 'bulb' },
+  { slug: 'lentes', name: 'Lentero', tagline: 'Soportes de lentes con tu personaje', icon: 'glasses' },
   { slug: '', name: 'Mis archivos y todas las herramientas', tagline: 'La página principal de herramientas', icon: 'apps' },
 ];
 
