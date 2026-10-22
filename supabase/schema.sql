@@ -1766,3 +1766,21 @@ as $$
 $$;
 revoke all on function public.public_catalog(text) from public;
 grant execute on function public.public_catalog(text) to anon, authenticated;
+
+-- ───────────────────────── Usos de IA (herramientas) ─────────────────────────
+-- Cada imagen que la IA redibuja (por ejemplo en el Lentero) deja un renglón: el servidor del sitio de
+-- herramientas los cuenta para el límite diario. El usuario solo puede agregar y ver los suyos.
+create table if not exists public.ai_generations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  tool text not null default '' check (char_length(tool) <= 40),
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_generations_user_idx on public.ai_generations (user_id, created_at);
+alter table public.ai_generations enable row level security;
+revoke all on public.ai_generations from anon;
+revoke update, delete on public.ai_generations from authenticated;
+drop policy if exists ai_generations_insert on public.ai_generations;
+create policy ai_generations_insert on public.ai_generations for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists ai_generations_read on public.ai_generations;
+create policy ai_generations_read on public.ai_generations for select to authenticated using (user_id = (select auth.uid()));
