@@ -2,12 +2,15 @@
 
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from "react";
 import { supabase } from "./supabase";
-import type { Carrier, Channel, Expense, Filament, Maintenance, Material, Packaging, PrintJob, Printer, Product, Profile, Sale, Supplier, PrinterWear} from "./types";
+import type { Carrier, Channel, Expense, Filament, Maintenance, Material, Packaging, PrintJob, Printer, Product, Profile, Sale, ShopInfo, Supplier, PrinterWear } from "./types";
 
 // Web twin of mobile/src/store/data.tsx: same tables, same queries, same Supabase project.
 
 type Tables = {
+  /** The shop's owner profile: its settings (light, margin, fixed costs…) apply to everyone working in it. */
   profile: Profile | null;
+  /** The shop the user works in now and their role there. */
+  shop: ShopInfo | null;
   suppliers: Supplier[];
   printers: Printer[];
   filaments: Filament[];
@@ -32,6 +35,7 @@ type DataState = Tables & {
 
 const EMPTY: Tables = {
   profile: null,
+  shop: null,
   suppliers: [],
   printers: [],
   filaments: [],
@@ -62,8 +66,12 @@ type Loaded = { tables: Tables; error?: undefined } | { tables?: undefined; erro
 
 async function fetchTables(userId: string): Promise<Loaded> {
   const db = supabase();
+  // Every table below is the active shop's (the database decides by my_shop); without the RPC (older
+  // schema) the user is the owner of their own shop.
+  const mine = await db.rpc("my_shop");
+  const shop: ShopInfo = mine.data ?? { shop_id: userId, role: "owner", shops: [], seats: null };
   const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers] = await Promise.all([
-    db.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    db.from("profiles").select("*").eq("id", shop.shop_id).maybeSingle(),
     db.from("suppliers").select("*").order("name"),
     db.from("printers").select("*").order("name"),
     db.from("filaments").select("*").order("material").order("color"),
@@ -90,6 +98,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
   return {
     tables: {
       profile: profile.data,
+      shop,
       suppliers: suppliers.data ?? [],
       printers: printers.data ?? [],
       filaments: filaments.data ?? [],

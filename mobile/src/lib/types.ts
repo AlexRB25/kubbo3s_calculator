@@ -13,6 +13,20 @@ export type Profile = {
   overheads: Overhead[];
   /** Pieces the workshop makes in a month, to share the fixed costs among. */
   overhead_pieces: number;
+  /** The shop (its owner's id) the user is working in; null = their own. */
+  active_shop: string | null;
+};
+
+/** What a person may do in a shop: the owner everything; admin all but settings, team and plan; staff the daily work. */
+export type ShopRole = 'owner' | 'admin' | 'staff';
+
+/** The shop the user works in now (my_shop()), their role there and every shop they can enter. */
+export type ShopInfo = {
+  shop_id: string;
+  role: ShopRole;
+  shops: { owner_id: string; role: ShopRole; name: string }[];
+  /** The user's own shop: collaborators their plan allows (null = no limit), current and invited. */
+  seats: { max: number | null; members: number; pending: number } | null;
 };
 
 /** A fixed monthly cost of the workshop. */

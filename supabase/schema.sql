@@ -1792,3 +1792,269 @@ create policy ai_generations_read on public.ai_generations for select to authent
 alter table public.profiles add column if not exists overheads jsonb not null default '[]';
 alter table public.profiles add column if not exists overhead_pieces int not null default 0 check (overhead_pieces >= 0);
 grant update (overheads, overhead_pieces) on public.profiles to authenticated;
+
+-- ───────────────────────── Tienda y colaboradores ─────────────────────────
+-- Cada cuenta es una tienda (la del dueño): sus filas llevan user_id = el dueño. El dueño invita por correo a
+-- colaboradores con su propia cuenta; ellos trabajan dentro de la tienda del dueño con un rol:
+--   admin: todo menos Ajustes, Equipo y Suscripción (eso es del dueño).
+--   staff: el día a día (productos, filamento, insumos, embalaje, impresiones, ventas, inventario, compras,
+--          mantenimiento) sin borrar nada, y sin tocar canales, paqueterías, impresoras, proveedores ni catálogo.
+-- Cuántos colaboradores caben lo dice el plan del dueño (plans.max_members).
+
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plans' and column_name = 'max_members') then
+    alter table public.plans add column max_members int check (max_members >= 0);
+    -- Valores de arranque (luego se cambian en la tabla plans); vacío = sin límite.
+    update public.plans set max_members = case id when 'free' then 0 when 'maker' then 1 when 'taller' then 3 when 'fabrica' then 10 else 0 end;
+  end if;
+end $$;
+
+create table if not exists public.shop_members (
+  owner_id uuid not null references auth.users (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  role text not null default 'staff' check (role in ('admin', 'staff')),
+  created_at timestamptz not null default now(),
+  primary key (owner_id, user_id),
+  check (owner_id <> user_id)
+);
+create index if not exists shop_members_user_idx on public.shop_members (user_id);
+
+create table if not exists public.shop_invites (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  email text not null check (email ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
+  role text not null default 'staff' check (role in ('admin', 'staff')),
+  token uuid not null default gen_random_uuid() unique,
+  created_at timestamptz not null default now(),
+  accepted_at timestamptz,
+  accepted_by uuid references auth.users (id) on delete set null
+);
+create unique index if not exists shop_invites_pending_idx on public.shop_invites (owner_id, lower(email)) where accepted_at is null;
+
+-- La tienda en la que trabaja cada quien (null = la suya).
+alter table public.profiles add column if not exists active_shop uuid references auth.users (id) on delete set null;
+grant update (active_shop) on public.profiles to authenticated;
+
+-- La tienda activa del usuario: la que eligió si sigue siendo colaborador ahí; si no, la suya.
+create or replace function public.current_shop() returns uuid
+language sql stable security definer set search_path = '' as $$
+  select coalesce(
+    (select p.active_shop from public.profiles p
+      where p.id = auth.uid() and p.active_shop is not null
+        and exists (select 1 from public.shop_members m where m.owner_id = p.active_shop and m.user_id = auth.uid())),
+    auth.uid());
+$$;
+revoke all on function public.current_shop() from public, anon;
+grant execute on function public.current_shop() to authenticated;
+
+-- 'owner', 'admin' o 'staff' en la tienda activa.
+create or replace function public.shop_role() returns text
+language sql stable security definer set search_path = '' as $$
+  select case
+    when public.current_shop() = auth.uid() then 'owner'
+    else (select m.role from public.shop_members m where m.owner_id = public.current_shop() and m.user_id = auth.uid())
+  end;
+$$;
+revoke all on function public.shop_role() from public, anon;
+grant execute on function public.shop_role() to authenticated;
+
+-- Las filas del taller son de la tienda activa: ahí se leen y se escriben (las nuevas, a su nombre).
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['suppliers', 'printers', 'filaments', 'channels', 'carriers', 'products', 'print_jobs',
+                           'print_job_filaments', 'sales', 'maintenance', 'printer_wear', 'expenses', 'packaging',
+                           'materials', 'inventory_adjustments', 'catalogs'] loop
+    execute format('alter table public.%I alter column user_id set default public.current_shop()', t);
+    execute format('drop policy if exists own_rows on public.%I', t);
+    execute format(
+      'create policy own_rows on public.%I for all to authenticated
+         using (user_id = (select public.current_shop())) with check (user_id = (select public.current_shop()))', t);
+  end loop;
+end $$;
+
+-- Lo que cada rol puede hacer directamente. Los cambios que hacen otros triggers (stock, desgaste, compras de
+-- un mantenimiento) no se revisan: vienen de algo que el usuario sí podía hacer.
+create or replace function public.guard_shop_role() returns trigger
+language plpgsql set search_path = '' as $$
+declare
+  v_role text;
+begin
+  if pg_trigger_depth() > 1 or auth.uid() is null then
+    return coalesce(new, old);
+  end if;
+  v_role := public.shop_role();
+  if v_role is null or v_role in ('owner', 'admin') then
+    return coalesce(new, old);
+  end if;
+  if tg_argv[0] = 'config' then
+    raise exception using errcode = 'P0001', message = 'Como colaborador no puedes cambiar esto. Pídeselo al dueño o a un administrador de la tienda.';
+  end if;
+  if tg_op = 'DELETE' then
+    raise exception using errcode = 'P0001', message = 'Como colaborador no puedes borrar. Pídeselo al dueño o a un administrador de la tienda.';
+  end if;
+  return coalesce(new, old);
+end $$;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['channels', 'carriers', 'printers', 'printer_wear', 'suppliers', 'catalogs'] loop
+    execute format('drop trigger if exists guard_shop_role on public.%I', t);
+    execute format('create trigger guard_shop_role before insert or update or delete on public.%I
+                      for each row execute function public.guard_shop_role(%L)', t, 'config');
+  end loop;
+  foreach t in array array['products', 'filaments', 'materials', 'packaging', 'print_jobs', 'sales', 'expenses',
+                           'maintenance', 'inventory_adjustments'] loop
+    execute format('drop trigger if exists guard_shop_role on public.%I', t);
+    execute format('create trigger guard_shop_role before delete on public.%I
+                      for each row execute function public.guard_shop_role(%L)', t, 'data');
+  end loop;
+end $$;
+
+-- Perfiles: cada quien el suyo; los colaboradores leen el del dueño (sus ajustes: luz, ganancia, gastos fijos)
+-- y el dueño los de su equipo (nombre y correo). Solo el dueño cambia sus ajustes.
+drop policy if exists profiles_select_own on public.profiles;
+create policy profiles_select_own on public.profiles for select to authenticated using (
+  id = (select auth.uid())
+  or id = (select public.current_shop())
+  or id in (select m.user_id from public.shop_members m where m.owner_id = (select auth.uid()))
+  or id in (select m.owner_id from public.shop_members m where m.user_id = (select auth.uid()))
+);
+
+-- Fotos de productos: en la carpeta de la tienda (o en la propia).
+drop policy if exists kubbo_products_own_folder on storage.objects;
+create policy kubbo_products_own_folder on storage.objects for all to authenticated
+  using (bucket_id = 'products' and (storage.foldername(name))[1] in ((select auth.uid())::text, (select public.current_shop())::text))
+  with check (bucket_id = 'products' and (storage.foldername(name))[1] in ((select auth.uid())::text, (select public.current_shop())::text));
+
+-- Equipo: el dueño ve y quita a los suyos y cambia su rol; cada colaborador se ve a sí mismo y puede salirse.
+alter table public.shop_members enable row level security;
+revoke all on public.shop_members from anon;
+revoke insert, update on public.shop_members from authenticated;
+grant update (role) on public.shop_members to authenticated;
+drop policy if exists shop_members_read on public.shop_members;
+create policy shop_members_read on public.shop_members for select to authenticated
+  using (owner_id = (select auth.uid()) or user_id = (select auth.uid()));
+drop policy if exists shop_members_role on public.shop_members;
+create policy shop_members_role on public.shop_members for update to authenticated
+  using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists shop_members_leave on public.shop_members;
+create policy shop_members_leave on public.shop_members for delete to authenticated
+  using (owner_id = (select auth.uid()) or user_id = (select auth.uid()));
+
+-- Invitaciones: solo el dueño de la tienda, a su tienda.
+alter table public.shop_invites enable row level security;
+revoke all on public.shop_invites from anon;
+revoke update on public.shop_invites from authenticated;
+drop policy if exists shop_invites_owner on public.shop_invites;
+create policy shop_invites_owner on public.shop_invites for all to authenticated
+  using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+
+-- Lugares del plan: colaboradores + invitaciones pendientes no pasan de plans.max_members.
+create or replace function public.shop_seats_left(p_owner uuid) returns int
+language sql stable security definer set search_path = public as $$
+  select case when p.max_members is null then 1000000
+    else p.max_members
+      - (select count(*) from public.shop_members m where m.owner_id = p_owner)::int
+      - (select count(*) from public.shop_invites i where i.owner_id = p_owner and i.accepted_at is null)::int
+  end
+  from public.plan_of(p_owner) p;
+$$;
+revoke all on function public.shop_seats_left(uuid) from public, anon, authenticated;
+
+create or replace function public.shop_invites_limit() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_plan public.plans;
+begin
+  new.email := lower(trim(new.email));
+  if lower(new.email) = (select lower(email) from public.profiles where id = new.owner_id) then
+    raise exception using errcode = 'P0001', message = 'Esa es tu propia cuenta.';
+  end if;
+  if exists (select 1 from public.shop_members m join public.profiles p on p.id = m.user_id
+             where m.owner_id = new.owner_id and lower(p.email) = new.email) then
+    raise exception using errcode = 'P0001', message = 'Esa persona ya es parte de tu tienda.';
+  end if;
+  if public.shop_seats_left(new.owner_id) <= 0 then
+    v_plan := public.plan_of(new.owner_id);
+    raise exception using errcode = 'P0001', message = case when coalesce(v_plan.max_members, 0) = 0
+      then format('Tu plan %s no incluye colaboradores. Mejora tu plan en la página de precios de Kubbo3D.', v_plan.name)
+      else format('Tu plan %s incluye %s colaborador(es) y ya están ocupados (contando invitaciones pendientes). Cancela una invitación, quita a alguien o mejora tu plan.', v_plan.name, v_plan.max_members) end;
+  end if;
+  return new;
+end $$;
+drop trigger if exists shop_invites_limit on public.shop_invites;
+create trigger shop_invites_limit before insert on public.shop_invites
+  for each row execute function public.shop_invites_limit();
+
+-- Lo que la página de la invitación muestra antes de aceptar (quien tenga el enlace).
+create or replace function public.invite_info(p_token uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'shop', coalesce(nullif(p.business_name, ''), nullif(p.name, ''), p.email),
+    'email', i.email,
+    'role', i.role,
+    'accepted', i.accepted_at is not null)
+  from public.shop_invites i join public.profiles p on p.id = i.owner_id
+  where i.token = p_token;
+$$;
+revoke all on function public.invite_info(uuid) from public, anon;
+grant execute on function public.invite_info(uuid) to authenticated;
+
+-- Aceptar: el correo de la cuenta tiene que ser el invitado. Queda como colaborador y trabajando en esa tienda.
+create or replace function public.accept_invite(p_token uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_invite public.shop_invites;
+  v_email text;
+begin
+  select * into v_invite from public.shop_invites where token = p_token for update;
+  if v_invite.id is null then
+    raise exception using errcode = 'P0001', message = 'Esta invitación ya no existe: pide que te inviten otra vez.';
+  end if;
+  if v_invite.accepted_at is not null then
+    raise exception using errcode = 'P0001', message = 'Esta invitación ya se usó.';
+  end if;
+  select lower(email) into v_email from public.profiles where id = auth.uid();
+  if v_email is distinct from lower(v_invite.email) then
+    raise exception using errcode = 'P0001', message = format('La invitación es para %s. Entra con esa cuenta para aceptarla.', v_invite.email);
+  end if;
+  insert into public.shop_members (owner_id, user_id, role) values (v_invite.owner_id, auth.uid(), v_invite.role)
+  on conflict (owner_id, user_id) do update set role = excluded.role;
+  update public.shop_invites set accepted_at = now(), accepted_by = auth.uid() where id = v_invite.id;
+  update public.profiles set active_shop = v_invite.owner_id where id = auth.uid();
+  return jsonb_build_object('owner_id', v_invite.owner_id, 'role', v_invite.role);
+end $$;
+revoke all on function public.accept_invite(uuid) from public, anon;
+grant execute on function public.accept_invite(uuid) to authenticated;
+
+-- La tienda activa, el rol y todas las tiendas a las que puede entrar (la suya primero).
+create or replace function public.my_shop() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'shop_id', public.current_shop(),
+    'role', public.shop_role(),
+    'shops', (
+      select jsonb_agg(s order by s ->> 'role' = 'owner' desc, s ->> 'name')
+      from (
+        select jsonb_build_object('owner_id', p.id, 'role', 'owner',
+                 'name', coalesce(nullif(p.business_name, ''), 'Mi tienda')) as s
+        from public.profiles p where p.id = auth.uid()
+        union all
+        select jsonb_build_object('owner_id', m.owner_id, 'role', m.role,
+                 'name', coalesce(nullif(p.business_name, ''), nullif(p.name, ''), p.email))
+        from public.shop_members m join public.profiles p on p.id = m.owner_id
+        where m.user_id = auth.uid()
+      ) list),
+    'seats', (select to_jsonb(x) from (select p.max_members as max,
+                (select count(*) from public.shop_members m where m.owner_id = auth.uid()) as members,
+                (select count(*) from public.shop_invites i where i.owner_id = auth.uid() and i.accepted_at is null) as pending
+              from public.plan_of(auth.uid()) p) x))
+  where auth.uid() is not null;
+$$;
+revoke all on function public.my_shop() from public, anon;
+grant execute on function public.my_shop() to authenticated;

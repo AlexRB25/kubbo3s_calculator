@@ -10,15 +10,19 @@ import { authErrorMessage, supabase, supabaseConfigured } from "@/lib/supabase";
 function SignInForm() {
   const router = useRouter();
   const { session } = useSession();
-  const [isRegister, setIsRegister] = useState(useSearchParams().get("modo") === "registro");
+  const params = useSearchParams();
+  const [isRegister, setIsRegister] = useState(params.get("modo") === "registro");
+  // Only paths inside this site, so the link cannot send people elsewhere after signing in.
+  const wanted = params.get("next") ?? "/app";
+  const next = wanted.startsWith("/") && !wanted.startsWith("//") ? wanted : "/app";
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Also covers arriving here while already signed in.
   useEffect(() => {
-    if (session) router.replace("/app");
-  }, [session, router]);
+    if (session) router.replace(next);
+  }, [session, router, next]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

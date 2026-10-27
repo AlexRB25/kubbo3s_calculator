@@ -85,7 +85,7 @@ function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilamen
  * purchases, prints and arqueos.
  */
 export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone: () => void }) {
-  const { suppliers, filaments } = useData();
+  const { suppliers, filaments, shop } = useData();
   const { session } = useSession();
   const { busy, error, setError, save } = useSave();
   const [picking, setPicking] = useState(!filament);
@@ -118,7 +118,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
   async function upload(file: File | undefined) {
     if (!file || !session) return;
     setUploading(true);
-    const { path, error: failed } = await uploadProductImage(session.user.id, file);
+    const { path, error: failed } = await uploadProductImage(shop?.shop_id ?? session.user.id, file);
     setUploading(false);
     if (failed) return setError(`No se pudo subir la foto: ${failed.message}`);
     setPhoto(imageUrl(path));

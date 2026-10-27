@@ -100,7 +100,7 @@ function ComboCard({ title, hint, combo }: { title: string; hint: string; combo:
 
 function ProductForm({ product, onDone }: { product?: Product; onDone: () => void }) {
   const { session } = useSession();
-  const { filaments, printers, channels, profile, packaging, materials, carriers } = useData();
+  const { filaments, printers, channels, profile, packaging, materials, carriers, shop } = useData();
   const { busy, error, setError, save } = useSave();
   const kwhPrice = profile?.kwh_price ?? 0;
 
@@ -196,7 +196,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         paths.push(photo.path);
         continue;
       }
-      const upload = await uploadProductImage(session!.user.id, photo.file!);
+      const upload = await uploadProductImage(shop?.shop_id ?? session!.user.id, photo.file!);
       if (upload.error) return { error: { message: `No se pudo subir ${photo.file!.name}: ${upload.error.message}` } };
       paths.push(upload.path);
     }

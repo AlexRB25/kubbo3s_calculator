@@ -19,7 +19,7 @@ type RecipeRow = { filament_id: string | null; grams: string };
 export default function ProductFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { session } = useSession();
-  const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials, carriers, shop } = useData();
   const { busy, error, setError, save } = useSave();
   const product = products.find((item) => item.id === id);
 
@@ -88,7 +88,7 @@ export default function ProductFormScreen() {
   async function write() {
     let imagePath = product?.image_path ?? null;
     if (photo) {
-      const upload = await uploadProductImage(session!.user.id, photo.uri, photo.mimeType);
+      const upload = await uploadProductImage(shop?.shop_id ?? session!.user.id, photo.uri, photo.mimeType);
       if (upload.error) return { error: { message: `No se pudo subir la foto: ${upload.error.message}` } };
       imagePath = upload.path;
     }

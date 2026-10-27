@@ -17,11 +17,15 @@ import type {
   Product,
   Profile,
   Sale,
+  ShopInfo,
   Supplier,
 } from '@/lib/types';
 
 type Tables = {
+  /** The shop's owner profile: its settings (light, margin, fixed costs…) apply to everyone working in it. */
   profile: Profile | null;
+  /** The shop the user works in now and their role there. */
+  shop: ShopInfo | null;
   suppliers: Supplier[];
   printers: Printer[];
   filaments: Filament[];
@@ -49,6 +53,7 @@ type DataState = Tables & {
 
 const EMPTY: Tables = {
   profile: null,
+  shop: null,
   suppliers: [],
   printers: [],
   filaments: [],
@@ -78,8 +83,11 @@ export function useData(): DataState {
 type Loaded = { tables: Tables; error?: undefined } | { tables?: undefined; error: string };
 
 async function fetchTables(userId: string): Promise<Loaded> {
+  // Every table is the active shop's (the database decides); without my_shop (older schema) it is their own.
+  const mine = await supabase.rpc('my_shop');
+  const shop: ShopInfo = mine.data ?? { shop_id: userId, role: 'owner', shops: [], seats: null };
   const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    supabase.from('profiles').select('*').eq('id', shop.shop_id).maybeSingle(),
     supabase.from('suppliers').select('*').order('name'),
     supabase.from('printers').select('*').order('name'),
     supabase.from('filaments').select('*').order('material').order('color'),
@@ -106,6 +114,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
   return {
     tables: {
       profile: profile.data,
+      shop,
       suppliers: suppliers.data ?? [],
       printers: printers.data ?? [],
       filaments: filaments.data ?? [],
