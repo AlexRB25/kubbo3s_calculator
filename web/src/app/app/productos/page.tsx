@@ -881,6 +881,8 @@ export default function ProductsPage() {
                       const suggestedShipped = suggestedPriceWithShipping(cost, channel, margin, shippingAt);
                       const at = price || suggestedShipped;
                       const quotes = shippingQuotes(channel, carriers, grams, box, at);
+                      // Without a price of their own, what selling at the suggested price (with shipping) would leave.
+                      const estimated = unitProfit(suggestedShipped, cost, channel, shippingAt(suggestedShipped));
                       const tip = (
                         <InfoTip label={`Detalle en ${channel.name}`}>
                           <p className="font-semibold">{channel.name}</p>
@@ -916,7 +918,15 @@ export default function ProductsPage() {
                               />
                             </>
                           ) : (
-                            <p className="mt-1 text-muted">Sin precio en este canal: pon uno en Editar.</p>
+                            <>
+                              <TipLine
+                                strong
+                                label={`Ganancia estimada al sugerido (${suggestedShipped > 0 ? Math.round((estimated / suggestedShipped) * 100) : 0}%)`}
+                                value={money(estimated)}
+                                tone={tone(estimated)}
+                              />
+                              <p className="mt-1 text-muted">Sin precio en este canal: pon uno en Editar.</p>
+                            </>
                           )}
                         </InfoTip>
                       );
@@ -925,6 +935,7 @@ export default function ProductsPage() {
                           <td key={channel.id} className="num whitespace-nowrap text-sm text-muted">
                             sugerido {money(suggestedShipped)}
                             {tip}
+                            {suggestedShipped > 0 && <div className={`text-xs ${tone(estimated)}`}>gana ~{money(estimated)} estimado</div>}
                           </td>
                         );
                       }
