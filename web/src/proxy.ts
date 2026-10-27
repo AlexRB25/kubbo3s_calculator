@@ -15,9 +15,14 @@ const hostOf = (value: string | undefined) => {
   }
 };
 
+/** Kubbo3D's own domain: it and every subdomain (calculator., tools., www.) are always this site's. */
+const KUBBO_DOMAIN = "kubbo3d.com";
+
 /** Hosts that are this site. Without SITE_URL or PB_COOKIE_DOMAIN own domains are not served (nothing to tell them apart). */
 function isOwnHost(host: string) {
   if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".vercel.app")) return true;
+  if (host === KUBBO_DOMAIN || host.endsWith(`.${KUBBO_DOMAIN}`)) return true;
+  if (host === hostOf(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? ""}`)) return true;
   const site = hostOf(process.env.SITE_URL).replace(/^www\./, "");
   const parent = (process.env.PB_COOKIE_DOMAIN ?? "").replace(/^\./, "").toLowerCase();
   if (!site && !parent) return true;
