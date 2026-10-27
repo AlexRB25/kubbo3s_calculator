@@ -2,9 +2,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, Chips, confirmDelete, ErrorText, Field, Line, Muted, Row, Screen, Select } from '@/components/ui';
+import { Button, Card, Chips, confirmDelete, ErrorText, Field, Line, Muted, Screen, Select } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { field, num, weight } from '@/lib/format';
+import { brandOptions } from '@/lib/labels';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
 
@@ -61,10 +62,17 @@ export default function FilamentFormScreen() {
 
       <Field label="Material" value={material} onChangeText={setMaterial} autoCapitalize="characters" maxLength={30} />
       <Chips options={MATERIALS.map((item) => ({ value: item, label: item }))} value={material} onChange={setMaterial} />
-      <Row>
-        <Field style={{ flex: 1 }} label="Color" value={color} onChangeText={setColor} placeholder="Negro mate" maxLength={40} />
-        <Field style={{ flex: 1 }} label="Marca" value={brand} onChangeText={setBrand} maxLength={40} />
-      </Row>
+      <Field label="Color" value={color} onChangeText={setColor} placeholder="Negro mate" maxLength={40} />
+      <Field label="Marca" value={brand} onChangeText={setBrand} placeholder="Elige abajo o escribe otra" maxLength={40} />
+      <Chips
+        options={brandOptions(filaments.map((item) => item.brand))
+          // While typing, only the brands that match.
+          .filter((item) => !brand.trim() || item.toLowerCase().includes(brand.trim().toLowerCase()))
+          .slice(0, brand.trim() ? 12 : 31)
+          .map((item) => ({ value: item, label: item }))}
+        value={brand}
+        onChange={setBrand}
+      />
 
       <View style={{ gap: Spacing.one }}>
         <Text style={styles.label}>Color en las listas</Text>

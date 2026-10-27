@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useData, useSave } from "@/lib/data";
 import { num } from "@/lib/format";
+import { brandOptions } from "@/lib/labels";
 import { useSession } from "@/lib/session";
 import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
 import type { CatalogFilament, Filament } from "@/lib/types";
@@ -84,7 +85,7 @@ function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilamen
  * purchases, prints and arqueos.
  */
 export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone: () => void }) {
-  const { suppliers } = useData();
+  const { suppliers, filaments } = useData();
   const { session } = useSession();
   const { busy, error, setError, save } = useSave();
   const [picking, setPicking] = useState(!filament);
@@ -186,7 +187,19 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
       </label>
       <label className="label">
         Marca
-        <input className="input" value={brand} onChange={(event) => setBrand(event.target.value)} placeholder="Elegoo, Bambu Lab…" />
+        <input
+          className="input"
+          value={brand}
+          onChange={(event) => setBrand(event.target.value)}
+          list="filament-brands"
+          maxLength={40}
+          placeholder="Elige de la lista o escribe otra"
+        />
+        <datalist id="filament-brands">
+          {brandOptions(filaments.map((item) => item.brand)).map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
       </label>
       <label className="label">
         Nombre del color
