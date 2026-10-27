@@ -88,6 +88,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="mt-auto flex flex-col gap-2 px-3 pt-6">
+            {process.env.PB_TOOLS_URL && (
+              <a href={process.env.PB_TOOLS_URL} className="text-sm text-muted hover:text-white">
+                Herramientas 3D →
+              </a>
+            )}
             <Link href="/tienda" className="text-sm text-muted hover:text-white">
               Tienda Kubbo →
             </Link>

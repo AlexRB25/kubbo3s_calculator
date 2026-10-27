@@ -8,7 +8,7 @@ import { Colors } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 /** The calculator's web site: it makes the one-time link that opens a tool already signed in. */
-const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL ?? '').replace(/\/$/, '');
+const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL || 'https://calculator.kubbo3d.com').replace(/\/$/, '');
 
 /** The tools of the tools site (same slugs as its pages). */
 const TOOLS: { slug: string; name: string; tagline: string; icon: IconName }[] = [

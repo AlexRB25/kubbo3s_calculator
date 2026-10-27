@@ -10,7 +10,7 @@ const TOOL = /^[a-z0-9-]{0,40}$/;
  * and the app's is never shared.
  */
 export async function POST(request: Request) {
-  const toolsUrl = (process.env.TOOLS_URL ?? "").replace(/\/$/, "");
+  const toolsUrl = (process.env.TOOLS_URL || process.env.PB_TOOLS_URL || "").replace(/\/$/, "");
   if (!toolsUrl) return Response.json({ error: "Falta la dirección del sitio de herramientas (TOOLS_URL)." }, { status: 503 });
   if (!process.env.SUPABASE_SECRET_KEY || !process.env.PB_SUPABASE_URL) {
     // Without the secret key the tools still open; the user signs in there.

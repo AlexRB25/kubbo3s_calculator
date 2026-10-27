@@ -11,9 +11,20 @@ let browser: SupabaseClient | undefined;
 /** Client for the browser: carries the signed-in user's session, so RLS shows only their rows. */
 export function supabase(): SupabaseClient {
   return (browser ??= createBrowserClient(url || "https://sin-configurar.supabase.co", key || "sin-configurar", {
-    // With a shared parent domain (e.g. ".kubbo3d.com") one sign-in works on every Kubbo3D site.
-    cookieOptions: process.env.PB_COOKIE_DOMAIN ? { domain: process.env.PB_COOKIE_DOMAIN } : undefined,
+    // With a shared parent domain (".kubbo3d.com") one sign-in works on every Kubbo3D site.
+    cookieOptions: cookieDomain() ? { domain: cookieDomain() } : undefined,
   }));
+}
+
+/**
+ * The parent domain every Kubbo3D site shares: PB_COOKIE_DOMAIN, or .kubbo3d.com when the site runs on
+ * it (kubbo3d.com, calculator.kubbo3d.com, tools.kubbo3d.com). Elsewhere (localhost, previews) none.
+ */
+function cookieDomain() {
+  if (process.env.PB_COOKIE_DOMAIN) return process.env.PB_COOKIE_DOMAIN;
+  if (typeof window === "undefined") return undefined;
+  const host = window.location.hostname;
+  return host === "kubbo3d.com" || host.endsWith(".kubbo3d.com") ? ".kubbo3d.com" : undefined;
 }
 
 /** Sessionless client for Server Components: reads only what the store publishes to everyone. */
