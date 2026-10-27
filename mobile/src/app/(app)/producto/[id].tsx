@@ -74,10 +74,21 @@ export default function ProductScreen() {
         const shipping = shippingAt(price || suggestedPriceWithShipping(cost.total, channel, margin, shippingAt));
         const suggested = `Sugerido: ${money(suggestedPrice(cost.total, channel, margin))} sin envío · ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))} con envío`;
         if (!price) {
+          // What selling at the suggested price with shipping would leave.
+          const at = suggestedPriceWithShipping(cost.total, channel, margin, shippingAt);
+          const estimated = unitProfit(at, cost.total, channel, shippingAt(at));
           return (
             <Card key={channel.id}>
               <Line strong label={channel.name} value="Sin precio" />
               <Muted>{suggested}</Muted>
+              {at > 0 && (
+                <Row style={{ justifyContent: 'space-between' }}>
+                  <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600' }}>Ganancia estimada al sugerido</Text>
+                  <Text style={{ color: estimated >= 0 ? Colors.money : Colors.danger, fontSize: 15, fontWeight: '700' }}>
+                    ~{money(estimated)} ({Math.round((estimated / at) * 100)}%)
+                  </Text>
+                </Row>
+              )}
             </Card>
           );
         }
