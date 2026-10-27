@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Card, Empty, Heading, Line, Muted, Row, Screen } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
-import { channelFees, costPerGram, filamentName, packagingName, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { channelFees, costPerGram, filamentName, packagingName, overheadPerPiece, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { duration, money, weight } from '@/lib/format';
 import { useData } from '@/store/data';
 
@@ -14,7 +14,7 @@ export default function ProductScreen() {
   const product = products.find((item) => item.id === id);
   if (!product) return <Empty icon="cube-outline" text="Este producto ya no existe." />;
 
-  const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules);
+  const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile));
   const machines = printers.filter((printer) => product.printer_ids.includes(printer.id));
   const box = packaging.find((item) => item.id === product.packaging_id);
   const margin = profile?.margin_pct ?? 0;
@@ -53,6 +53,7 @@ export default function ProductScreen() {
         <Line label={`Luz · ${duration(product.print_minutes)}`} value={money(cost.electricity)} />
         <Line label="Desgaste de máquina" value={money(cost.machine)} />
         <Line label="Otros costos" value={money(cost.extra)} />
+        {(cost.overhead ?? 0) > 0 && <Line label="Gastos fijos" value={money(cost.overhead ?? 0)} />}
         <Line strong label="Total" value={money(cost.total)} />
         <Muted>
           {machines.length ? `Sale en: ${machines.map((printer) => printer.name).join(', ')}.` : 'Sin máquina asignada: no se suma luz ni desgaste.'}

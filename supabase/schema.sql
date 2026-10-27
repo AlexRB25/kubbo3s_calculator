@@ -1784,3 +1784,11 @@ drop policy if exists ai_generations_insert on public.ai_generations;
 create policy ai_generations_insert on public.ai_generations for insert to authenticated with check (user_id = (select auth.uid()));
 drop policy if exists ai_generations_read on public.ai_generations;
 create policy ai_generations_read on public.ai_generations for select to authenticated using (user_id = (select auth.uid()));
+
+-- ───────────────────────── Gastos fijos del taller ─────────────────────────
+-- Renta del local, internet, sueldos… cada uno con nombre, monto al mes y si está activo. Los activos se
+-- reparten entre las piezas que el taller produce al mes y esa parte se suma al costo de cada pieza.
+-- [{"id": "…", "name": "Renta del local", "amount": 15000, "active": true}]
+alter table public.profiles add column if not exists overheads jsonb not null default '[]';
+alter table public.profiles add column if not exists overhead_pieces int not null default 0 check (overhead_pieces >= 0);
+grant update (overheads, overhead_pieces) on public.profiles to authenticated;

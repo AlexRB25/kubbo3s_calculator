@@ -1,5 +1,6 @@
 "use client";
 
+import { OverheadCosts } from "@/components/app/OverheadCosts";
 import { WasteRules } from "@/components/app/WasteRules";
 import { FieldsForm, PageHeader, type FieldDef } from "@/components/app/ui";
 import { useData } from "@/lib/data";
@@ -39,6 +40,7 @@ export default function SettingsPage() {
           }}
         />
       </div>
+      <OverheadCosts />
       <WasteRules />
     </>
   );

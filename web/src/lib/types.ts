@@ -9,7 +9,14 @@ export type Profile = {
   margin_pct: number;
   /** Extra filament quoted per plate by how many pieces it carries (waste, failed pieces). */
   waste_rules: WasteRule[];
+  /** The workshop's fixed monthly costs (rent, internet…); the active ones are shared among overhead_pieces. */
+  overheads: Overhead[];
+  /** Pieces the workshop makes in a month, to share the fixed costs among. */
+  overhead_pieces: number;
 };
+
+/** A fixed monthly cost of the workshop. */
+export type Overhead = { id: string; name: string; amount: number; active: boolean };
 
 /** Plates of up to `max_pieces` pieces are quoted with `pct` % more filament. */
 export type WasteRule = { max_pieces: number; pct: number };

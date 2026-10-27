@@ -7,7 +7,7 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { costPerGram, filamentName, packagingName, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { costPerGram, filamentName, packagingName, overheadPerPiece, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { field, money, num, weight } from '@/lib/format';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
 import type { Product } from '@/lib/types';
@@ -70,7 +70,7 @@ export default function ProductFormScreen() {
         plates: [],
         extra_cost: num(extraCost),
       };
-  const cost = productCost({ ...draft, materials: product?.materials }, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules);
+  const cost = productCost({ ...draft, materials: product?.materials }, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile));
 
   const setRow = (index: number, change: Partial<RecipeRow>) =>
     setRecipe(recipe.map((row, position) => (position === index ? { ...row, ...change } : row)));
@@ -247,6 +247,7 @@ export default function ProductFormScreen() {
         <Line label="Luz" value={money(cost.electricity)} />
         <Line label="Desgaste de máquina" value={money(cost.machine)} />
         <Line label="Otros" value={money(cost.extra)} />
+        {(cost.overhead ?? 0) > 0 && <Line label="Gastos fijos" value={money(cost.overhead ?? 0)} />}
         <Line strong label="Costo por pieza" value={money(cost.total)} />
       </Card>
 

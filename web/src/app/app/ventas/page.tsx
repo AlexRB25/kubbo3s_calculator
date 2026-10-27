@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { channelFees, productCost, shippingQuotes } from "@/lib/costs";
+import { channelFees, overheadPerPiece, productCost, shippingQuotes } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { day, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
@@ -47,7 +47,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   // One package per sale, whatever the number of pieces.
   const autoPackaging = shipped ? (packaging.find((item) => item.id === product?.packaging_id)?.cost ?? 0) : 0;
   const totalPackaging = shipped && packagingCost !== "" ? num(packagingCost) : autoPackaging;
-  const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules).total : num(customCost);
+  const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile)).total : num(customCost);
   const profit = pieces * unitPrice - totalFees - totalShipping - totalPackaging - pieces * unitCost;
 
   function submit(event: React.FormEvent) {

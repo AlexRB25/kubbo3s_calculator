@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Empty, Field, ListItem, Screen } from '@/components/ui';
-import { productCost } from '@/lib/costs';
+import { overheadPerPiece, productCost } from '@/lib/costs';
 import { money } from '@/lib/format';
 import { useData } from '@/store/data';
 
@@ -27,7 +27,7 @@ export default function ProductsScreen() {
           key={product.id}
           left={<ProductThumb path={product.image_path} />}
           title={product.name}
-          subtitle={`Costo ${money(productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules).total)}`}
+          subtitle={`Costo ${money(productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile)).total)}`}
           value={String(product.stock)}
           valueHint="en stock"
           tone={product.stock <= 0 ? 'bad' : undefined}

@@ -7,6 +7,8 @@ export type CostBreakdown = {
   extra: number;
   /** Supplies (LEDs, bulbs, screws…) one product takes; included in total. */
   supplies?: number;
+  /** Its share of the workshop's fixed costs (rent, internet…); included in total. */
+  overhead?: number;
   total: number;
 };
 
@@ -137,15 +139,27 @@ export function productCost(
   kwhPrice: number,
   materials: Material[] = [],
   waste: WasteRule[] = [],
+  overhead = 0,
 ): CostBreakdown {
   const supplies = suppliesCost(product.materials, materials);
-  const withSupplies = (cost: CostBreakdown): CostBreakdown => ({ ...cost, supplies, total: cost.total + supplies });
+  const withSupplies = (cost: CostBreakdown): CostBreakdown => ({ ...cost, supplies, overhead, total: cost.total + supplies + overhead });
   if (product.plates?.length) {
     const combo = choose(optionsOf(product, filaments, printers, kwhPrice, waste), partsOf(product), product.extra_cost, true);
     if (combo) return withSupplies(combo.cost);
   }
   const assigned = printers.filter((printer) => product.printer_ids.includes(printer.id));
   return withSupplies(breakdown(product.filaments, product.print_minutes, assigned, filaments, kwhPrice, product.extra_cost));
+}
+
+/**
+ * Each piece's share of the workshop's fixed costs: the active ones (rent, internet…) divided among the
+ * pieces made in a month. 0 without pieces or active costs.
+ */
+export function overheadPerPiece(profile: { overheads?: { amount: number; active: boolean }[]; overhead_pieces?: number } | null | undefined) {
+  const pieces = Number(profile?.overhead_pieces ?? 0);
+  if (!(pieces > 0)) return 0;
+  const monthly = (profile?.overheads ?? []).reduce((total, item) => total + (item.active ? Number(item.amount) || 0 : 0), 0);
+  return monthly / pieces;
 }
 
 /** What one unit of a supply costs: from its purchases, or the reference while it has none. */
