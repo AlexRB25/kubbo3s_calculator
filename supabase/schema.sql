@@ -2058,3 +2058,583 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke all on function public.my_shop() from public, anon;
 grant execute on function public.my_shop() to authenticated;
+
+-- ───────────────────────── Marketplace de modelos 3D ─────────────────────────
+-- Cualquier usuario sube STL / 3MF gratis o de pago; los demás los descargan o compran, comentan,
+-- califican y guardan en favoritos. Kubbo cobra con Mercado Pago, se queda fee_pct y el resto
+-- suma al saldo del vendedor, que lo retira (CLABE, Mercado Pago o PayPal) cuando pasan hold_days.
+
+create table if not exists public.market_settings (
+  id int primary key default 1 check (id = 1),
+  -- Comisión de Kubbo sobre cada venta, en % del precio (cubre también la comisión de Mercado Pago).
+  fee_pct numeric(5,2) not null default 20 check (fee_pct between 0 and 90),
+  -- Saldo mínimo para pedir un retiro.
+  min_payout numeric(12,2) not null default 200 check (min_payout >= 0),
+  -- Días que una venta espera antes de poder retirarse (reembolsos y contracargos).
+  hold_days int not null default 14 check (hold_days between 0 and 120)
+);
+insert into public.market_settings (id) values (1) on conflict do nothing;
+alter table public.market_settings enable row level security;
+revoke insert, update, delete on public.market_settings from anon, authenticated;
+drop policy if exists market_settings_read on public.market_settings;
+create policy market_settings_read on public.market_settings for select to anon, authenticated using (true);
+
+-- Perfil público de quien sube, comenta o califica. Se crea solo la primera vez (ensure_maker).
+create table if not exists public.makers (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  handle text not null unique check (handle ~ '^[a-z0-9_]{3,30}$'),
+  name text not null default '' check (char_length(name) <= 80),
+  bio text not null default '' check (char_length(bio) <= 500),
+  country text not null default '' check (char_length(country) <= 60),
+  created_at timestamptz not null default now()
+);
+alter table public.makers enable row level security;
+revoke insert, update, delete on public.makers from anon, authenticated;
+grant update (handle, name, bio, country) on public.makers to authenticated;
+drop policy if exists makers_read on public.makers;
+create policy makers_read on public.makers for select to anon, authenticated using (true);
+drop policy if exists makers_own on public.makers;
+create policy makers_own on public.makers for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- Crea el perfil público con un @usuario libre sacado del nombre (nunca del correo).
+create or replace function public.ensure_maker(p_user uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_name text;
+  v_base text;
+  v_handle text;
+begin
+  if p_user is null or exists (select 1 from public.makers where user_id = p_user) then
+    return;
+  end if;
+  select btrim(name) into v_name from public.profiles where id = p_user;
+  v_base := left(regexp_replace(translate(lower(coalesce(v_name, '')), 'áàäâéèëêíìïîóòöôúùüûñç', 'aaaaeeeeiiiioooouuuunc'), '[^a-z0-9]+', '', 'g'), 20);
+  if char_length(v_base) < 3 then
+    v_base := 'maker';
+  end if;
+  v_handle := v_base;
+  while exists (select 1 from public.makers where handle = v_handle) loop
+    v_handle := v_base || (1000 + floor(random() * 9000))::int;
+  end loop;
+  insert into public.makers (user_id, handle, name) values (p_user, v_handle, left(coalesce(v_name, ''), 80))
+  on conflict (user_id) do nothing;
+end $$;
+revoke all on function public.ensure_maker(uuid) from public, anon, authenticated;
+
+create or replace function public.my_maker() returns public.makers
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_row public.makers;
+begin
+  perform public.ensure_maker(auth.uid());
+  select * into v_row from public.makers where user_id = auth.uid();
+  return v_row;
+end $$;
+revoke all on function public.my_maker() from public, anon;
+grant execute on function public.my_maker() to authenticated;
+
+-- Datos para pagarle al vendedor. Solo los ve él (y el admin con la clave secreta).
+create table if not exists public.maker_payout_info (
+  user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  method text not null check (method in ('clabe', 'mercadopago', 'paypal')),
+  account text not null check (char_length(btrim(account)) between 3 and 120),
+  holder text not null default '' check (char_length(holder) <= 120),
+  updated_at timestamptz not null default now()
+);
+alter table public.maker_payout_info enable row level security;
+revoke all on public.maker_payout_info from anon;
+drop policy if exists maker_payout_info_own on public.maker_payout_info;
+create policy maker_payout_info_own on public.maker_payout_info for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+create table if not exists public.models (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references public.makers (user_id) on delete cascade,
+  title text not null check (char_length(btrim(title)) between 3 and 120),
+  description text not null default '' check (char_length(description) <= 5000),
+  category text not null default 'otros' check (char_length(category) <= 40),
+  tags text[] not null default '{}',
+  -- En pesos; 0 = gratis.
+  price numeric(12,2) not null default 0 check (price = 0 or price between 10 and 20000),
+  -- Licencia: true = quien lo obtiene puede vender las piezas impresas.
+  commercial boolean not null default false,
+  -- Material, capa, soportes, relleno…
+  print_notes text not null default '' check (char_length(print_notes) <= 2000),
+  -- Rutas en el bucket público model-media (<user_id>/<model_id>/…); la primera es la portada.
+  images text[] not null default '{}',
+  -- [{"path","name","size"}] en el bucket privado model-files (<user_id>/<model_id>/…).
+  files jsonb not null default '[]',
+  status text not null default 'draft' check (status in ('draft', 'published')),
+  -- Lo oculta el admin (derechos de autor, contenido ofensivo…).
+  blocked boolean not null default false,
+  blocked_reason text not null default '',
+  downloads int not null default 0,
+  sales int not null default 0,
+  likes int not null default 0,
+  comments int not null default 0,
+  rating_avg numeric(3,2) not null default 0,
+  rating_count int not null default 0,
+  published_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists models_user_idx on public.models (user_id);
+create index if not exists models_listing_idx on public.models (published_at desc) where status = 'published' and not blocked;
+alter table public.models enable row level security;
+revoke insert, update, delete on public.models from anon, authenticated;
+grant insert (id, title, description, category, tags, price, commercial, print_notes, images, files, status) on public.models to authenticated;
+grant update (title, description, category, tags, price, commercial, print_notes, images, files, status) on public.models to authenticated;
+grant delete on public.models to authenticated;
+drop policy if exists models_read on public.models;
+create policy models_read on public.models for select to anon, authenticated
+  using ((status = 'published' and not blocked) or user_id = (select auth.uid()));
+drop policy if exists models_insert on public.models;
+create policy models_insert on public.models for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists models_update on public.models;
+create policy models_update on public.models for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists models_delete on public.models;
+create policy models_delete on public.models for delete to authenticated using (user_id = (select auth.uid()));
+
+create or replace function public.models_check() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_prefix text := new.user_id::text || '/' || new.id::text || '/';
+  v_file jsonb;
+begin
+  -- Los contadores los mueven otros triggers (profundidad > 1): solo los cambios del vendedor pasan por aquí.
+  if pg_trigger_depth() > 1 then
+    return new;
+  end if;
+  perform public.ensure_maker(new.user_id);
+  new.title := btrim(new.title);
+  new.tags := coalesce((select array_agg(distinct t) from (
+    select left(lower(btrim(x)), 30) as t from unnest(new.tags) x where btrim(x) <> '' limit 10) s), '{}');
+  if cardinality(new.images) > 12 then
+    raise exception 'Máximo 12 fotos por modelo.';
+  end if;
+  if jsonb_typeof(new.files) is distinct from 'array' or jsonb_array_length(new.files) > 20 then
+    raise exception 'Máximo 20 archivos por modelo.';
+  end if;
+  for v_file in select * from jsonb_array_elements(new.files) loop
+    if not coalesce(v_file ->> 'path', '') like v_prefix || '%' or v_file ->> 'path' like '%..%' then
+      raise exception 'Archivo fuera de la carpeta del modelo.';
+    end if;
+  end loop;
+  if exists (select 1 from unnest(new.images) i where i not like v_prefix || '%') then
+    raise exception 'Foto fuera de la carpeta del modelo.';
+  end if;
+  if new.status = 'published' then
+    if cardinality(new.images) = 0 or jsonb_array_length(new.files) = 0 then
+      raise exception 'Para publicar sube al menos una foto y un archivo STL o 3MF.';
+    end if;
+    new.published_at := coalesce(new.published_at, now());
+  end if;
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists models_check on public.models;
+create trigger models_check before insert or update on public.models
+  for each row execute function public.models_check();
+
+create table if not exists public.model_purchases (
+  id uuid primary key default gen_random_uuid(),
+  model_id uuid not null references public.models (id) on delete cascade,
+  buyer_id uuid not null references auth.users (id) on delete cascade,
+  -- Sin llave foránea: la venta queda registrada aunque el vendedor borre su cuenta.
+  seller_id uuid not null,
+  title text not null,
+  price numeric(12,2) not null,
+  fee_pct numeric(5,2) not null,
+  fee numeric(12,2) not null,
+  seller_amount numeric(12,2) not null,
+  status text not null default 'pending' check (status in ('pending', 'paid', 'refunded')),
+  payment_id text,
+  paid_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists model_purchases_paid_idx on public.model_purchases (model_id, buyer_id) where status = 'paid';
+create index if not exists model_purchases_buyer_idx on public.model_purchases (buyer_id);
+create index if not exists model_purchases_seller_idx on public.model_purchases (seller_id, status);
+alter table public.model_purchases enable row level security;
+revoke insert, update, delete on public.model_purchases from anon, authenticated;
+drop policy if exists model_purchases_own on public.model_purchases;
+create policy model_purchases_own on public.model_purchases for select to authenticated
+  using (buyer_id = (select auth.uid()) or seller_id = (select auth.uid()));
+
+-- Un modelo vendido no se borra: el vendedor lo despublica y quien lo compró lo sigue descargando.
+create or replace function public.models_keep_sold() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+  if auth.uid() is not null and exists (select 1 from public.model_purchases p where p.model_id = old.id and p.status = 'paid') then
+    raise exception 'Este modelo ya tiene compras: despublícalo en lugar de borrarlo.';
+  end if;
+  return old;
+end $$;
+drop trigger if exists models_keep_sold on public.models;
+create trigger models_keep_sold before delete on public.models
+  for each row execute function public.models_keep_sold();
+
+-- Quién descargó qué (una fila por persona y modelo). Quien bajó un modelo gratis lo conserva si luego le ponen precio.
+create table if not exists public.model_downloads (
+  model_id uuid not null references public.models (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  times int not null default 1,
+  -- La bajó cuando era gratis: la conserva aunque luego tenga precio (una compra reembolsada no).
+  free boolean not null default false,
+  first_at timestamptz not null default now(),
+  last_at timestamptz not null default now(),
+  primary key (model_id, user_id)
+);
+create index if not exists model_downloads_user_idx on public.model_downloads (user_id);
+alter table public.model_downloads enable row level security;
+revoke insert, update, delete on public.model_downloads from anon, authenticated;
+drop policy if exists model_downloads_own on public.model_downloads;
+create policy model_downloads_own on public.model_downloads for select to authenticated using (user_id = (select auth.uid()));
+
+create or replace function public.has_model_access(p_model uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select auth.uid() is not null and exists (
+    select 1 from public.models m
+    where m.id = p_model and (
+      m.user_id = auth.uid()
+      or (m.price = 0 and m.status = 'published' and not m.blocked)
+      or exists (select 1 from public.model_purchases p where p.model_id = m.id and p.buyer_id = auth.uid() and p.status = 'paid')
+      or exists (select 1 from public.model_downloads d where d.model_id = m.id and d.user_id = auth.uid() and d.free)));
+$$;
+revoke all on function public.has_model_access(uuid) from public, anon;
+grant execute on function public.has_model_access(uuid) to authenticated;
+
+-- Registra la descarga y devuelve la lista de archivos; el navegador firma cada uno con su sesión.
+create or replace function public.download_model(p_model uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_model public.models;
+  v_first boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'Entra a tu cuenta para descargar.';
+  end if;
+  if not public.has_model_access(p_model) then
+    raise exception 'Compra este modelo para descargarlo.';
+  end if;
+  select * into v_model from public.models where id = p_model;
+  if v_model.user_id <> auth.uid() then
+    insert into public.model_downloads (model_id, user_id, free) values (p_model, auth.uid(), v_model.price = 0)
+    on conflict (model_id, user_id) do update
+      set times = public.model_downloads.times + 1, last_at = now(), free = public.model_downloads.free or excluded.free
+    returning (xmax = 0) into v_first;
+    if v_first then
+      update public.models set downloads = downloads + 1 where id = p_model;
+    end if;
+  end if;
+  return v_model.files;
+end $$;
+revoke all on function public.download_model(uuid) from public, anon;
+grant execute on function public.download_model(uuid) to authenticated;
+
+-- Aparta la compra con el precio de la base de datos; /api/modelos/pagar la cobra con Mercado Pago.
+create or replace function public.buy_model(p_model uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_model public.models;
+  v_fee_pct numeric(5,2);
+  v_fee numeric(12,2);
+  v_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Entra a tu cuenta para comprar.';
+  end if;
+  select * into v_model from public.models where id = p_model and status = 'published' and not blocked;
+  if not found then
+    raise exception 'Este modelo ya no está a la venta.';
+  end if;
+  if v_model.user_id = auth.uid() then
+    raise exception 'Es tu propio modelo.';
+  end if;
+  if v_model.price = 0 then
+    raise exception 'Este modelo es gratis: descárgalo directo.';
+  end if;
+  if exists (select 1 from public.model_purchases where model_id = p_model and buyer_id = auth.uid() and status = 'paid') then
+    return jsonb_build_object('already', true);
+  end if;
+  select fee_pct into v_fee_pct from public.market_settings where id = 1;
+  v_fee := round(v_model.price * v_fee_pct / 100, 2);
+  select id into v_id from public.model_purchases
+  where model_id = p_model and buyer_id = auth.uid() and status = 'pending' order by created_at desc limit 1;
+  if v_id is null then
+    insert into public.model_purchases (model_id, buyer_id, seller_id, title, price, fee_pct, fee, seller_amount)
+    values (p_model, auth.uid(), v_model.user_id, v_model.title, v_model.price, v_fee_pct, v_fee, v_model.price - v_fee)
+    returning id into v_id;
+  else
+    update public.model_purchases
+    set title = v_model.title, price = v_model.price, fee_pct = v_fee_pct, fee = v_fee, seller_amount = v_model.price - v_fee, created_at = now()
+    where id = v_id;
+  end if;
+  return jsonb_build_object('id', v_id, 'price', v_model.price);
+end $$;
+revoke all on function public.buy_model(uuid) from public, anon;
+grant execute on function public.buy_model(uuid) to authenticated;
+
+-- Contador de ventas del modelo cuando una compra se paga o se reembolsa.
+create or replace function public.model_purchases_count() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if (old.status = 'paid') <> (new.status = 'paid') then
+    update public.models set sales = greatest(sales + case when new.status = 'paid' then 1 else -1 end, 0) where id = new.model_id;
+  end if;
+  return null;
+end $$;
+drop trigger if exists model_purchases_count on public.model_purchases;
+create trigger model_purchases_count after update of status on public.model_purchases
+  for each row execute function public.model_purchases_count();
+
+create table if not exists public.model_favorites (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  model_id uuid not null references public.models (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, model_id)
+);
+create index if not exists model_favorites_model_idx on public.model_favorites (model_id);
+alter table public.model_favorites enable row level security;
+revoke all on public.model_favorites from anon;
+revoke update on public.model_favorites from authenticated;
+drop policy if exists model_favorites_own on public.model_favorites;
+create policy model_favorites_own on public.model_favorites for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+create or replace function public.model_favorites_count() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.models set likes = likes + 1 where id = new.model_id;
+  else
+    update public.models set likes = greatest(likes - 1, 0) where id = old.model_id;
+  end if;
+  return null;
+end $$;
+drop trigger if exists model_favorites_count on public.model_favorites;
+create trigger model_favorites_count after insert or delete on public.model_favorites
+  for each row execute function public.model_favorites_count();
+
+create table if not exists public.model_comments (
+  id uuid primary key default gen_random_uuid(),
+  model_id uuid not null references public.models (id) on delete cascade,
+  user_id uuid not null default auth.uid() references public.makers (user_id) on delete cascade,
+  -- Respuesta a otro comentario (un solo nivel).
+  parent_id uuid references public.model_comments (id) on delete cascade,
+  body text not null check (char_length(btrim(body)) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists model_comments_model_idx on public.model_comments (model_id, created_at);
+alter table public.model_comments enable row level security;
+revoke update on public.model_comments from anon, authenticated;
+revoke insert, delete on public.model_comments from anon;
+drop policy if exists model_comments_read on public.model_comments;
+create policy model_comments_read on public.model_comments for select to anon, authenticated
+  using (exists (select 1 from public.models m where m.id = model_id));
+drop policy if exists model_comments_insert on public.model_comments;
+create policy model_comments_insert on public.model_comments for insert to authenticated
+  with check (user_id = (select auth.uid()) and exists (select 1 from public.models m where m.id = model_id));
+-- Borra su comentario quien lo escribió o el dueño del modelo.
+drop policy if exists model_comments_delete on public.model_comments;
+create policy model_comments_delete on public.model_comments for delete to authenticated
+  using (user_id = (select auth.uid())
+         or exists (select 1 from public.models m where m.id = model_id and m.user_id = (select auth.uid())));
+
+create or replace function public.model_comments_check() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.ensure_maker(new.user_id);
+  new.body := btrim(new.body);
+  if new.parent_id is not null and not exists (
+    select 1 from public.model_comments c where c.id = new.parent_id and c.model_id = new.model_id and c.parent_id is null) then
+    raise exception 'Solo se responde a comentarios de este modelo.';
+  end if;
+  -- Freno al spam: máximo 20 comentarios por persona cada 10 minutos.
+  if (select count(*) from public.model_comments c where c.user_id = new.user_id and c.created_at > now() - interval '10 minutes') >= 20 then
+    raise exception 'Vas muy rápido: espera unos minutos para comentar otra vez.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists model_comments_check on public.model_comments;
+create trigger model_comments_check before insert on public.model_comments
+  for each row execute function public.model_comments_check();
+
+create or replace function public.model_comments_count() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' then
+    update public.models set comments = comments + 1 where id = new.model_id;
+  else
+    update public.models set comments = greatest(comments - 1, 0) where id = old.model_id;
+  end if;
+  return null;
+end $$;
+drop trigger if exists model_comments_count on public.model_comments;
+create trigger model_comments_count after insert or delete on public.model_comments
+  for each row execute function public.model_comments_count();
+
+-- Calificación de 1 a 5 estrellas: solo quien descargó o compró el modelo, y no su autor.
+create table if not exists public.model_ratings (
+  model_id uuid not null references public.models (id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  stars smallint not null check (stars between 1 and 5),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (model_id, user_id)
+);
+alter table public.model_ratings enable row level security;
+revoke all on public.model_ratings from anon;
+revoke update on public.model_ratings from authenticated;
+grant update (stars) on public.model_ratings to authenticated;
+drop policy if exists model_ratings_own on public.model_ratings;
+create policy model_ratings_own on public.model_ratings for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()) and public.has_model_access(model_id)
+              and not exists (select 1 from public.models m where m.id = model_id and m.user_id = (select auth.uid())));
+
+create or replace function public.model_ratings_count() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_model uuid := coalesce(new.model_id, old.model_id);
+begin
+  update public.models m
+  set rating_avg = coalesce(r.avg, 0), rating_count = r.n
+  from (select round(avg(stars), 2) as avg, count(*)::int as n from public.model_ratings where model_id = v_model) r
+  where m.id = v_model;
+  return null;
+end $$;
+drop trigger if exists model_ratings_count on public.model_ratings;
+create trigger model_ratings_count after insert or update or delete on public.model_ratings
+  for each row execute function public.model_ratings_count();
+
+-- Denuncias (derechos de autor, contenido ofensivo, archivo roto…). Las revisa el admin.
+create table if not exists public.model_reports (
+  id uuid primary key default gen_random_uuid(),
+  model_id uuid not null references public.models (id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  reason text not null check (reason in ('copyright', 'offensive', 'broken', 'other')),
+  details text not null default '' check (char_length(details) <= 2000),
+  status text not null default 'new' check (status in ('new', 'resolved')),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists model_reports_open_idx on public.model_reports (model_id, user_id) where status = 'new';
+alter table public.model_reports enable row level security;
+revoke all on public.model_reports from anon;
+revoke select, update, delete on public.model_reports from authenticated;
+drop policy if exists model_reports_insert on public.model_reports;
+create policy model_reports_insert on public.model_reports for insert to authenticated with check (user_id = (select auth.uid()));
+
+-- Retiros del saldo del vendedor. Los pide el vendedor (request_payout) y los paga el admin.
+create table if not exists public.maker_payouts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  amount numeric(12,2) not null check (amount > 0),
+  method text not null,
+  account text not null,
+  holder text not null default '',
+  status text not null default 'requested' check (status in ('requested', 'paid', 'rejected')),
+  -- Folio de la transferencia o motivo del rechazo; lo escribe el admin.
+  reference text not null default '',
+  created_at timestamptz not null default now(),
+  processed_at timestamptz
+);
+create index if not exists maker_payouts_user_idx on public.maker_payouts (user_id, created_at desc);
+alter table public.maker_payouts enable row level security;
+revoke insert, update, delete on public.maker_payouts from anon, authenticated;
+drop policy if exists maker_payouts_own on public.maker_payouts;
+create policy maker_payouts_own on public.maker_payouts for select to authenticated using (user_id = (select auth.uid()));
+
+-- Saldo de un vendedor: ventas pagadas − comisión, menos lo que aún espera hold_days, menos retiros.
+create or replace function public.maker_balance(p_user uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'earned', e.earned, 'held', e.held, 'withdrawn', w.paid, 'requested', w.requested,
+    'available', e.earned - e.held - w.paid - w.requested,
+    'min_payout', s.min_payout, 'hold_days', s.hold_days, 'fee_pct', s.fee_pct)
+  from public.market_settings s
+  cross join lateral (
+    select coalesce(sum(p.seller_amount), 0) as earned,
+           coalesce(sum(p.seller_amount) filter (where p.paid_at > now() - make_interval(days => s.hold_days)), 0) as held
+    from public.model_purchases p where p.seller_id = p_user and p.status = 'paid') e
+  cross join lateral (
+    select coalesce(sum(x.amount) filter (where x.status = 'paid'), 0) as paid,
+           coalesce(sum(x.amount) filter (where x.status = 'requested'), 0) as requested
+    from public.maker_payouts x where x.user_id = p_user) w
+  where s.id = 1;
+$$;
+revoke all on function public.maker_balance(uuid) from public, anon, authenticated;
+
+create or replace function public.my_balance() returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select public.maker_balance(auth.uid()) where auth.uid() is not null;
+$$;
+revoke all on function public.my_balance() from public, anon;
+grant execute on function public.my_balance() to authenticated;
+
+create or replace function public.request_payout() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_balance jsonb;
+  v_info public.maker_payout_info;
+  v_amount numeric(12,2);
+  v_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Entra a tu cuenta.';
+  end if;
+  -- Un retiro a la vez por vendedor, aunque pidan dos al mismo tiempo.
+  perform pg_advisory_xact_lock(hashtext('payout:' || auth.uid()::text));
+  if exists (select 1 from public.maker_payouts where user_id = auth.uid() and status = 'requested') then
+    raise exception 'Ya tienes un retiro en proceso.';
+  end if;
+  select * into v_info from public.maker_payout_info where user_id = auth.uid();
+  if not found then
+    raise exception 'Primero guarda a dónde te pagamos (CLABE, Mercado Pago o PayPal).';
+  end if;
+  v_balance := public.maker_balance(auth.uid());
+  v_amount := (v_balance ->> 'available')::numeric;
+  if v_amount <= 0 or v_amount < (v_balance ->> 'min_payout')::numeric then
+    raise exception 'El retiro mínimo es de $% y tienes $% disponibles.', v_balance ->> 'min_payout', greatest(v_amount, 0);
+  end if;
+  insert into public.maker_payouts (user_id, amount, method, account, holder)
+  values (auth.uid(), v_amount, v_info.method, v_info.account, v_info.holder)
+  returning id into v_id;
+  return jsonb_build_object('id', v_id, 'amount', v_amount);
+end $$;
+revoke all on function public.request_payout() from public, anon;
+grant execute on function public.request_payout() to authenticated;
+
+-- Fotos (públicas) y archivos (privados) de los modelos, en <user_id>/<model_id>/…
+insert into storage.buckets (id, name, public) values ('model-media', 'model-media', true)
+on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('model-files', 'model-files', false)
+on conflict (id) do nothing;
+
+drop policy if exists kubbo_model_media_own on storage.objects;
+create policy kubbo_model_media_own on storage.objects for all to authenticated
+  using (bucket_id = 'model-media' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'model-media' and (storage.foldername(name))[1] = (select auth.uid())::text);
+drop policy if exists kubbo_model_files_own on storage.objects;
+create policy kubbo_model_files_own on storage.objects for all to authenticated
+  using (bucket_id = 'model-files' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'model-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- Un archivo de <vendedor>/<modelo>/… lo lee quien tiene acceso a ese modelo de ese vendedor.
+create or replace function public.can_read_model_file(p_name text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce((
+    select public.has_model_access(m.id)
+    from public.models m
+    where m.id = case when (string_to_array(p_name, '/'))[2] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                      then ((string_to_array(p_name, '/'))[2])::uuid end
+      and m.user_id::text = (string_to_array(p_name, '/'))[1]), false);
+$$;
+revoke all on function public.can_read_model_file(text) from public, anon;
+grant execute on function public.can_read_model_file(text) to authenticated;
+
+drop policy if exists kubbo_model_files_buyers on storage.objects;
+create policy kubbo_model_files_buyers on storage.objects for select to authenticated
+  using (bucket_id = 'model-files' and public.can_read_model_file(name));

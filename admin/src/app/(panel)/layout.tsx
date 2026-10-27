@@ -16,6 +16,8 @@ const LINKS = [
   { href: "/impresoras", label: "Catálogo de impresoras" },
   { href: "/categorias", label: "Categorías de productos" },
   { href: "/catalogos", label: "Catálogos y dominios" },
+  { href: "/marketplace", label: "Modelos 3D" },
+  { href: "/retiros", label: "Modelos 3D: retiros" },
 ];
 
 // Every page here reads live data with the admin's session: never prerender them at build time.
@@ -28,6 +30,10 @@ export default async function PanelLayout({ children }: LayoutProps<"/">) {
     .select("id", { count: "exact", head: true })
     .eq("status", "pending");
   const { count: newReports } = await admin().from("bug_reports").select("id", { count: "exact", head: true }).eq("status", "new");
+  // Before the marketplace part of the schema runs these tables do not exist: the counts just stay empty.
+  const { count: modelReports } = await admin().from("model_reports").select("id", { count: "exact", head: true }).eq("status", "new");
+  const { count: payouts } = await admin().from("maker_payouts").select("id", { count: "exact", head: true }).eq("status", "requested");
+  const badges: Record<string, number | null> = { "/pedidos": pending, "/reportes": newReports, "/marketplace": modelReports, "/retiros": payouts };
 
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col md:flex-row">
@@ -44,12 +50,7 @@ export default async function PanelLayout({ children }: LayoutProps<"/">) {
               className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium text-muted hover:bg-raised hover:text-white"
             >
               {link.label}
-              {link.href === "/pedidos" && !!pending && (
-                <span className="rounded-full bg-warn px-2 text-xs font-bold text-ink">{pending}</span>
-              )}
-              {link.href === "/reportes" && !!newReports && (
-                <span className="rounded-full bg-warn px-2 text-xs font-bold text-ink">{newReports}</span>
-              )}
+              {!!badges[link.href] && <span className="rounded-full bg-warn px-2 text-xs font-bold text-ink">{badges[link.href]}</span>}
             </Link>
           ))}
         </nav>

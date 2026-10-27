@@ -133,6 +133,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 Herramientas 3D →
               </a>
             )}
+            <Link href="/modelos" className="text-sm text-muted hover:text-white">
+              Modelos 3D (STL) →
+            </Link>
             <Link href="/tienda" className="text-sm text-muted hover:text-white">
               Tienda Kubbo →
             </Link>

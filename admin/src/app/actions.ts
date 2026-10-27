@@ -307,3 +307,53 @@ export async function setCatalogDomain(form: FormData) {
   }
   revalidatePath("/catalogos");
 }
+
+// ── Marketplace de modelos 3D ──
+
+export async function saveMarketSettings(form: FormData) {
+  await requireAdmin();
+  must(
+    await admin()
+      .from("market_settings")
+      .update({ fee_pct: number(form, "fee_pct"), min_payout: number(form, "min_payout"), hold_days: Math.round(number(form, "hold_days")) })
+      .eq("id", 1),
+  );
+  revalidatePath("/marketplace");
+}
+
+/** Hides a model from everyone except its author (copyright claims, offensive content…), or shows it again. */
+export async function setModelBlocked(form: FormData) {
+  await requireAdmin();
+  const blocked = flag(form, "blocked");
+  must(
+    await admin()
+      .from("models")
+      .update({ blocked, blocked_reason: blocked ? text(form, "reason") : "" })
+      .eq("id", text(form, "model_id")),
+  );
+  // Hiding a model settles its open reports.
+  if (blocked) must(await admin().from("model_reports").update({ status: "resolved" }).eq("model_id", text(form, "model_id")).eq("status", "new"));
+  revalidatePath("/marketplace");
+}
+
+export async function resolveReport(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("model_reports").update({ status: "resolved" }).eq("id", text(form, "id")));
+  revalidatePath("/marketplace");
+}
+
+/** Marks a payout request as paid (after sending the money) or rejected; the reference is shown to the seller. */
+export async function processPayout(form: FormData) {
+  await requireAdmin();
+  const status = text(form, "status") === "paid" ? "paid" : "rejected";
+  const reference = text(form, "reference");
+  if (status === "paid" && !reference) redirect(`/retiros?error=${encodeURIComponent("Escribe el folio o referencia del pago.")}`);
+  must(
+    await admin()
+      .from("maker_payouts")
+      .update({ status, reference, processed_at: new Date().toISOString() })
+      .eq("id", text(form, "id"))
+      .eq("status", "requested"),
+  );
+  revalidatePath("/retiros");
+}

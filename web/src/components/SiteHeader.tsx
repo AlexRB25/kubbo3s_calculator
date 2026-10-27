@@ -20,6 +20,9 @@ export function SiteHeader() {
           <Link href="/#funciones" className="hover:text-white">
             Funciones
           </Link>
+          <Link href="/modelos" className="hover:text-white">
+            Modelos 3D
+          </Link>
           <Link href="/tienda" className="hover:text-white">
             Tienda
           </Link>

@@ -27,6 +27,13 @@ const TOOLS: { slug: string; name: string; tagline: string; icon: IconName }[] =
   { slug: '', name: 'Mis archivos y todas las herramientas', tagline: 'La página principal de herramientas', icon: 'apps' },
 ];
 
+/** Pages of the 3D models marketplace (on the calculator's web site). */
+const MARKET: { page: string; name: string; tagline: string; icon: IconName }[] = [
+  { page: '/modelos', name: 'Modelos 3D', tagline: 'Descarga o compra STL y 3MF', icon: 'storefront' },
+  { page: '/modelos/panel', name: 'Vender mis modelos', tagline: 'Sube tus diseños, ventas y retiros', icon: 'cash' },
+  { page: '/modelos/biblioteca', name: 'Mi biblioteca', tagline: 'Compras, descargas y favoritos', icon: 'library' },
+];
+
 /**
  * Every Kubbo3D tool, opened in a browser inside the app (they run a 3D engine in the browser), with
  * the user already signed in: the web site makes a one-time link, so the app's session is never shared.
@@ -35,16 +42,18 @@ export default function ToolsScreen() {
   const [opening, setOpening] = useState('');
   const [error, setError] = useState('');
 
+  /** A tool (its slug) or a marketplace page ("/modelos…"). */
   async function open(slug: string) {
     setError('');
     if (!WEB_URL) return setError('Falta configurar EXPO_PUBLIC_WEB_URL (la dirección de la calculadora web).');
     setOpening(slug || 'inicio');
+    const target = slug.startsWith('/') ? { page: slug } : { tool: slug };
     try {
       const { data } = await supabase.auth.getSession();
       const response = await fetch(`${WEB_URL}/api/herramientas/enlace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token ?? ''}` },
-        body: JSON.stringify({ tool: slug }),
+        body: JSON.stringify(target),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok || !body?.url) throw new Error(body?.error ?? 'No se pudo abrir la herramienta.');
@@ -66,6 +75,16 @@ export default function ToolsScreen() {
         Se abren aquí mismo con tu cuenta. Sube tu modelo, ajusta y descarga el STL o el 3MF; también queda en Mis archivos para volver a bajarlo.
       </Muted>
       {error ? <ErrorText>{error}</ErrorText> : null}
+      {MARKET.map((item) => (
+        <ListItem
+          key={item.page}
+          left={<Ionicons name={item.icon} size={22} color={Colors.accent} />}
+          title={item.name}
+          subtitle={item.tagline}
+          onPress={opening ? undefined : () => open(item.page)}
+        />
+      ))}
+      <Muted>Herramientas</Muted>
       {TOOLS.map((tool) => (
         <ListItem
           key={tool.slug || 'inicio'}

@@ -2,26 +2,31 @@ import { adminClient } from "@/lib/server";
 
 /** Tool pages of the tools site the app may open ("" = its home). */
 const TOOL = /^[a-z0-9-]{0,40}$/;
+/** Pages of this site the app may open signed in: the 3D models marketplace. */
+const PAGE = /^\/modelos(\/[a-z0-9_/-]{0,80})?$/;
 
 /**
  * For the mobile app: a one-time link that opens a tool of the tools site already signed in.
- * Header: "Authorization: Bearer <the app's access token>". Body: {"tool": "llavero"}. Answers {"url"}.
+ * Header: "Authorization: Bearer <the app's access token>". Body: {"tool": "llavero"}, or {"page": "/modelos"}
+ * for a page of this site. Answers {"url"}.
  * The link carries a magic-link token (not the app's tokens), so the browser gets its own session
  * and the app's is never shared.
  */
 export async function POST(request: Request) {
+  const body = await request.json().catch(() => null);
+  const tool = String(body?.tool ?? "");
+  const page = body?.page == null ? null : String(body.page);
+  if (page != null ? !PAGE.test(page) : !TOOL.test(tool)) return Response.json({ error: "Herramienta inválida." }, { status: 400 });
   const toolsUrl = (process.env.TOOLS_URL || process.env.PB_TOOLS_URL || "").replace(/\/$/, "");
-  if (!toolsUrl) return Response.json({ error: "Falta la dirección del sitio de herramientas (TOOLS_URL)." }, { status: 503 });
+  const site = page != null ? (process.env.SITE_URL || new URL(request.url).origin).replace(/\/$/, "") : toolsUrl;
+  if (!site) return Response.json({ error: "Falta la dirección del sitio de herramientas (TOOLS_URL)." }, { status: 503 });
   if (!process.env.SUPABASE_SECRET_KEY || !process.env.PB_SUPABASE_URL) {
-    // Without the secret key the tools still open; the user signs in there.
-    return Response.json({ url: toolsUrl, signedIn: false });
+    // Without the secret key the page still opens; the user signs in there.
+    return Response.json({ url: `${site}${page ?? ""}`, signedIn: false });
   }
 
   const token = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!token) return Response.json({ error: "Inicia sesión en la app." }, { status: 401 });
-  const body = await request.json().catch(() => null);
-  const tool = String(body?.tool ?? "");
-  if (!TOOL.test(tool)) return Response.json({ error: "Herramienta inválida." }, { status: 400 });
 
   const db = adminClient();
   const { data: user, error } = await db.auth.getUser(token);
@@ -32,6 +37,6 @@ export async function POST(request: Request) {
   if (link.error || !hashed) return Response.json({ error: "No se pudo preparar la entrada a las herramientas." }, { status: 502 });
 
   // After "#": the browser keeps it to itself, so it never shows in a server log.
-  const next = encodeURIComponent(`/${tool}`);
-  return Response.json({ url: `${toolsUrl}/entrar/app#token_hash=${encodeURIComponent(hashed)}&next=${next}`, signedIn: true });
+  const next = encodeURIComponent(page ?? `/${tool}`);
+  return Response.json({ url: `${site}/entrar/app#token_hash=${encodeURIComponent(hashed)}&next=${next}`, signedIn: true });
 }
