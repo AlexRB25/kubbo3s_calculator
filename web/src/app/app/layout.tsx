@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavIcon, type NavIconName } from "@/components/app/NavIcon";
+import { TableLabels } from "@/components/app/TableLabels";
 import { DataProvider, useData } from "@/lib/data";
 import type { ShopRole } from "@/lib/types";
 import { useSession } from "@/lib/session";
@@ -273,6 +274,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </aside>
         <main className="flex min-w-0 flex-1 flex-col gap-6 p-4 md:p-8">
+          <TableLabels />
           <Gate>{children}</Gate>
         </main>
       </div>

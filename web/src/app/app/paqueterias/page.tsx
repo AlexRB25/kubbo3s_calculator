@@ -112,7 +112,7 @@ function CarrierForm({ carrier, onDone }: { carrier?: Carrier; onDone: () => voi
       )}
 
       <div className="overflow-x-auto">
-        <table className="table w-max text-sm">
+        <table className="table table-scroll w-max text-sm">
           <thead>
             <tr>
               <th>Peso hasta (kg)</th>
