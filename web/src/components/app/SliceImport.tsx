@@ -4,12 +4,16 @@ import { useState, type ChangeEvent } from "react";
 import { Modal } from "@/components/app/ui";
 import { filamentName } from "@/lib/costs";
 import { duration, weight } from "@/lib/format";
-import { matchFilament, matchPrinter, readSlice, type SliceReport } from "@/lib/slice";
+import { matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice, type SliceReport } from "@/lib/slice";
 import type { Filament, Printer } from "@/lib/types";
 
 /** One plate as it goes into the product form: grams already by the user's filament ids. */
-export type ImportedPlate = { name: string; minutes: number; grams: Record<string, number>; pieces: number };
-export type SliceImportResult = { printerId: string; plates: ImportedPlate[]; thumbnail: File | null };
+export type ImportedPlate = { name: string; minutes: number; grams: Record<string, number>; pieces: Record<string, number>; objects: number };
+/** `parts` are the distinct pieces found (copies grouped), named as the user left them; empty when the file does not say. */
+export type SliceImportResult = { printerId: string; plates: ImportedPlate[]; parts: { name: string; needed: number }[]; thumbnail: File | null };
+
+/** A distinct piece of the file: `key` is how the slicer calls it, `name` and `needed` what the user typed. */
+type PieceRow = { key: string; name: string; needed: string };
 
 type Review = {
   report: SliceReport;
@@ -17,6 +21,7 @@ type Review = {
   printerId: string;
   /** Slot of the slicer ("plate:slot") → the user's filament chosen for it. */
   choices: Record<string, string>;
+  pieces: PieceRow[];
 };
 
 const STEPS = [
@@ -47,7 +52,11 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
       for (const plate of report.plates) {
         for (const sliced of plate.filaments) choices[`${plate.index}:${sliced.slot}`] = matchFilament(sliced, filaments).filament?.id ?? "";
       }
-      setReview({ report, fileName: file.name, printerId: matchPrinter(report.printerModel, printers)?.id ?? "", choices });
+      // Copies of one object are one piece: 18 objects can be 6 bodies, 6 right hands and 6 left hands.
+      const totals = pieceGroups(report.plates.flatMap((plate) => plate.objects));
+      const needed = neededPerProduct(totals.map((group) => group.count));
+      const pieces = totals.map((group, index) => ({ key: group.name, name: group.name, needed: String(needed[index]) }));
+      setReview({ report, fileName: file.name, printerId: matchPrinter(report.printerModel, printers)?.id ?? "", choices, pieces });
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -58,6 +67,13 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
   function apply() {
     if (!review) return;
     const { report, choices, printerId } = review;
+    // Pieces renamed alike are one piece.
+    const nameOf = (key: string) => review.pieces.find((piece) => piece.key === key)?.name.trim() || key;
+    const parts: SliceImportResult["parts"] = [];
+    for (const piece of review.pieces) {
+      const name = nameOf(piece.key);
+      if (!parts.some((part) => part.name.toLowerCase() === name.toLowerCase())) parts.push({ name, needed: Math.max(1, Math.round(Number(piece.needed) || 1)) });
+    }
     const plates = report.plates.map((plate) => {
       const grams: Record<string, number> = {};
       for (const sliced of plate.filaments) {
@@ -65,15 +81,23 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
         // Two slots with the same spool of the user add up.
         if (id) grams[id] = Math.round(((grams[id] ?? 0) + sliced.grams) * 100) / 100;
       }
-      return { name: report.plates.length > 1 ? `Placa ${plate.index}` : "Placa 1", minutes: Math.round(plate.minutes), grams, pieces: plate.objects.length };
+      const pieces: Record<string, number> = {};
+      for (const group of pieceGroups(plate.objects)) {
+        const name = parts.find((part) => part.name.toLowerCase() === nameOf(group.name).toLowerCase())?.name ?? group.name;
+        pieces[name] = (pieces[name] ?? 0) + group.count;
+      }
+      return { name: report.plates.length > 1 ? `Placa ${plate.index}` : "Placa 1", minutes: Math.round(plate.minutes), grams, pieces, objects: plate.objects.length };
     });
     const png = report.plates.find((plate) => plate.thumbnail)?.thumbnail;
     const thumbnail = png ? new File([png.slice()], "placa.png", { type: "image/png" }) : null;
-    onApply({ printerId, plates, thumbnail });
+    onApply({ printerId, plates, parts, thumbnail });
     setReview(null);
   }
 
   const missing = review ? Object.values(review.choices).some((id) => !id) : false;
+  const objectCount = review ? review.report.plates.reduce((total, plate) => total + plate.objects.length, 0) : 0;
+  const setPiece = (index: number, change: Partial<PieceRow>) =>
+    review && setReview({ ...review, pieces: review.pieces.map((piece, position) => (position === index ? { ...piece, ...change } : piece)) });
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-dashed border-brand/50 bg-brand/5 p-3">
@@ -172,6 +196,36 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
                 })}
               </div>
             ))}
+
+            {review.pieces.length > 0 && (
+              <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+                <p className="font-semibold">
+                  {objectCount} {objectCount === 1 ? "objeto" : "objetos"} ·{" "}
+                  {review.pieces.length === 1 ? "1 pieza" : `${review.pieces.length} piezas distintas`}
+                  {objectCount > review.pieces.length && " (las copias se juntan)"}
+                </p>
+                <p className="text-xs text-muted">
+                  Ponle a cada pieza el nombre que quieras y cuántas lleva un producto. Si dos son la misma, ponles el mismo nombre y se juntan.
+                </p>
+                {review.pieces.map((piece, index) => {
+                  const copies = review.report.plates
+                    .map((plate) => ({ plate, count: pieceGroups(plate.objects).find((group) => group.name === piece.key)?.count ?? 0 }))
+                    .filter((item) => item.count > 0)
+                    .map((item) => (review.report.plates.length > 1 ? `×${item.count} en placa ${item.plate.index}` : `×${item.count}`))
+                    .join(", ");
+                  return (
+                    <div key={piece.key} className="flex flex-wrap items-center gap-2 text-sm">
+                      <input className="input min-w-40 flex-1" value={piece.name} aria-label={`Nombre de ${piece.key}`} onChange={(event) => setPiece(index, { name: event.target.value })} />
+                      <span className="w-32 text-muted">{copies}</span>
+                      <label className="flex items-center gap-1 text-xs text-muted">
+                        <input className="input w-16" inputMode="numeric" value={piece.needed} onChange={(event) => setPiece(index, { needed: event.target.value })} />
+                        por producto
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <p className="text-xs text-muted">
               Los gramos del laminador ya traen la purga y la torre de los cambios de color. Tu merma de Ajustes (las piezas que salen mal) se sigue sumando

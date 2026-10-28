@@ -10,7 +10,7 @@ import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Mu
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { costPerGram, filamentName, packagingName, overheadPerPiece, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { field, money, num, weight } from '@/lib/format';
-import { matchFilament, matchPrinter, readSlice } from '@/lib/slice';
+import { matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice } from '@/lib/slice';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
 import type { Product } from '@/lib/types';
 import { useData, useSave } from '@/store/data';
@@ -89,10 +89,18 @@ export default function ProductFormScreen() {
       if (picked.canceled) return;
       const file = picked.result;
       const report = readSlice(new Uint8Array(await file.arrayBuffer()), file.name);
-      const pieces = Math.max(1, report.plates.reduce((total, plate) => total + plate.objects.length, 0));
+      // Copies of one object are one piece; a product takes one set (6 bodies + 6 right + 6 left hands → 6 products).
+      const groups = pieceGroups(report.plates.flatMap((plate) => plate.objects));
+      const needed = neededPerProduct(groups.map((group) => group.count));
+      const objects = groups.reduce((total, group) => total + group.count, 0);
+      const pieces = Math.max(1, Math.floor(objects / Math.max(1, needed.reduce((total, count) => total + count, 0))));
       const totalMinutes = report.plates.reduce((total, plate) => total + plate.minutes, 0) / pieces;
       const grams: Record<string, number> = {};
-      const notes = [`${report.slicer}: ${pieces} ${pieces === 1 ? 'pieza' : 'piezas'}; tiempo y gramos divididos entre ellas.`, ...report.warnings];
+      const found =
+        groups.length > 1
+          ? `${objects} objetos, ${groups.length} piezas distintas (${groups.map((group, index) => `${group.name} ×${group.count}${needed[index] > 1 ? `, ${needed[index]} por producto` : ''}`).join('; ')}) → ${pieces} ${pieces === 1 ? 'producto' : 'productos'}`
+          : `${pieces} ${pieces === 1 ? 'pieza' : 'piezas'}`;
+      const notes = [`${report.slicer}: ${found}; tiempo y gramos divididos entre ${pieces === 1 ? 'él' : 'ellos'}.`, ...report.warnings];
       for (const plate of report.plates) {
         for (const sliced of plate.filaments) {
           const { filament, close } = matchFilament(sliced, filaments);

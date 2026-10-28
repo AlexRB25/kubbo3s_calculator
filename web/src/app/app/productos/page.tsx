@@ -186,14 +186,35 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const setPart = (index: number, change: Partial<PartRow>) => setPartRows(partRows.map((row, position) => (position === index ? { ...row, ...change } : row)));
 
   /** Fills the plates of one printer from a sliced file; empty plates are replaced, filled ones kept. */
-  function applySlice({ printerId, plates: imported, thumbnail }: SliceImportResult) {
+  function applySlice({ printerId, plates: imported, parts: found, thumbnail }: SliceImportResult) {
+    // The pieces found become the product's: same name → same piece; the single unnamed one takes the first.
+    let pieceRows = partRows;
+    const idOf: Record<string, string> = {};
+    for (const part of found) {
+      const same = pieceRows.find((row) => row.name.trim().toLowerCase() === part.name.toLowerCase());
+      const blank = pieceRows.length === 1 && !pieceRows[0].name.trim() ? pieceRows[0] : null;
+      if (same) idOf[part.name] = same.id;
+      else if (blank) {
+        idOf[part.name] = blank.id;
+        pieceRows = [{ ...blank, name: part.name, needed: String(part.needed) }];
+      } else {
+        const id = newId();
+        idOf[part.name] = id;
+        pieceRows = [...pieceRows, { id, name: part.name, needed: String(part.needed) }];
+      }
+    }
+    if (pieceRows !== partRows) setPartRows(pieceRows);
+    const piecesOf = (plate: SliceImportResult["plates"][number]): Record<string, string> => {
+      if (found.length) return Object.fromEntries(Object.entries(plate.pieces).map(([name, count]) => [idOf[name], String(count)]));
+      // The file does not name its objects: with a single piece, every object is one.
+      return pieceRows.length === 1 && plate.objects > 0 ? { [pieceRows[0].id]: String(plate.objects) } : {};
+    };
     const rows: PlateRow[] = imported.map((plate) => ({
       name: plate.name,
       hours: field(Math.floor(plate.minutes / 60)),
       minutes: field(plate.minutes % 60),
       grams: Object.fromEntries(Object.entries(plate.grams).map(([id, grams]) => [id, field(grams)])),
-      // With a single piece, every object on the plate is one; with several, the user says which is which.
-      parts: partRows.length === 1 && plate.pieces > 0 ? { [partRows[0].id]: String(plate.pieces) } : {},
+      parts: piecesOf(plate),
     }));
     const current = (plates[printerId] ?? []).filter((plate) => plate.hours || plate.minutes || Object.values(plate.grams).some((grams) => num(grams) > 0));
     // Numbered after the plates the printer already had.

@@ -209,3 +209,38 @@ export function matchPrinter(model: string, printers: Printer[]): Printer | null
     null
   );
 }
+
+// ── Pieces: copies of the same object on a plate are one piece ──
+
+export type PieceGroup = { name: string; count: number };
+
+/** "Cuerpo.stl", "Cuerpo.stl_2", "Cuerpo (3)", "Cuerpo copy" → "Cuerpo": the slicers name their copies like this. */
+export function pieceName(object: string) {
+  const name = object
+    .trim()
+    .replace(/\.(stl|3mf|obj|step|stp|amf)(?:[_ -]?\d+)?$/i, '')
+    .replace(/\s*\(\d+\)$/, '')
+    .replace(/[\s_-]*(copy|copia)(?:[\s_-]*\d+)?$/i, '')
+    .trim();
+  return name || 'Pieza';
+}
+
+/** The distinct pieces of a plate and how many of each it prints, in order of appearance. */
+export function pieceGroups(objects: string[]): PieceGroup[] {
+  const groups: PieceGroup[] = [];
+  for (const object of objects) {
+    const name = pieceName(object);
+    const group = groups.find((item) => item.name.toLowerCase() === name.toLowerCase());
+    if (group) group.count += 1;
+    else groups.push({ name, count: 1 });
+  }
+  return groups;
+}
+
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+
+/** How many of each piece one product takes, guessed from the copies printed (6 bodies and 12 hands → 1 and 2). */
+export function neededPerProduct(counts: number[]) {
+  const divisor = counts.filter((count) => count > 0).reduce(gcd, 0) || 1;
+  return counts.map((count) => Math.max(1, Math.round(count / divisor)));
+}
