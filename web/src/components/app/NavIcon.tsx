@@ -4,7 +4,7 @@ const circle = (cx: number, cy: number, r: number) => `M${cx - r} ${cy}a${r} ${r
 /** Line icons of the panel's pages (24×24, stroked). */
 const PATHS = {
   resumen: "M3 3h7v9H3z M14 3h7v5h-7z M14 12h7v9h-7z M3 16h7v5H3z",
-  inventario: "M21 8l-9-5-9 5 9 5 9-5z M3 8v8l9 5 9-5V8 M12 13v8",
+  inventario: "M9 3h6v4H9z M9 5H6a1 1 0 0 0-1 1v15h14V6a1 1 0 0 0-1-1h-3 M9 12h6 M9 16h6",
   productos: "M12 2l9 5v10l-9 5-9-5V7z M3 7l9 5 9-5 M12 12v10",
   catalogo: "M3 9l1.5-5h15L21 9 M3 9c0 1.7 1.3 3 3 3s3-1.3 3-3c0 1.7 1.3 3 3 3s3-1.3 3-3c0 1.7 1.3 3 3 3s3-1.3 3-3 M5 12v9h14v-9 M10 21v-5h4v5",
   filamento: `${circle(12, 12, 9)} ${circle(12, 12, 3)} M12 3v6 M12 15v6`,
