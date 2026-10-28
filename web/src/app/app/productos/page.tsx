@@ -976,18 +976,22 @@ export default function ProductsPage() {
                       if (!price) {
                         return (
                           <td key={channel.id} className="num whitespace-nowrap text-sm text-muted">
-                            sugerido {money(suggestedShipped)}
-                            {tip}
-                            {suggestedShipped > 0 && <div className={`text-xs ${tone(estimated)}`}>gana ~{money(estimated)} estimado</div>}
+                            <div>
+                              sugerido {money(suggestedShipped)}
+                              {tip}
+                              {suggestedShipped > 0 && <div className={`text-xs ${tone(estimated)}`}>gana ~{money(estimated)} estimado</div>}
+                            </div>
                           </td>
                         );
                       }
                       const shipped = unitProfit(price, cost, channel, shippingAt(price));
                       return (
                         <td key={channel.id} className="num whitespace-nowrap">
-                          {money(price)}
-                          {tip}
-                          <div className={`text-xs ${tone(shipped)}`}>gana {money(shipped)} con envío</div>
+                          <div>
+                            {money(price)}
+                            {tip}
+                            <div className={`text-xs ${tone(shipped)}`}>gana {money(shipped)} con envío</div>
+                          </div>
                         </td>
                       );
                     })}
