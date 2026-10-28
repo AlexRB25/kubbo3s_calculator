@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { CategoryPicker } from "@/components/app/CategoryPicker";
 import { InfoTip, TipLine } from "@/components/app/InfoTip";
+import { SliceImport, type SliceImportResult } from "@/components/app/SliceImport";
 import { Empty, Line, Modal, PageHeader, Switch, TableCard } from "@/components/app/ui";
 import {
   channelFees,
@@ -183,6 +184,26 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     setPlates({ ...plates, [printerId]: plates[printerId].map((plate, position) => (position === index ? { ...plate, ...change } : plate)) });
 
   const setPart = (index: number, change: Partial<PartRow>) => setPartRows(partRows.map((row, position) => (position === index ? { ...row, ...change } : row)));
+
+  /** Fills the plates of one printer from a sliced file; empty plates are replaced, filled ones kept. */
+  function applySlice({ printerId, plates: imported, thumbnail }: SliceImportResult) {
+    const rows: PlateRow[] = imported.map((plate) => ({
+      name: plate.name,
+      hours: field(Math.floor(plate.minutes / 60)),
+      minutes: field(plate.minutes % 60),
+      grams: Object.fromEntries(Object.entries(plate.grams).map(([id, grams]) => [id, field(grams)])),
+      // With a single piece, every object on the plate is one; with several, the user says which is which.
+      parts: partRows.length === 1 && plate.pieces > 0 ? { [partRows[0].id]: String(plate.pieces) } : {},
+    }));
+    const current = (plates[printerId] ?? []).filter((plate) => plate.hours || plate.minutes || Object.values(plate.grams).some((grams) => num(grams) > 0));
+    // Numbered after the plates the printer already had.
+    const numbered = [...current, ...rows].map((plate, index) => (current.length && /^Placa \d+$/.test(plate.name) ? { ...plate, name: `Placa ${index + 1}` } : plate));
+    setPlates({ ...plates, [printerId]: numbered });
+    if (!printerIds.includes(printerId)) setPrinterIds([...printerIds, printerId]);
+    const ids = imported.flatMap((plate) => Object.keys(plate.grams));
+    setUsed([...new Set([...used.filter(Boolean), ...ids])]);
+    if (thumbnail && photos.length === 0) setPhotos([{ key: `placa-${Date.now()}`, file: thumbnail, url: URL.createObjectURL(thumbnail) }]);
+  }
 
   function togglePrinter(printerId: string, on: boolean) {
     setPrinterIds(on ? [...printerIds, printerId] : printerIds.filter((item) => item !== printerId));
@@ -410,6 +431,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           </p>
         ) : (
           <>
+            <SliceImport filaments={filaments} printers={printers} onApply={applySlice} />
             <p className="text-xs text-muted">
               Elige en qué impresoras sale. En cada placa anota qué piezas salen y cuántas (por ejemplo 4 brazos y 5 colas), su tiempo y los gramos de cada
               filamento como te los da el laminador.

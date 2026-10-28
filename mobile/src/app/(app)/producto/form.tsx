@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -9,6 +10,7 @@ import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Mu
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { costPerGram, filamentName, packagingName, overheadPerPiece, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { field, money, num, weight } from '@/lib/format';
+import { matchFilament, matchPrinter, readSlice } from '@/lib/slice';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
 import type { Product } from '@/lib/types';
 import { useData, useSave } from '@/store/data';
@@ -71,6 +73,49 @@ export default function ProductFormScreen() {
         extra_cost: num(extraCost),
       };
   const cost = productCost({ ...draft, materials: product?.materials }, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile));
+
+  // What the last sliced file said, shown under the recipe so the user can check the matches.
+  const [sliceNote, setSliceNote] = useState<string[]>([]);
+
+  /**
+   * Fills the recipe from a sliced 3MF or G-code: time and grams per piece (the plate's totals ÷ its pieces), the
+   * filament of the nearest colour for each one the slicer used and the printer of that model. The slicer's grams
+   * already include purge; the waste rules of Ajustes (pieces that fail) still add on top.
+   */
+  async function importSlice() {
+    setSliceNote([]);
+    try {
+      const picked = await File.pickFileAsync();
+      if (picked.canceled) return;
+      const file = picked.result;
+      const report = readSlice(new Uint8Array(await file.arrayBuffer()), file.name);
+      const pieces = Math.max(1, report.plates.reduce((total, plate) => total + plate.objects.length, 0));
+      const totalMinutes = report.plates.reduce((total, plate) => total + plate.minutes, 0) / pieces;
+      const grams: Record<string, number> = {};
+      const notes = [`${report.slicer}: ${pieces} ${pieces === 1 ? 'pieza' : 'piezas'}; tiempo y gramos divididos entre ellas.`, ...report.warnings];
+      for (const plate of report.plates) {
+        for (const sliced of plate.filaments) {
+          const { filament, close } = matchFilament(sliced, filaments);
+          if (!filament) {
+            notes.push(`No tienes filamentos para ${sliced.type} ${sliced.color}: da de alta uno.`);
+            continue;
+          }
+          grams[filament.id] = (grams[filament.id] ?? 0) + sliced.grams / pieces;
+          if (!close) notes.push(`${sliced.type} ${sliced.color} → ${filamentName(filament)}: color o material distinto, revísalo.`);
+        }
+      }
+      setRecipe(Object.entries(grams).map(([filament_id, value]) => ({ filament_id, grams: String(Math.round(value * 100) / 100) })));
+      setHours(field(Math.floor(Math.round(totalMinutes) / 60)));
+      setMinutes(field(Math.round(totalMinutes) % 60));
+      const printer = matchPrinter(report.printerModel, printers);
+      if (printer && !printerIds.includes(printer.id)) setPrinterIds([...printerIds, printer.id]);
+      if (!printer) notes.push(report.printerModel ? `No tienes registrada una ${report.printerModel}: elige abajo en cuál sale.` : 'Elige abajo en qué impresora sale.');
+      notes.push('Tu merma de Ajustes (piezas que salen mal) se sigue sumando aparte.');
+      setSliceNote(notes);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'No se pudo leer el archivo.');
+    }
+  }
 
   const setRow = (index: number, change: Partial<RecipeRow>) =>
     setRecipe(recipe.map((row, position) => (position === index ? { ...row, ...change } : row)));
@@ -181,6 +226,18 @@ export default function ProductFormScreen() {
       ) : (
         <>
       <Heading>Filamento por pieza</Heading>
+      <Button variant="secondary" icon="document-attach" label="Importar 3MF o G-code laminado" onPress={importSlice} />
+      <Muted>
+        En Bambu Studio u OrcaSlicer: lamina, y en el menú de «Imprimir placa» elige «Exportar la placa de impresión actual». Llena gramos, colores, tiempo e
+        impresora.
+      </Muted>
+      {sliceNote.length > 0 && (
+        <Card>
+          {sliceNote.map((note) => (
+            <Muted key={note}>{note}</Muted>
+          ))}
+        </Card>
+      )}
       {recipe.map((row, index) => (
         <Row key={index} style={{ alignItems: 'flex-end' }}>
           <Select
