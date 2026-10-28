@@ -4,7 +4,7 @@ import { useState, type ChangeEvent } from "react";
 import { Modal } from "@/components/app/ui";
 import { filamentName } from "@/lib/costs";
 import { duration, weight } from "@/lib/format";
-import { matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice, type SliceReport } from "@/lib/slice";
+import { fitsPrinter, matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice, type SliceReport } from "@/lib/slice";
 import type { Filament, Printer } from "@/lib/types";
 
 /** One plate as it goes into the product form: grams already by the user's filament ids. */
@@ -95,6 +95,8 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
   }
 
   const missing = review ? Object.values(review.choices).some((id) => !id) : false;
+  // The G-code is made for one model: other printers cannot print it.
+  const fits = review ? printers.filter((printer) => fitsPrinter(review.report.printerModel, printer)) : [];
   const objectCount = review ? review.report.plates.reduce((total, plate) => total + plate.objects.length, 0) : 0;
   const setPiece = (index: number, change: Partial<PieceRow>) =>
     review && setReview({ ...review, pieces: review.pieces.map((piece, position) => (position === index ? { ...piece, ...change } : piece)) });
@@ -144,18 +146,30 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
 
             <label className="label">
               Impresora
-              <select className="input" value={review.printerId} onChange={(event) => setReview({ ...review, printerId: event.target.value })}>
-                <option value="">Elegir…</option>
-                {printers.map((printer) => (
-                  <option key={printer.id} value={printer.id}>
-                    {printer.name}
-                  </option>
-                ))}
+              <select
+                className="input"
+                value={review.printerId}
+                disabled={fits.length === 0}
+                onChange={(event) => setReview({ ...review, printerId: event.target.value })}
+              >
+                <option value="">{fits.length ? "Elegir…" : "Sin impresoras compatibles"}</option>
+                {printers.map((printer) => {
+                  const fit = fits.includes(printer);
+                  return (
+                    <option key={printer.id} value={printer.id} disabled={!fit} className={fit ? undefined : "text-muted"}>
+                      {printer.name}
+                      {fit ? "" : " · no compatible"}
+                    </option>
+                  );
+                })}
               </select>
-              {!review.printerId && (
-                <span className="font-normal text-warn">
-                  {review.report.printerModel ? `No tienes registrada una ${review.report.printerModel}: elige en cuál la imprimes.` : "Elige en qué impresora sale."}
+              {fits.length === 0 ? (
+                <span role="alert" className="font-normal text-bad">
+                  No tienes impresoras compatibles para este archivo{review.report.printerModel && ` (se laminó para ${review.report.printerModel})`}. Lamínalo para una
+                  de tus impresoras o da de alta esa impresora en Impresoras.
                 </span>
+              ) : (
+                !review.printerId && <span className="font-normal text-warn">Elige en qué impresora sale.</span>
               )}
             </label>
 

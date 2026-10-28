@@ -89,6 +89,12 @@ export default function ProductFormScreen() {
       if (picked.canceled) return;
       const file = picked.result;
       const report = readSlice(new Uint8Array(await file.arrayBuffer()), file.name);
+      // The G-code is made for one model: without a printer of it, the file cannot be printed here.
+      const printer = matchPrinter(report.printerModel, printers);
+      if (report.printerModel && !printer) {
+        setSliceNote([`No tienes impresoras compatibles para este archivo (se laminó para ${report.printerModel}). Lamínalo para una de tus impresoras o da de alta esa impresora.`]);
+        return;
+      }
       // Copies of one object are one piece; a product takes one set (6 bodies + 6 right + 6 left hands → 6 products).
       const groups = pieceGroups(report.plates.flatMap((plate) => plate.objects));
       const needed = neededPerProduct(groups.map((group) => group.count));
@@ -115,9 +121,8 @@ export default function ProductFormScreen() {
       setRecipe(Object.entries(grams).map(([filament_id, value]) => ({ filament_id, grams: String(Math.round(value * 100) / 100) })));
       setHours(field(Math.floor(Math.round(totalMinutes) / 60)));
       setMinutes(field(Math.round(totalMinutes) % 60));
-      const printer = matchPrinter(report.printerModel, printers);
       if (printer && !printerIds.includes(printer.id)) setPrinterIds([...printerIds, printer.id]);
-      if (!printer) notes.push(report.printerModel ? `No tienes registrada una ${report.printerModel}: elige abajo en cuál sale.` : 'Elige abajo en qué impresora sale.');
+      if (!printer) notes.push('El archivo no dice para qué impresora es: elige abajo en cuál sale.');
       notes.push('Tu merma de Ajustes (piezas que salen mal) se sigue sumando aparte.');
       setSliceNote(notes);
     } catch (caught) {

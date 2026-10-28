@@ -198,16 +198,23 @@ export function matchFilament(sliced: SlicedFilament, filaments: Filament[]): { 
 
 const plain = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-/** The user's printer of the model the file was sliced for ("Bambu Lab A1" ≠ "Bambu Lab A1 mini"). */
-export function matchPrinter(model: string, printers: Printer[]): Printer | null {
+/**
+ * Whether a printer can print a file sliced for `model` ("Bambu Lab A1" ≠ "Bambu Lab A1 mini"): the G-code is made
+ * for that machine. A file that does not say its printer fits any.
+ */
+export function fitsPrinter(model: string, printer: Printer) {
   const wanted = plain(model);
-  if (!wanted) return null;
-  return (
-    printers.find((printer) => plain(`${printer.brand}${printer.model}`) === wanted) ??
-    printers.find((printer) => plain(printer.model) && wanted.endsWith(plain(printer.model))) ??
-    printers.find((printer) => plain(printer.name).includes(wanted)) ??
-    null
-  );
+  if (!wanted) return true;
+  const own = plain(printer.model);
+  if (own) return plain(`${printer.brand}${printer.model}`) === wanted || (wanted.endsWith(own) && wanted.includes(plain(printer.brand))) || wanted === own;
+  // Printers without a model: their name without the device id ("Bambu Lab A1 · 605").
+  return plain(printer.name.split('·')[0]) === wanted;
+}
+
+/** The user's first printer of the model the file was sliced for. */
+export function matchPrinter(model: string, printers: Printer[]): Printer | null {
+  if (!plain(model)) return null;
+  return printers.find((printer) => fitsPrinter(model, printer)) ?? null;
 }
 
 // ── Pieces: copies of the same object on a plate are one piece ──
@@ -242,5 +249,7 @@ const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
 /** How many of each piece one product takes, guessed from the copies printed (6 bodies and 12 hands → 1 and 2). */
 export function neededPerProduct(counts: number[]) {
   const divisor = counts.filter((count) => count > 0).reduce(gcd, 0) || 1;
-  return counts.map((count) => Math.max(1, Math.round(count / divisor)));
+  const needed = counts.map((count) => Math.max(1, Math.round(count / divisor)));
+  // Counts with no clear ratio (7, 12 and 1) are not sets of one product: one of each, the user corrects it.
+  return Math.max(...needed) > 4 ? counts.map(() => 1) : needed;
 }
