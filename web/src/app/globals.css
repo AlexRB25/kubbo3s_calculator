@@ -99,7 +99,8 @@ body {
     @apply flex items-center justify-end gap-x-1 border-0 px-0 py-1 text-right;
     max-width: none;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
   .table:not(.table-scroll) td::before {
     content: attr(data-label);
