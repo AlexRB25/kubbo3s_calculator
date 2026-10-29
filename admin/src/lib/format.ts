@@ -22,3 +22,6 @@ export const dateTime = (iso: string) =>
 /** "2026-10-09" -> "9 oct" */
 export const shortDay = (day: string) =>
   new Date(`${day}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+
+/** "https://x.supabase.co//storage/…" -> "https://x.supabase.co/storage/…" (photos saved while PB_SUPABASE_URL ended in "/"). */
+export const cleanUrl = (url: string) => url.replace(/([^:/])\/{2,}/g, "$1/");

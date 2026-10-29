@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { createUpload } from "@/app/actions";
 import { browserClient } from "@/lib/supabase/browser";
+import { cleanUrl } from "@/lib/format";
 
 const publicUrl = (bucket: string, path: string) => `${process.env.PB_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 
@@ -22,7 +23,7 @@ export function ImagesInput({
   /** Only one photo: a new one replaces it. */
   single?: boolean;
 }) {
-  const [urls, setUrls] = useState(defaultValue);
+  const [urls, setUrls] = useState(() => defaultValue.map(cleanUrl));
   const [status, setStatus] = useState("");
 
   async function handleFiles(files: FileList | null) {

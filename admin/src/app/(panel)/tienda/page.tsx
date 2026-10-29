@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { deleteStoreCategory, saveStoreCategory } from "@/app/actions";
-import { count, money } from "@/lib/format";
+import { cleanUrl, count, money } from "@/lib/format";
 import { admin, must } from "@/lib/supabase/admin";
 
 type Product = {
@@ -51,7 +51,7 @@ export default async function StoreAdminPage() {
                 <td>
                   <div className="flex items-center gap-3">
                     <div className="relative size-10 shrink-0 overflow-hidden rounded-lg bg-raised">
-                      {product.images[0] && <Image src={product.images[0]} alt="" fill sizes="40px" className="object-cover" />}
+                      {product.images[0] && <Image src={cleanUrl(product.images[0])} alt="" fill sizes="40px" className="object-cover" />}
                     </div>
                     {product.name}
                   </div>

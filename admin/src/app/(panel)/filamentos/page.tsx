@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { money } from "@/lib/format";
+import { cleanUrl, money } from "@/lib/format";
 import { admin, must } from "@/lib/supabase/admin";
 
 export type CatalogFilament = {
@@ -63,7 +63,7 @@ export default async function FilamentCatalogPage() {
                   <td>
                     <div className="flex items-center gap-3">
                       <div className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-line" style={{ background: filament.color_hex }}>
-                        {filament.image_url && <Image src={filament.image_url} alt="" fill sizes="48px" className="object-cover" />}
+                        {filament.image_url && <Image src={cleanUrl(filament.image_url)} alt="" fill sizes="48px" className="object-cover" />}
                       </div>
                       <div>
                         <p className="font-semibold">

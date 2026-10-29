@@ -4,7 +4,8 @@ const nextConfig: NextConfig = {
   // Browser-visible variables are named PB_* instead of NEXT_PUBLIC_*, so Next.js only inlines
   // the ones listed here.
   env: {
-    PB_SUPABASE_URL: process.env.PB_SUPABASE_URL ?? "",
+    // Without a trailing "/", or photo URLs get "//storage" and next/image rejects them.
+    PB_SUPABASE_URL: (process.env.PB_SUPABASE_URL ?? "").replace(/\/+$/, ""),
     PB_SUPABASE_PUBLISHABLE_KEY: process.env.PB_SUPABASE_PUBLISHABLE_KEY ?? "",
   },
   images: {

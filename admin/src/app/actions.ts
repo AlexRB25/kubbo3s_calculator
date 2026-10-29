@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { admin, must } from "@/lib/supabase/admin";
 import { serverClient } from "@/lib/supabase/server";
+import { cleanUrl } from "@/lib/format";
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const number = (form: FormData, key: string) => Number(text(form, key) || 0);
@@ -48,7 +49,7 @@ export async function saveStoreProduct(form: FormData) {
     price: number(form, "price"),
     compare_price: optionalNumber(form, "compare_price"),
     stock: Math.round(number(form, "stock")),
-    images: form.getAll("images").map(String).filter(Boolean),
+    images: form.getAll("images").map(String).filter(Boolean).map(cleanUrl),
     active: flag(form, "active"),
     featured: flag(form, "featured"),
   };
@@ -204,7 +205,7 @@ export async function saveCatalogFilament(form: FormData) {
     material: text(form, "material"),
     color_name: text(form, "color_name"),
     color_hex: text(form, "color_hex") || "#9A9AA8",
-    image_url: form.getAll("images").map(String).filter(Boolean)[0] ?? null,
+    image_url: form.getAll("images").map(String).filter(Boolean).map(cleanUrl)[0] ?? null,
     spool_g: number(form, "spool_g") || 1000,
     reference_price_kg: number(form, "reference_price_kg"),
     nozzle_temp: text(form, "nozzle_temp"),
