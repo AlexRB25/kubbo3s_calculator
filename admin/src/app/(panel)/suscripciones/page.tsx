@@ -1,12 +1,12 @@
 import { cancelSubscription, grantSubscription } from "@/app/actions";
-import { dateTime, money } from "@/lib/format";
+import { dateTime } from "@/lib/format";
 import { admin, must } from "@/lib/supabase/admin";
 
 type Subscription = {
   id: string;
   user_id: string;
   plan_id: string;
-  source: "mercadopago" | "admin";
+  source: "mercadopago" | "admin" | "stripe";
   status: "pending" | "authorized" | "paused" | "cancelled";
   lifetime: boolean;
   amount: number;
@@ -40,7 +40,7 @@ function standing(subscription: Subscription, now: number) {
   return { label: MP_STATUS[subscription.status], tone: subscription.status === "authorized" ? "text-money" : "text-muted", live: false };
 }
 
-/** Plans given by hand (tests, courtesies) next to the ones paid with Mercado Pago. */
+/** Plans given by hand (tests, courtesies) next to the ones paid with Stripe (and the old ones of Mercado Pago). */
 export default async function SubscriptionsPage({ searchParams }: PageProps<"/suscripciones">) {
   const params = await searchParams;
   const query = String(params.q ?? "").trim();
@@ -152,13 +152,15 @@ export default async function SubscriptionsPage({ searchParams }: PageProps<"/su
                     </td>
                     <td>{plan?.name ?? subscription.plan_id}</td>
                     <td className="text-muted">
-                      {subscription.source === "admin" ? "Asignada" : `Mercado Pago · ${money(subscription.amount)} ${subscription.currency}`}
+                      {subscription.source === "admin"
+                        ? "Asignada"
+                        : `${subscription.source === "stripe" ? "Stripe" : "Mercado Pago"} · ${subscription.amount} ${subscription.currency}`}
                     </td>
                     <td className={state.tone}>{state.label}</td>
                     <td className="whitespace-nowrap text-muted">
                       {subscription.lifetime
                         ? "Nunca"
-                        : subscription.source === "mercadopago" && subscription.status === "authorized" && subscription.next_payment_date
+                        : subscription.source !== "admin" && subscription.status === "authorized" && subscription.next_payment_date
                           ? `Próximo cobro ${dateTime(subscription.next_payment_date)}`
                           : subscription.paid_until
                             ? dateTime(subscription.paid_until)

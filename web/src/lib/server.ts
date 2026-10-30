@@ -1,12 +1,14 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Currency } from "./currency";
+import { chargeFromMxn, stripe } from "./stripe";
 
 // Server-only helpers for charging store orders. Nothing here may be imported from a client component.
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** True when the site can charge online; otherwise checkout falls back to manual payment instructions. */
+/** True when the site can charge online (Stripe); otherwise checkout falls back to manual payment instructions. */
 export const paymentsConfigured = () =>
-  Boolean(process.env.MP_ACCESS_TOKEN && process.env.SUPABASE_SECRET_KEY && process.env.PB_SUPABASE_URL);
+  Boolean(process.env.STRIPE_SECRET_KEY && process.env.SUPABASE_SECRET_KEY && process.env.PB_SUPABASE_URL);
 
 let client: SupabaseClient | undefined;
 
@@ -17,87 +19,87 @@ export function adminClient(): SupabaseClient {
   }));
 }
 
-/** Calls the Mercado Pago API with the seller's access token. */
-export function mercadoPago(path: string, init?: RequestInit) {
-  return fetch(`https://api.mercadopago.com${path}`, {
-    ...init,
-    cache: "no-store",
-    headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, "Content-Type": "application/json", ...init?.headers },
-  });
-}
+/** What a Stripe Checkout Session pays for, in its metadata: a store order or a marketplace purchase. */
+export type CheckoutKind = "order" | "model";
 
-type ConfirmResult = "paid" | "ignored" | "retry";
+type Confirm = { result: "paid" | "waiting" | "ignored" | "retry" };
 
 /**
- * Asks Mercado Pago about a payment and, if it is approved and covers the order it references,
- * marks that order as paid. The payment is always read from the API, never trusted from the
- * caller, so this is safe to run from the webhook and from the return page alike.
- * "retry" means Mercado Pago or the database could not be reached and the caller should try again.
+ * Asks Stripe about a Checkout Session and, once it is paid, marks the store order or the model purchase
+ * it was made for as paid. The session is always read from the API with the secret key, never trusted from
+ * the caller, so the webhook and the return pages can both call it. "waiting": completed but the money
+ * settles later (OXXO). "retry": Stripe or the database could not be reached.
  */
-export async function confirmPayment(paymentId: string): Promise<ConfirmResult> {
-  if (!/^\d+$/.test(paymentId)) return "ignored";
-  const response = await mercadoPago(`/v1/payments/${paymentId}`);
-  if (response.status === 404) return "ignored";
-  if (!response.ok) return "retry";
-  const payment = await response.json();
-  const reference = String(payment.external_reference ?? "");
-  if (reference.startsWith(MODEL_REFERENCE)) return confirmModelPurchase(paymentId, payment, reference.slice(MODEL_REFERENCE.length));
-  if (payment.status !== "approved" || !UUID.test(reference)) return "ignored";
+export async function confirmCheckout(sessionId: string): Promise<Confirm> {
+  if (!/^cs_[\w]{10,200}$/.test(sessionId)) return { result: "ignored" };
+  const response = await stripe(`/checkout/sessions/${sessionId}`);
+  if (response.status === 404) return { result: "ignored" };
+  if (!response.ok) return { result: "retry" };
+  const session = await response.json();
+  const kind = session.metadata?.kind as CheckoutKind | undefined;
+  const id = String(session.metadata?.id ?? "");
+  if (!UUID.test(id) || (kind !== "order" && kind !== "model")) return { result: "ignored" };
+  if (session.payment_status !== "paid") return { result: session.status === "complete" ? "waiting" : "ignored" };
 
   const db = adminClient();
-  const order = await db.from("store_orders").select("id, total").eq("id", payment.external_reference).maybeSingle();
-  if (order.error) return "retry";
-  if (!order.data) return "ignored";
-  if (payment.currency_id !== "MXN" || Number(payment.transaction_amount) + 0.005 < Number(order.data.total)) {
-    console.error(`Pago ${paymentId} no cubre el pedido ${order.data.id}: ${payment.transaction_amount} ${payment.currency_id}`);
-    return "ignored";
-  }
-
-  // Only a pending order becomes paid: a repeated notification, or one for an order already
-  // shipped or cancelled, changes nothing.
-  const update = await db
-    .from("store_orders")
-    .update({ status: "paid", payment_id: paymentId, paid_at: new Date().toISOString() })
-    .eq("id", order.data.id)
-    .eq("status", "pending");
-  return update.error ? "retry" : "paid";
-}
-
-/** external_reference of a marketplace purchase: "modelo:<model_purchases.id>". Store orders use the bare order id. */
-export const MODEL_REFERENCE = "modelo:";
-
-type Payment = { status: string; currency_id: string; transaction_amount: number };
-
-/**
- * Marks a model purchase paid when its payment is approved and covers the price, or refunded when
- * Mercado Pago gave the money back (refund or chargeback): the buyer then loses the download and
- * the seller the amount from their balance.
- */
-async function confirmModelPurchase(paymentId: string, payment: Payment, purchaseId: string): Promise<ConfirmResult> {
-  if (!UUID.test(purchaseId)) return "ignored";
-  const db = adminClient();
-  if (payment.status === "refunded" || payment.status === "charged_back") {
-    const update = await db.from("model_purchases").update({ status: "refunded" }).eq("id", purchaseId).eq("payment_id", paymentId).eq("status", "paid");
-    return update.error ? "retry" : "ignored";
-  }
-  if (payment.status !== "approved") return "ignored";
-
-  const purchase = await db.from("model_purchases").select("id, price").eq("id", purchaseId).maybeSingle();
-  if (purchase.error) return "retry";
-  if (!purchase.data) return "ignored";
-  if (payment.currency_id !== "MXN" || Number(payment.transaction_amount) + 0.005 < Number(purchase.data.price)) {
-    console.error(`Pago ${paymentId} no cubre la compra de modelo ${purchaseId}: ${payment.transaction_amount} ${payment.currency_id}`);
-    return "ignored";
-  }
-  const update = await db
-    .from("model_purchases")
-    .update({ status: "paid", payment_id: paymentId, paid_at: new Date().toISOString() })
-    .eq("id", purchaseId)
-    .eq("status", "pending");
+  const table = kind === "order" ? "store_orders" : "model_purchases";
+  const paid = {
+    status: "paid",
+    payment_id: String(session.payment_intent ?? session.id),
+    paid_at: new Date().toISOString(),
+    paid_amount: Number(session.amount_total) / (["CLP", "PYG"].includes(String(session.currency).toUpperCase()) ? 1 : 100),
+    paid_currency: String(session.currency).toUpperCase(),
+  };
+  // Only a pending one becomes paid: a repeated notification, or one for an order already shipped or
+  // cancelled, changes nothing.
+  const update = await db.from(table).update(paid).eq("id", id).eq("status", "pending");
   if (update.error?.code === "23505") {
-    // The buyer already owned it (paid twice in two tabs): nothing to give, the second payment is refunded by hand.
-    console.error(`Pago ${paymentId}: el comprador ya tenía el modelo de la compra ${purchaseId}; reembólsalo en Mercado Pago.`);
-    return "ignored";
+    // The buyer already owned the model (paid twice in two tabs): the second payment is refunded by hand.
+    console.error(`Pago ${paid.payment_id}: el comprador ya tenía el modelo de la compra ${id}; reembólsalo en Stripe.`);
+    return { result: "ignored" };
   }
-  return update.error ? "retry" : "paid";
+  return { result: update.error ? "retry" : "paid" };
+}
+
+/**
+ * Stripe gave the money of a payment back (refund or lost dispute): the buyer of a model loses the download
+ * and the seller the amount from their balance. Store orders are handled by hand from the admin panel.
+ */
+export async function refundPayment(paymentIntent: string): Promise<"ok" | "retry"> {
+  if (!/^pi_\w+$/.test(paymentIntent)) return "ok";
+  const update = await adminClient().from("model_purchases").update({ status: "refunded" }).eq("payment_id", paymentIntent).eq("status", "paid");
+  return update.error ? "retry" : "ok";
+}
+
+type CheckoutLine = { name: string; mxn: number; quantity: number };
+
+/**
+ * Opens a Stripe Checkout for a store order or a model purchase, charged in the buyer's currency at today's
+ * rate (the prices are in Mexican pesos). Answers the page to send the buyer to, or null when Stripe refused.
+ */
+export async function createCheckout(options: { kind: CheckoutKind; id: string; email?: string; lines: CheckoutLine[]; currency: Currency; back: string }) {
+  const lineItems = await Promise.all(
+    options.lines.map(async (line) => ({
+      quantity: line.quantity,
+      price_data: { currency: options.currency.toLowerCase(), unit_amount: await chargeFromMxn(line.mxn, options.currency), product_data: { name: line.name.slice(0, 250) } },
+    })),
+  );
+  const metadata = { kind: options.kind, id: options.id };
+  const separator = options.back.includes("?") ? "&" : "?";
+  const response = await stripe("/checkout/sessions", {
+    mode: "payment",
+    line_items: lineItems,
+    customer_email: options.email || undefined,
+    client_reference_id: options.id,
+    metadata,
+    payment_intent_data: { metadata, statement_descriptor_suffix: "KUBBO3D" },
+    success_url: `${options.back}${separator}session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: options.back,
+    locale: "es",
+  });
+  if (!response.ok) {
+    console.error("Stripe rechazó el pago:", response.status, await response.text());
+    return null;
+  }
+  return String((await response.json()).url);
 }

@@ -2734,3 +2734,18 @@ begin
 end $$;
 revoke all on function public.change_currency(text, text, numeric) from public, anon;
 grant execute on function public.change_currency(text, text, numeric) to authenticated;
+
+-- ───────────────────────── Cobros con Stripe ─────────────────────────
+-- Mercado Pago se reemplazó por Stripe: cobra en la moneda del cliente (los precios siguen en pesos
+-- mexicanos y se convierten al tipo de cambio del día) y deposita en pesos. payment_id guarda el
+-- PaymentIntent (pi_…); paid_amount y paid_currency, lo que realmente se cobró.
+alter table public.store_orders add column if not exists paid_amount numeric(14,2);
+alter table public.store_orders add column if not exists paid_currency text;
+alter table public.model_purchases add column if not exists paid_amount numeric(14,2);
+alter table public.model_purchases add column if not exists paid_currency text;
+
+-- Suscripciones: la de Stripe (sub_…). Las de Mercado Pago quedan como historial.
+alter table public.subscriptions add column if not exists stripe_subscription_id text unique;
+alter table public.subscriptions drop constraint if exists subscriptions_source_check;
+alter table public.subscriptions add constraint subscriptions_source_check check (source in ('mercadopago', 'admin', 'stripe'));
+alter table public.subscriptions alter column source set default 'stripe';

@@ -70,7 +70,7 @@ function Sales({ userId }: { userId: string }) {
         <Tile label="Ya retirado" value=<Price mxn={balance.withdrawn} /> />
       </div>
       <p className="text-sm text-muted">
-        Kubbo cobra al comprador con Mercado Pago (en pesos; acepta tarjetas de casi cualquier país) y se queda el {balance.fee_pct} % de cada venta. Lo demás
+        Kubbo cobra al comprador con Stripe (con tarjeta de cualquier país, en su moneda; tu saldo queda en pesos mexicanos) y se queda el {balance.fee_pct} % de cada venta. Lo demás
         suma a tu saldo; puedes retirarlo desde <Price mxn={balance.min_payout} />.
       </p>
 

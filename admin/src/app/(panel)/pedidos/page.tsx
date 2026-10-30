@@ -17,6 +17,8 @@ type Order = {
   status: keyof typeof STATUSES;
   tracking: string;
   payment_id: string | null;
+  paid_amount: number | null;
+  paid_currency: string | null;
   paid_at: string | null;
   subtotal: number;
   shipping: number;
@@ -70,7 +72,8 @@ export default async function OrdersPage({ searchParams }: PageProps<"/pedidos">
             <p className="text-xs text-muted">{dateTime(order.created_at)}</p>
             {order.payment_id && (
               <p className="text-xs text-money">
-                Pagado con Mercado Pago · pago {order.payment_id}
+                {order.payment_id.startsWith("pi_") ? "Pagado con Stripe" : "Pagado con Mercado Pago"} · pago {order.payment_id}
+                {order.paid_currency && order.paid_currency !== "MXN" && ` · cobrado ${order.paid_amount} ${order.paid_currency}`}
                 {order.paid_at && ` · ${dateTime(order.paid_at)}`}
               </p>
             )}

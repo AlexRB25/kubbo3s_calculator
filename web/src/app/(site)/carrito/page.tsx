@@ -60,7 +60,7 @@ export default function CartPage() {
       return setError(error.message);
     }
     clearCart();
-    // With Mercado Pago configured the buyer goes straight to pay; otherwise (or if it cannot be
+    // With Stripe configured the buyer goes straight to pay; otherwise (or if it cannot be
     // reached) the order stays placed and the page shows how to pay by hand.
     const checkout = await startPayment(data.id);
     if (checkout) {
@@ -217,7 +217,7 @@ export default function CartPage() {
               {busy ? "Enviando…" : "Hacer pedido y pagar"}
             </button>
             <p className="text-xs text-muted">
-              Al hacer tu pedido apartamos tus piezas y te llevamos a pagar con Mercado Pago (tarjeta, SPEI o efectivo). Lo
+              Al hacer tu pedido apartamos tus piezas y te llevamos a pagar con tarjeta en tu moneda (en México también OXXO). Lo
               enviamos en cuanto se confirme tu pago.
             </p>
           </aside>

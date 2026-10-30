@@ -40,9 +40,14 @@ const FALLBACK_RATES = Object.fromEntries(LIST.map((item) => [item.code, item.pe
 
 let rates = FALLBACK_RATES;
 let loading: Promise<Record<Currency, number>> | null = null;
+let loadedAt = 0;
 
-/** Today's rates from Mexican pesos (open.er-api.com, updated daily); read once per session. */
+/** Today's rates from Mexican pesos (open.er-api.com, updated daily); read again every 6 hours (a server lives long). */
 export function loadRates() {
+  if (Date.now() - loadedAt > 6 * 3600 * 1000) {
+    loading = null;
+    loadedAt = Date.now();
+  }
   loading ??= fetch('https://open.er-api.com/v6/latest/MXN')
     .then((response) => response.json())
     .then((body: { result?: string; rates?: Record<string, number> }) => {

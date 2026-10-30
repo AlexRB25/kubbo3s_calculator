@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PayButton } from "@/components/PayButton";
 import { Price } from "@/components/Price";
-import { adminClient, confirmPayment, paymentsConfigured, UUID } from "@/lib/server";
+import { adminClient, confirmCheckout, paymentsConfigured, UUID } from "@/lib/server";
 
 export const metadata: Metadata = { title: "Tu pedido", robots: { index: false } };
 
@@ -14,13 +14,13 @@ const TITLES: Record<string, string> = {
 };
 
 /**
- * Where Mercado Pago sends the buyer back, and the page to check on an order later. The order
+ * Where Stripe sends the buyer back, and the page to check on an order later. The order
  * id in the link is the only key: it shows the status and total, never the buyer's details.
  */
 export default async function OrderPage({ searchParams }: PageProps<"/pedido">) {
   const params = await searchParams;
-  const id = String(params.id ?? params.external_reference ?? "");
-  const paymentId = String(params.payment_id ?? params.collection_id ?? "");
+  const id = String(params.id ?? "");
+  const sessionId = String(params.session_id ?? "");
 
   if (!paymentsConfigured() || !UUID.test(id)) {
     return (
@@ -34,7 +34,7 @@ export default async function OrderPage({ searchParams }: PageProps<"/pedido">) 
   }
 
   // The webhook may not have arrived yet (or cannot reach localhost): check the payment now.
-  if (paymentId) await confirmPayment(paymentId);
+  const checkout = sessionId ? await confirmCheckout(sessionId) : null;
 
   const db = adminClient();
   const [{ data: order }, { data: settings }] = await Promise.all([
@@ -49,8 +49,8 @@ export default async function OrderPage({ searchParams }: PageProps<"/pedido">) 
     );
   }
 
-  // Mercado Pago says "pending"/"in_process" for payments that settle later (OXXO, SPEI).
-  const settling = order.status === "pending" && ["pending", "in_process"].includes(String(params.status ?? ""));
+  // Completed but not paid yet: an OXXO voucher waiting for the cash.
+  const settling = order.status === "pending" && checkout?.result === "waiting";
   const message = encodeURIComponent(`Hola, tengo una duda sobre mi pedido #${order.number} de Kubbo3D.`);
 
   return (
@@ -66,8 +66,8 @@ export default async function OrderPage({ searchParams }: PageProps<"/pedido">) 
       {order.status === "pending" &&
         (settling ? (
           <p className="text-muted">
-            Si pagaste en efectivo o por transferencia, Mercado Pago nos avisa en cuanto se acredite; puedes volver a esta
-            página para ver el estado.
+            Si vas a pagar en OXXO, te avisamos en cuanto se acredite tu pago; puedes volver a esta página para ver el
+            estado.
           </p>
         ) : (
           <>

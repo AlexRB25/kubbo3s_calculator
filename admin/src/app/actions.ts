@@ -137,7 +137,7 @@ export async function grantSubscription(form: FormData) {
   back("listo", `${user.email} ahora tiene el plan ${plan.name} ${end}.`);
 }
 
-/** Ends a hand-given plan right away. Mercado Pago subscriptions are cancelled by their owner. */
+/** Ends a hand-given plan right away. Paid subscriptions (Stripe) are cancelled by their owner. */
 export async function cancelSubscription(form: FormData) {
   await requireAdmin();
   const now = new Date().toISOString();

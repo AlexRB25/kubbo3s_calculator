@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { REPORT_REASONS, type ModelFile } from "@/lib/market";
 import { useSession } from "@/lib/session";
 import { supabase } from "@/lib/supabase";
+import { displayCurrency } from "@/lib/display-currency";
 
 type Props = { modelId: string; ownerId: string; price: number; title: string };
 export type Signed = { name: string; url: string };
@@ -22,13 +23,13 @@ export async function downloadLinks(modelId: string): Promise<Signed[]> {
   );
 }
 
-/** Asks the server for the Mercado Pago checkout of a model purchase and sends the buyer there. */
+/** Asks the server for the Stripe checkout of a model purchase (in the visitor's currency) and sends the buyer there. */
 async function checkout(purchaseId: string) {
   const { data } = await supabase().auth.getSession();
   const response = await fetch("/api/modelos/pagar", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token ?? ""}` },
-    body: JSON.stringify({ purchase_id: purchaseId }),
+    body: JSON.stringify({ purchase_id: purchaseId, currency: displayCurrency() }),
   });
   const body = await response.json().catch(() => null);
   if (!response.ok || !body?.url) throw new Error(body?.error ?? "No pudimos abrir el pago.");
@@ -136,7 +137,7 @@ export function ModelActions({ modelId, ownerId, price, title }: Props) {
           </button>
         ) : price > 0 ? (
           <button className="btn btn-primary btn-lg" onClick={buy} disabled={busy}>
-            {busy ? "Abriendo Mercado Pago…" : "Comprar con Mercado Pago"}
+            {busy ? "Abriendo el pago…" : "Comprar"}
           </button>
         ) : (
           <button className="btn btn-primary btn-lg" onClick={download} disabled={busy}>

@@ -3,8 +3,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { isCurrency, loadRates, type Currency } from "./currency";
 
-// The currency a visitor sees the store and the marketplace in. Their prices are in Mexican pesos
-// (Mercado Pago charges them in pesos); other currencies are shown converted at today's rate.
+// The currency a visitor sees the store and the marketplace in, and pays in. Their prices are in Mexican
+// pesos; other currencies are shown converted at today's rate, and Stripe charges in them the same way.
 // It starts as the currency of the visitor's workshop, and they can change it in the header.
 
 const KEY = "kubbo-currency";
@@ -36,6 +36,9 @@ export function rememberCurrency(currency: Currency) {
   }
   listeners.forEach((listener) => listener());
 }
+
+/** The visitor's currency right now, for a checkout started outside React. */
+export const displayCurrency = read;
 
 export const useDisplayCurrency = () => useSyncExternalStore(subscribe, read, () => "MXN" as Currency);
 

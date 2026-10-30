@@ -46,7 +46,7 @@ export default async function MarketplacePage({ searchParams }: PageProps<"/mark
       <header>
         <h1>Modelos 3D</h1>
         <p className="text-sm text-muted">
-          {paid.length} ventas por {money(sold)} · comisión de Kubbo {money(income)}. Mercado Pago cobra su propia comisión de lo que entra.
+          {paid.length} ventas por {money(sold)} · comisión de Kubbo {money(income)}. Stripe cobra su propia comisión de lo que entra.
         </p>
       </header>
 
