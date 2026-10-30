@@ -9,7 +9,7 @@ import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
 import type { CatalogFilament, Filament } from "@/lib/types";
 import { ColorsField, Swatch } from "./Swatch";
 
-const MATERIALS = ["PLA", "PLA Basic", "PLA+", "PLA Silk", "PLA Matte", "PETG", "Rapid PETG", "ABS", "ASA", "TPU", "Shoe3D", "PC", "Nylon"];
+const MATERIALS = ["PLA", "PLA Basic", "PLA+", "PLA Silk", "Silk PLA+", "PLA Matte", "PETG", "Rapid PETG", "ABS", "ASA", "TPU", "Shoe3D", "PC", "Nylon"];
 
 /** Picks a filament from the Kubbo catalog: search by brand, material or colour. */
 function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilament) => void; onCancel: () => void }) {
