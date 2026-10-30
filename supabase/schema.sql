@@ -372,6 +372,13 @@ revoke insert, update, delete on public.profiles from anon, authenticated;
 alter table public.profiles add column if not exists waste_rules jsonb not null default '[]';
 grant update (name, business_name, kwh_price, margin_pct, waste_rules) on public.profiles to authenticated;
 
+-- Moneda del taller: sus costos y precios se escriben y muestran en ella. Lo que Kubbo3D recomienda
+-- (precios de referencia del catálogo, en pesos mexicanos) se convierte al tipo de cambio del día.
+alter table public.profiles add column if not exists currency text not null default 'MXN';
+alter table public.profiles drop constraint if exists profiles_currency_check;
+alter table public.profiles add constraint profiles_currency_check check (currency in ('MXN', 'USD', 'COP'));
+grant update (currency) on public.profiles to authenticated;
+
 -- La ganancia deseada se mide sobre el precio de venta (vendo en 100, me quedan 50: 50 %), ya no sobre
 -- el costo. Una sola vez, los perfiles de antes pasan su porcentaje a su equivalente sobre la venta
 -- (100 % sobre el costo = 50 % sobre la venta), así sus precios sugeridos no cambian.
@@ -1734,6 +1741,7 @@ as $$
     'about', c.about,
     'whatsapp', c.whatsapp,
     'show_prices', c.show_prices,
+    'currency', coalesce(pr.currency, 'MXN'),
     'domain', case when c.domain_verified then c.domain end,
     'products', coalesce((
       select jsonb_agg(jsonb_build_object(

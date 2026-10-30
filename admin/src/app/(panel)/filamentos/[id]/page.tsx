@@ -48,9 +48,9 @@ export default async function CatalogFilamentPage({ params }: PageProps<"/filame
           <input name="spool_g" type="number" min={1} step="any" defaultValue={filament?.spool_g ?? 1000} className="input" />
         </label>
         <label className="label">
-          Precio de referencia por kg ($)
+          Precio de referencia por kg (MXN)
           <input name="reference_price_kg" type="number" min={0} step="any" defaultValue={filament?.reference_price_kg ?? 0} className="input" />
-          <span className="font-normal">Lo que normalmente cuesta en México; el usuario lo puede cambiar.</span>
+          <span className="font-normal">Lo que normalmente cuesta en México, en pesos mexicanos; a quien trabaja en dólares o pesos colombianos se le convierte al tipo de cambio del día. El usuario lo puede cambiar.</span>
         </label>
         <label className="label">
           Temperatura de boquilla

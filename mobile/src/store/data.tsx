@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 
+import { isCurrency } from '@/lib/currency';
+import { setWorkshopCurrency } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import type {
   Carrier,
@@ -111,6 +113,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
     (result) => result.error,
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
+  setWorkshopCurrency(isCurrency(profile.data?.currency) ? profile.data.currency : 'MXN');
   return {
     tables: {
       profile: profile.data,

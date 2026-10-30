@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { CurrencySelect } from "@/components/Price";
 import { useCart } from "@/lib/cart";
 import { useSession } from "@/lib/session";
 
@@ -27,6 +28,7 @@ export function SiteHeader() {
             Tienda
           </Link>
         </nav>
+        <CurrencySelect />
         <Link href="/carrito" className="btn" aria-label={`Carrito, ${pieces} piezas`}>
           Carrito
           {pieces > 0 && <span className="rounded-full bg-brand px-2 text-xs font-bold text-ink">{pieces}</span>}

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
 import { makerName, mediaUrl, type ModelCard } from "@/lib/market";
 
 export function ModelCardView({ model }: { model: ModelCard }) {
@@ -13,7 +13,7 @@ export function ModelCardView({ model }: { model: ModelCard }) {
         <span
           className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-bold ${Number(model.price) > 0 ? "bg-ink/85 text-white" : "bg-money text-ink"}`}
         >
-          {Number(model.price) > 0 ? money(model.price) : "Gratis"}
+          {Number(model.price) > 0 ? <Price mxn={model.price} /> : "Gratis"}
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-1 p-3">

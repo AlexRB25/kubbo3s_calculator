@@ -1,5 +1,5 @@
 import { costPerGram, filamentName } from "./costs";
-import { money, weight } from "./format";
+import { getWorkshopCurrency, money, moneyIn, weight } from "./format";
 import { filamentColors } from "./labels";
 import type { Expense, Filament, InventoryItemType, Material } from "./types";
 
@@ -26,9 +26,8 @@ export type Item = {
 
 export const UNIT_LABELS: Record<Item["unit"], string> = { g: "gramos", ml: "mililitros", pza: "piezas" };
 
-const fine = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 4 });
 /** Money with up to four decimals, for the cost of a gram. */
-export const preciseMoney = (value: number) => fine.format(Number(value) || 0);
+export const preciseMoney = (value: number) => moneyIn(value, getWorkshopCurrency(), 4);
 
 /** "1.25 kg", "30 ml", "12 pzas". */
 export function amount(item: Pick<Item, "unit">, value: number) {

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
 import type { StoreProduct } from "@/lib/store";
 
 export function StoreProductCard({ product }: { product: StoreProduct }) {
@@ -26,9 +26,9 @@ export function StoreProductCard({ product }: { product: StoreProduct }) {
       <div className="flex flex-1 flex-col gap-1 p-3">
         <span className="line-clamp-2 text-sm font-medium">{product.name}</span>
         <span className="mt-auto flex items-baseline gap-2">
-          <strong className="text-lg tabular-nums">{money(product.price)}</strong>
+          <strong className="text-lg tabular-nums"><Price mxn={product.price} /></strong>
           {product.compare_price != null && product.compare_price > product.price && (
-            <s className="text-xs tabular-nums text-muted">{money(product.compare_price)}</s>
+            <s className="text-xs tabular-nums text-muted"><Price mxn={product.compare_price} /></s>
           )}
         </span>
       </div>

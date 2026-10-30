@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { ModelCardView } from "@/components/ModelCardView";
 import { downloadLinks, type Signed } from "@/components/market/ModelActions";
 import { MarketPanel } from "@/components/market/Panel";
-import { day, money } from "@/lib/format";
+import { Price } from "@/components/Price";
+import { day } from "@/lib/format";
 import { CARD_COLUMNS, type ModelCard } from "@/lib/market";
 import { supabase } from "@/lib/supabase";
 
@@ -51,7 +52,7 @@ function MyLibrary({ userId }: { userId: string }) {
                 <div className="min-w-48 flex-1">
                   <p className="font-medium">{purchase.title}</p>
                   <p className="text-xs text-muted">
-                    {money(purchase.price)} · {day(purchase.paid_at)}
+                    <Price mxn={purchase.price} /> · {day(purchase.paid_at)}
                   </p>
                 </div>
                 <Link href={`/modelos/${purchase.model_id}`} className="btn">

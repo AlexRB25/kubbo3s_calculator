@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { fromMxn, loadRates } from "@/lib/currency";
 import { useData, useSave } from "@/lib/data";
 import { num } from "@/lib/format";
 import { brandOptions, filamentColors } from "@/lib/labels";
@@ -86,7 +87,7 @@ function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilamen
  * purchases, prints and arqueos.
  */
 export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone: () => void }) {
-  const { suppliers, filaments, shop } = useData();
+  const { suppliers, filaments, shop, profile } = useData();
   const { session } = useSession();
   const { busy, error, setError, save } = useSave();
   const [picking, setPicking] = useState(!filament);
@@ -112,7 +113,8 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
     setColors(filamentColors(item));
     setGlow(item.glow);
     setPhoto(item.image_url);
-    if (item.reference_price_kg > 0) setCostPerKg(String(item.reference_price_kg));
+    // The catalog's reference is in Mexican pesos: the workshop gets it in its own currency.
+    if (item.reference_price_kg > 0) loadRates().then((rates) => setCostPerKg(String(fromMxn(item.reference_price_kg, profile?.currency ?? "MXN", rates))));
     setLowStock(String(Math.round(item.spool_g * 0.2)));
     setNotes([item.nozzle_temp && `Boquilla ${item.nozzle_temp}`, item.bed_temp && `Cama ${item.bed_temp}`, item.notes].filter(Boolean).join(" · "));
     setPicking(false);

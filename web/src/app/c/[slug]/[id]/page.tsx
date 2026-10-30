@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Gallery } from "@/components/Gallery";
 import { loadCatalog, whatsappUrl } from "@/lib/catalog";
 import { catalogBase } from "@/lib/catalog-base";
-import { money } from "@/lib/format";
+import { moneyIn } from "@/lib/format";
 import { imageUrl } from "@/lib/supabase";
 
 async function find(params: PageProps<"/c/[slug]/[id]">["params"]) {
@@ -68,7 +68,7 @@ export default async function CatalogProductPage({ params }: PageProps<"/c/[slug
                   className="btn btn-primary btn-lg flex items-center justify-between gap-3"
                 >
                   <span>{link.channel} ↗</span>
-                  {link.price != null && <span className="tabular-nums">{money(Number(link.price))}</span>}
+                  {link.price != null && <span className="tabular-nums">{moneyIn(Number(link.price), catalog.currency ?? "MXN")}</span>}
                 </a>
               ))}
             </div>

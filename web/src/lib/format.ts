@@ -1,6 +1,34 @@
-const pesos = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+import { CURRENCIES, type Currency } from './currency';
 
-export const money = (amount: number) => pesos.format(Number(amount) || 0);
+const formatters = new Map<string, Intl.NumberFormat>();
+function formatter(currency: Currency, maxDigits?: number) {
+  const key = `${currency}-${maxDigits ?? ''}`;
+  let found = formatters.get(key);
+  if (!found) {
+    const { locale, digits } = CURRENCIES.find((item) => item.code === currency) ?? CURRENCIES[0];
+    found = new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: Math.max(digits, maxDigits ?? digits),
+    });
+    formatters.set(key, found);
+  }
+  return found;
+}
+
+/** The workshop's currency: costs and prices are typed and shown in it (set when its settings load). */
+let workshopCurrency: Currency = 'MXN';
+export const setWorkshopCurrency = (currency: Currency) => {
+  workshopCurrency = currency;
+};
+export const getWorkshopCurrency = () => workshopCurrency;
+
+/** An amount of the workshop, in its currency. */
+export const money = (amount: number) => formatter(workshopCurrency).format(Number(amount) || 0);
+
+/** An amount in a given currency; `maxDigits` allows more decimals (the cost of a gram). */
+export const moneyIn = (amount: number, currency: Currency, maxDigits?: number) => formatter(currency, maxDigits).format(Number(amount) || 0);
 
 /** 1250 -> "1.25 kg", 250 -> "250 g" */
 export function weight(grams: number) {

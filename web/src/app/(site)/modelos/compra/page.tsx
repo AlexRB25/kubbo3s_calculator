@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
 import { adminClient, confirmPayment, paymentsConfigured, UUID } from "@/lib/server";
 
 export const metadata: Metadata = { title: "Tu compra", robots: { index: false } };
@@ -47,7 +47,7 @@ export default async function ModelPurchasePage({ searchParams }: PageProps<"/mo
     <main className="mx-auto flex max-w-xl flex-col items-center gap-5 px-4 py-16 text-center">
       <h1 className="text-3xl">{title}</h1>
       <p className="text-muted">
-        <strong className="text-white">{purchase.title}</strong> · {money(purchase.price)}
+        <strong className="text-white">{purchase.title}</strong> · <Price mxn={purchase.price} />
       </p>
       {purchase.status === "paid" && <p className="text-muted">Descárgalo cuando quieras: también queda guardado en Mi biblioteca.</p>}
       {settling && <p className="text-muted">Cuando Mercado Pago confirme el pago (OXXO o transferencia pueden tardar), podrás descargarlo desde Mi biblioteca.</p>}

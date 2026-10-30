@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { Currency } from "@/lib/currency";
 import { publicClient, supabaseConfigured } from "@/lib/supabase";
 
 // A workshop's public catalog (see "Catálogo público del taller" in supabase/schema.sql).
@@ -23,6 +24,8 @@ export type PublicCatalog = {
   about: string;
   whatsapp: string;
   show_prices: boolean;
+  /** The workshop's currency: its prices are written in it. */
+  currency?: Currency;
   domain: string | null;
   products: CatalogProduct[];
 };

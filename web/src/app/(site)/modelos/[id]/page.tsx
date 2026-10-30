@@ -5,7 +5,8 @@ import { cache } from "react";
 import { Gallery } from "@/components/Gallery";
 import { ModelActions } from "@/components/market/ModelActions";
 import { ModelComments } from "@/components/market/ModelComments";
-import { day, money } from "@/lib/format";
+import { Price } from "@/components/Price";
+import { day } from "@/lib/format";
 import { categoryLabel, fileSize, makerName, mediaUrl, type Comment, type Maker, type Model } from "@/lib/market";
 import { publicClient, supabaseConfigured } from "@/lib/supabase";
 
@@ -68,7 +69,7 @@ export default async function ModelPage({ params }: PageProps<"/modelos/[id]">) 
             </p>
           </div>
 
-          <strong className="text-3xl tabular-nums">{price > 0 ? money(price) : "Gratis"}</strong>
+          <strong className="text-3xl tabular-nums">{price > 0 ? <Price mxn={price} charged /> : "Gratis"}</strong>
           <ModelActions modelId={model.id} ownerId={model.user_id} price={price} title={model.title} />
 
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">

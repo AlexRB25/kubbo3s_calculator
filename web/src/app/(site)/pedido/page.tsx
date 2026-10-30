@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PayButton } from "@/components/PayButton";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
 import { adminClient, confirmPayment, paymentsConfigured, UUID } from "@/lib/server";
 
 export const metadata: Metadata = { title: "Tu pedido", robots: { index: false } };
@@ -58,7 +58,7 @@ export default async function OrderPage({ searchParams }: PageProps<"/pedido">) 
       <h1 className="text-3xl">{TITLES[order.status] ?? (settling ? "Estamos esperando tu pago" : "Tu pedido está por pagar")}</h1>
       <p className="text-muted">
         Pedido <strong className="text-white">#{order.number}</strong> · Total{" "}
-        <strong className="text-white">{money(order.total)}</strong>
+        <strong className="text-white"><Price mxn={order.total} charged /></strong>
       </p>
 
       {order.status === "paid" && <p className="text-muted">Ya estamos preparando tu pedido. Te avisaremos cuando salga.</p>}

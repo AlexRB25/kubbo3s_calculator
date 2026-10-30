@@ -1,6 +1,9 @@
 "use client";
 
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from "react";
+import { isCurrency } from "./currency";
+import { rememberCurrency } from "./display-currency";
+import { setWorkshopCurrency } from "./format";
 import { supabase } from "./supabase";
 import type { Carrier, Channel, Expense, Filament, Maintenance, Material, Packaging, PrintJob, Printer, Product, Profile, Sale, ShopInfo, Supplier, PrinterWear } from "./types";
 
@@ -95,6 +98,9 @@ async function fetchTables(userId: string): Promise<Loaded> {
     (result) => result.error,
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
+  const currency = isCurrency(profile.data?.currency) ? profile.data.currency : "MXN";
+  setWorkshopCurrency(currency);
+  rememberCurrency(currency);
   return {
     tables: {
       profile: profile.data,

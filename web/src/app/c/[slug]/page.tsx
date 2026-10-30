@@ -47,7 +47,7 @@ export default async function CatalogPage({ params, searchParams }: PageProps<"/
       {shown.length ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {shown.map((product) => (
-            <CatalogCard key={product.id} product={product} href={`${base}/${product.id}`} />
+            <CatalogCard key={product.id} product={product} href={`${base}/${product.id}`} currency={catalog.currency} />
           ))}
         </div>
       ) : (

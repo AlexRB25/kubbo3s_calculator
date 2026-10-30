@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { MarketPanel } from "@/components/market/Panel";
-import { day, money } from "@/lib/format";
+import { Price } from "@/components/Price";
+import { day, moneyIn } from "@/lib/format";
 import { PAYOUT_METHODS, type Balance, type PayoutMethod } from "@/lib/market";
 import { supabase } from "@/lib/supabase";
 
@@ -53,7 +54,7 @@ function Sales({ userId }: { userId: string }) {
     const { data, error: failed } = await supabase().rpc("request_payout");
     setBusy(false);
     if (failed) return setError(failed.message);
-    setNotice(`Pediste un retiro de ${money(data.amount)}. Te avisamos cuando esté pagado.`);
+    setNotice(`Pediste un retiro de ${moneyIn(data.amount, "MXN")}. Te avisamos cuando esté pagado.`);
     await load();
   }
 
@@ -63,14 +64,14 @@ function Sales({ userId }: { userId: string }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-3 sm:grid-cols-4">
-        <Tile label="Disponible para retirar" value={money(balance.available)} strong />
-        <Tile label={`Esperando ${balance.hold_days} días`} value={money(balance.held)} hint="Por reembolsos y contracargos" />
-        <Tile label="En retiro" value={money(balance.requested)} />
-        <Tile label="Ya retirado" value={money(balance.withdrawn)} />
+        <Tile label="Disponible para retirar" value=<Price mxn={balance.available} /> strong />
+        <Tile label={`Esperando ${balance.hold_days} días`} value=<Price mxn={balance.held} /> hint="Por reembolsos y contracargos" />
+        <Tile label="En retiro" value=<Price mxn={balance.requested} /> />
+        <Tile label="Ya retirado" value=<Price mxn={balance.withdrawn} /> />
       </div>
       <p className="text-sm text-muted">
         Kubbo cobra al comprador con Mercado Pago (en pesos; acepta tarjetas de casi cualquier país) y se queda el {balance.fee_pct} % de cada venta. Lo demás
-        suma a tu saldo; puedes retirarlo desde {money(balance.min_payout)}.
+        suma a tu saldo; puedes retirarlo desde <Price mxn={balance.min_payout} />.
       </p>
 
       <section className="card flex max-w-2xl flex-col gap-3">
@@ -83,7 +84,7 @@ function Sales({ userId }: { userId: string }) {
         )}
         {notice && <p className="text-sm text-brand">{notice}</p>}
         <button className="btn btn-primary self-start" disabled={busy || !info || !canWithdraw} onClick={withdraw}>
-          {busy ? "Pidiendo…" : `Retirar ${money(balance.available)}`}
+          {busy ? "Pidiendo…" : `Retirar ${moneyIn(balance.available, "MXN")}`}
         </button>
       </section>
 
@@ -111,7 +112,7 @@ function Sales({ userId }: { userId: string }) {
                       {PAYOUT_STATUS[payout.status]}
                       {payout.reference && <div className="text-xs text-muted">{payout.reference}</div>}
                     </td>
-                    <td className="num">{money(payout.amount)}</td>
+                    <td className="num"><Price mxn={payout.amount} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -146,9 +147,9 @@ function Sales({ userId }: { userId: string }) {
                       </Link>
                       {sale.status === "refunded" && <span className="ml-2 text-xs no-underline">(reembolsada)</span>}
                     </td>
-                    <td className="num">{money(sale.price)}</td>
-                    <td className="num">{money(sale.fee)}</td>
-                    <td className="num text-money">{money(sale.seller_amount)}</td>
+                    <td className="num"><Price mxn={sale.price} /></td>
+                    <td className="num"><Price mxn={sale.fee} /></td>
+                    <td className="num text-money"><Price mxn={sale.seller_amount} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -160,7 +161,7 @@ function Sales({ userId }: { userId: string }) {
   );
 }
 
-function Tile({ label, value, hint, strong }: { label: string; value: string; hint?: string; strong?: boolean }) {
+function Tile({ label, value, hint, strong }: { label: string; value: ReactNode; hint?: string; strong?: boolean }) {
   return (
     <div className="card flex flex-col gap-1">
       <span className="text-xs text-muted">{label}</span>

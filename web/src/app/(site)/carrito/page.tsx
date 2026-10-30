@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PayButton, startPayment } from "@/components/PayButton";
 import { clearCart, setCartQuantity, useCart } from "@/lib/cart";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
+import { moneyIn } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { shippingFor, type PlacedOrder, type StoreProduct, type StoreSettings } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
@@ -72,13 +73,13 @@ export default function CartPage() {
   }
 
   if (order) {
-    const message = encodeURIComponent(`Hola, hice el pedido #${order.number} en Kubbo3D por ${money(order.total)}.`);
+    const message = encodeURIComponent(`Hola, hice el pedido #${order.number} en Kubbo3D por ${moneyIn(order.total, "MXN")}.`);
     return (
       <main className="mx-auto flex max-w-xl flex-col gap-5 px-4 py-16 text-center">
         <h1 className="text-3xl">¡Gracias! Recibimos tu pedido #{order.number}</h1>
         <p className="text-muted">
-          Total a pagar: <strong className="text-white">{money(order.total)}</strong>
-          {order.shipping > 0 && ` (incluye ${money(order.shipping)} de envío)`}. Guarda tu número de pedido.
+          Total a pagar: <strong className="text-white"><Price mxn={order.total} charged /></strong>
+          {order.shipping > 0 && ` (incluye ${moneyIn(order.shipping, "MXN")} de envío)`}. Guarda tu número de pedido.
         </p>
         {settings?.payment_instructions && (
           <div className="card text-left">
@@ -130,7 +131,7 @@ export default function CartPage() {
                     <Link href={`/tienda/${product.slug}`} className="font-medium hover:underline">
                       {product.name}
                     </Link>
-                    <p className="text-sm text-muted">{money(product.price)} c/u</p>
+                    <p className="text-sm text-muted"><Price mxn={product.price} /> c/u</p>
                     {quantity > product.stock && <p className="text-sm text-bad">Solo quedan {product.stock}.</p>}
                   </div>
                   <input
@@ -142,7 +143,7 @@ export default function CartPage() {
                     onChange={(event) => setCartQuantity(product.id, Math.max(1, Math.round(Number(event.target.value)) || 1))}
                     className="input w-20"
                   />
-                  <strong className="w-24 text-right tabular-nums">{money(product.price * quantity)}</strong>
+                  <strong className="w-24 text-right tabular-nums"><Price mxn={product.price * quantity} /></strong>
                   <button className="btn" onClick={() => setCartQuantity(product.id, 0)}>
                     Quitar
                   </button>
@@ -194,18 +195,18 @@ export default function CartPage() {
             <h2>Resumen</h2>
             <p className="flex justify-between text-sm">
               <span className="text-muted">Productos</span>
-              <span className="tabular-nums">{money(subtotal)}</span>
+              <span className="tabular-nums"><Price mxn={subtotal} /></span>
             </p>
             <p className="flex justify-between text-sm">
               <span className="text-muted">Envío</span>
-              <span className="tabular-nums">{shipping > 0 ? money(shipping) : "Gratis"}</span>
+              <span className="tabular-nums">{shipping > 0 ? <Price mxn={shipping} /> : "Gratis"}</span>
             </p>
             {settings?.free_shipping_from != null && subtotal < settings.free_shipping_from && (
-              <p className="text-xs text-muted">Envío gratis a partir de {money(settings.free_shipping_from)}.</p>
+              <p className="text-xs text-muted">Envío gratis a partir de <Price mxn={settings.free_shipping_from} />.</p>
             )}
             <p className="flex justify-between border-t border-line pt-3 text-lg font-semibold">
               <span>Total</span>
-              <span className="tabular-nums">{money(subtotal + shipping)}</span>
+              <span className="tabular-nums"><Price mxn={subtotal + shipping} charged /></span>
             </p>
             {error && (
               <p role="alert" className="error">

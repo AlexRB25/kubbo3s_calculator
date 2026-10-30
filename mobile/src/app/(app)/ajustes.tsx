@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
-import { Button, ErrorText, Field, Screen } from '@/components/ui';
+import { Button, Chips, ErrorText, Field, Muted, Screen } from '@/components/ui';
+import { CURRENCIES, type Currency } from '@/lib/currency';
 import { field, num } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
@@ -12,6 +13,7 @@ export default function SettingsScreen() {
   const [name, setName] = useState(profile?.name ?? '');
   const [businessName, setBusinessName] = useState(profile?.business_name ?? '');
   const [kwhPrice, setKwhPrice] = useState(field(profile?.kwh_price));
+  const [currency, setCurrency] = useState<Currency>(profile?.currency ?? 'MXN');
   const [margin, setMargin] = useState(String(profile?.margin_pct ?? 50));
 
   function submit() {
@@ -19,7 +21,7 @@ export default function SettingsScreen() {
     save(() =>
       supabase
         .from('profiles')
-        .update({ name: name.trim(), business_name: businessName.trim(), kwh_price: num(kwhPrice), margin_pct: num(margin) })
+        .update({ name: name.trim(), business_name: businessName.trim(), kwh_price: num(kwhPrice), margin_pct: num(margin), currency })
         .eq('id', profile!.id),
     );
   }
@@ -28,6 +30,8 @@ export default function SettingsScreen() {
     <Screen>
       <Field label="Tu nombre" value={name} onChangeText={setName} maxLength={40} />
       <Field label="Nombre del negocio" value={businessName} onChangeText={setBusinessName} maxLength={60} />
+      <Chips label="Moneda" options={CURRENCIES.map((item) => ({ value: item.code, label: item.code }))} value={currency} onChange={setCurrency} />
+      <Muted>Tus costos y precios se escriben y se muestran en ella. Cambiarla no convierte lo que ya escribiste.</Muted>
       <Field
         label="Precio de la luz por kWh"
         unit="$"

@@ -1,3 +1,5 @@
+import type { Currency } from './currency';
+
 // Rows as they come from Supabase (see supabase/schema.sql).
 
 export type Profile = {
@@ -7,6 +9,8 @@ export type Profile = {
   business_name: string;
   kwh_price: number;
   margin_pct: number;
+  /** Costs and prices of the workshop are typed and shown in it. */
+  currency: Currency;
   /** Extra filament quoted per plate by how many pieces it carries (waste, failed pieces). */
   waste_rules: WasteRule[];
   /** The workshop's fixed monthly costs (rent, internet…); the active ones are shared among overhead_pieces. */

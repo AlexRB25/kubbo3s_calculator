@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AddToCart } from "@/components/AddToCart";
 import { Gallery } from "@/components/Gallery";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
 import type { StoreProduct } from "@/lib/store";
 import { publicClient, supabaseConfigured } from "@/lib/supabase";
 
@@ -39,9 +39,9 @@ export default async function StoreProductPage({ params }: PageProps<"/tienda/[s
         <div className="flex flex-col gap-5">
           <h1 className="text-3xl">{product.name}</h1>
           <p className="flex items-baseline gap-3">
-            <strong className="text-3xl tabular-nums">{money(product.price)}</strong>
+            <strong className="text-3xl tabular-nums"><Price mxn={product.price} charged /></strong>
             {product.compare_price != null && product.compare_price > product.price && (
-              <s className="tabular-nums text-muted">{money(product.compare_price)}</s>
+              <s className="tabular-nums text-muted"><Price mxn={product.compare_price} /></s>
             )}
           </p>
           <AddToCart productId={product.id} stock={product.stock} />

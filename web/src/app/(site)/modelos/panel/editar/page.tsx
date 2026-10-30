@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ChangeEvent } from "react";
 import { MarketPanel } from "@/components/market/Panel";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
 import { CATEGORIES, fileSize, MAX_FILE_MB, MAX_IMAGE_MB, mediaUrl, MODEL_EXTENSIONS, safeFileName, type Model, type ModelFile } from "@/lib/market";
 import { supabase } from "@/lib/supabase";
 
@@ -274,7 +274,7 @@ function Editor({ userId }: { userId: string }) {
       <aside className="flex flex-col gap-4">
         <div className="card flex flex-col gap-3">
           <label className="label">
-            Precio en pesos (0 = gratis)
+            Precio en pesos mexicanos, MXN (0 = gratis)
             <input
               className="input"
               type="number"
@@ -288,7 +288,7 @@ function Editor({ userId }: { userId: string }) {
           {price > 0 && price < 10 && <p className="text-xs text-warn">El precio mínimo es $10 (o 0 para gratis).</p>}
           {price >= 10 && feePct != null && (
             <p className="text-xs text-muted">
-              Por cada venta recibes <strong className="text-money">{money(price - Math.round(price * feePct) / 100)}</strong> (Kubbo se queda el {feePct} %).
+              Por cada venta recibes <strong className="text-money"><Price mxn={price - Math.round(price * feePct) / 100} /></strong> (Kubbo se queda el {feePct} %).
             </p>
           )}
           <label className="flex items-start gap-2 text-sm">

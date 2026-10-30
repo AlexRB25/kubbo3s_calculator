@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { MarketPanel } from "@/components/market/Panel";
-import { money } from "@/lib/format";
+import { Price } from "@/components/Price";
 import { mediaUrl, type Model } from "@/lib/market";
 import { supabase } from "@/lib/supabase";
 
@@ -55,7 +55,7 @@ function MyModels({ userId }: { userId: string }) {
               <div className="min-w-48 flex-1">
                 <p className="font-medium">{model.title}</p>
                 <p className="text-xs text-muted">
-                  {Number(model.price) > 0 ? money(model.price) : "Gratis"} · ⬇ {model.downloads} · {model.sales} ventas · ♥ {model.likes} · 💬 {model.comments}
+                  {Number(model.price) > 0 ? <Price mxn={model.price} /> : "Gratis"} · ⬇ {model.downloads} · {model.sales} ventas · ♥ {model.likes} · 💬 {model.comments}
                   {model.rating_count > 0 && ` · ★ ${Number(model.rating_avg).toFixed(1)}`}
                 </p>
                 {model.blocked && <p className="text-xs text-bad">Oculto por Kubbo{model.blocked_reason && `: ${model.blocked_reason}`}</p>}
