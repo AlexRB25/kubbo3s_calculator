@@ -73,6 +73,10 @@ export type Filament = {
   material: string;
   color: string;
   color_hex: string;
+  /** The other colours of a bicolor, tricolor or rainbow filament, after color_hex. */
+  extra_colors: string[];
+  /** Glow in the dark: its swatch glows in the lists. */
+  glow: boolean;
   supplier_id: string | null;
   stock_g: number;
   /** Reference: what a kilo usually costs, as the user typed it. */
@@ -94,6 +98,10 @@ export type CatalogFilament = {
   material: string;
   color_name: string;
   color_hex: string;
+  /** The other colours of a bicolor, tricolor or rainbow filament, after color_hex. */
+  extra_colors: string[];
+  /** Glow in the dark: its swatch glows in the lists. */
+  glow: boolean;
   image_url: string | null;
   spool_g: number;
   reference_price_kg: number;

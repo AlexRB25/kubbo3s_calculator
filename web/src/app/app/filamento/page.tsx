@@ -4,11 +4,13 @@ import { useState } from "react";
 import { PurchaseForm } from "@/components/app/PurchaseForm";
 import { CountForm, StockHistory } from "@/components/app/StockDialogs";
 import { FilamentForm } from "@/components/app/FilamentForm";
+import { Swatch } from "@/components/app/Swatch";
 import { Empty, Modal, PageHeader, Stat, TableCard } from "@/components/app/ui";
 import { costPerGram, filamentName } from "@/lib/costs";
 import { useData } from "@/lib/data";
 import { money, weight } from "@/lib/format";
 import { filamentItem, preciseMoney } from "@/lib/inventory";
+import { filamentColors } from "@/lib/labels";
 import type { Filament } from "@/lib/types";
 
 export default function FilamentsPage() {
@@ -60,16 +62,16 @@ export default function FilamentsPage() {
                   <tr key={filament.id}>
                     <td>
                       <span className="flex items-center gap-3">
-                        <span className="relative size-10 shrink-0 overflow-hidden rounded-lg border border-line" style={{ background: filament.color_hex }}>
+                        <Swatch colors={filamentColors(filament)} glow={filament.glow} className="relative size-10 shrink-0 overflow-hidden rounded-lg border border-line">
                           {filament.image_url && (
                             // eslint-disable-next-line @next/next/no-img-element -- public photo of the spool
                             <img src={filament.image_url} alt="" className="absolute inset-0 size-full object-cover" />
                           )}
-                        </span>
+                        </Swatch>
                         <span>
                           {filamentName(filament)}
                           <span className="flex items-center gap-1 text-xs text-muted">
-                            <span className="inline-block size-3 rounded-full border border-line" style={{ background: filament.color_hex }} />
+                            <Swatch colors={filamentColors(filament)} glow={filament.glow} className="inline-block size-3 shrink-0 rounded-full border border-line" />
                             {filament.color || "Sin nombre de color"}
                           </span>
                         </span>

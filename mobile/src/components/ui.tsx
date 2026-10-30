@@ -332,9 +332,20 @@ export function Loading() {
   );
 }
 
-/** Colored dot that stands for a filament. */
-export function Swatch({ color }: { color: string }) {
-  return <View style={[styles.swatch, { backgroundColor: color }]} />;
+/** Colored dot that stands for a filament: one band per colour, and a glow when it glows in the dark. */
+export function Swatch({ colors, glow = false }: { colors: string[]; glow?: boolean }) {
+  return (
+    <View
+      style={[
+        styles.swatch,
+        glow && { borderColor: colors[0], borderWidth: 2, shadowColor: colors[0], shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+      ]}
+    >
+      {colors.map((color, index) => (
+        <View key={index} style={{ flex: 1, backgroundColor: color }} />
+      ))}
+    </View>
+  );
 }
 
 /** Asks before a destructive action. */
@@ -462,5 +473,5 @@ const styles = StyleSheet.create({
   },
   statValue: { color: Colors.text, fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
   empty: { alignItems: 'center', justifyContent: 'center', gap: Spacing.two, padding: Spacing.five },
-  swatch: { width: 28, height: 28, borderRadius: Radius.pill, borderColor: Colors.border, borderWidth: 1 },
+  swatch: { width: 28, height: 28, borderRadius: Radius.pill, borderColor: Colors.border, borderWidth: 1, flexDirection: 'row', overflow: 'hidden' },
 });

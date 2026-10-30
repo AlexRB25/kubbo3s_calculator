@@ -6,6 +6,7 @@ import { useState } from "react";
 import { CategoryPicker } from "@/components/app/CategoryPicker";
 import { InfoTip, TipLine } from "@/components/app/InfoTip";
 import { SliceImport, type SliceImportResult } from "@/components/app/SliceImport";
+import { Swatch } from "@/components/app/Swatch";
 import { Empty, Line, Modal, PageHeader, Switch, TableCard } from "@/components/app/ui";
 import {
   channelFees,
@@ -28,6 +29,7 @@ import {
   type Combo,
 } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
+import { filamentColors } from "@/lib/labels";
 import { duration, field, money, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
@@ -406,7 +408,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           const filament = filaments.find((item) => item.id === filamentId);
           return (
             <div key={index} className="flex items-center gap-2">
-              <span className="size-5 shrink-0 rounded-full border border-line" style={{ background: filament?.color_hex ?? "transparent" }} />
+              <Swatch colors={filament ? filamentColors(filament) : []} glow={filament?.glow} className="size-5 shrink-0 rounded-full border border-line" />
               <select
                 className="input flex-1"
                 aria-label={`Filamento ${index + 1}`}
@@ -526,7 +528,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                       return (
                         <label key={id} className="label">
                           <span className="flex items-center gap-1">
-                            <span className="inline-block size-3 shrink-0 rounded-full border border-line" style={{ background: filament?.color_hex }} />
+                            <Swatch colors={filament ? filamentColors(filament) : []} glow={filament?.glow} className="inline-block size-3 shrink-0 rounded-full border border-line" />
                             <span className="truncate">{filament ? filament.color || filamentName(filament) : "Filamento"} (g)</span>
                           </span>
                           <input

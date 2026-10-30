@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteCatalogFilament, saveCatalogFilament } from "@/app/actions";
+import { ColorsInput } from "@/components/ColorsInput";
 import { ImagesInput } from "@/components/ImagesInput";
 import { admin, must } from "@/lib/supabase/admin";
 import type { CatalogFilament } from "../page";
@@ -41,10 +42,7 @@ export default async function CatalogFilamentPage({ params }: PageProps<"/filame
           Nombre del color
           <input name="color_name" defaultValue={filament?.color_name} className="input" required placeholder="Gris, Verde bosque, Rojo fuego…" />
         </label>
-        <label className="label">
-          Color (para las listas)
-          <input name="color_hex" type="color" defaultValue={filament?.color_hex ?? "#9a9aa8"} className="input h-11 p-1" />
-        </label>
+        <ColorsInput defaultColors={filament ? [filament.color_hex, ...(filament.extra_colors ?? [])] : []} defaultGlow={filament?.glow ?? false} />
         <label className="label">
           Peso del rollo (g)
           <input name="spool_g" type="number" min={1} step="any" defaultValue={filament?.spool_g ?? 1000} className="input" />

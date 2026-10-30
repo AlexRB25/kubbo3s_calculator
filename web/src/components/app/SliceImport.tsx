@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
+import { Swatch } from "@/components/app/Swatch";
 import { Modal } from "@/components/app/ui";
 import { filamentName } from "@/lib/costs";
 import { duration, weight } from "@/lib/format";
+import { filamentColors } from "@/lib/labels";
 import { fitsPrinter, matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice, type SliceReport } from "@/lib/slice";
 import type { Filament, Printer } from "@/lib/types";
 
@@ -190,7 +192,7 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
                         {sliced.type || "Filamento"} {sliced.slot > 1 || plate.filaments.length > 1 ? `#${sliced.slot}` : ""} · {weight(sliced.grams)}
                       </span>
                       <span className="text-muted">→</span>
-                      <span className="size-5 shrink-0 rounded-full border border-line" style={{ background: chosen?.color_hex ?? "transparent" }} />
+                      <Swatch colors={chosen ? filamentColors(chosen) : []} glow={chosen?.glow} className="size-5 shrink-0 rounded-full border border-line" />
                       <select
                         className="input min-w-48 flex-1"
                         value={review.choices[key] ?? ""}

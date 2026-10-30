@@ -83,3 +83,9 @@ export function brandOptions(used: (string | null | undefined)[]) {
   }
   return all;
 }
+
+/** Every colour of a filament, the main one first (one for a solid filament, more for a bicolor or rainbow). */
+export const filamentColors = (filament: { color_hex: string; extra_colors?: string[] | null }) => [
+  filament.color_hex,
+  ...(filament.extra_colors ?? []),
+];

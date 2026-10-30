@@ -1,5 +1,6 @@
 import { costPerGram, filamentName } from "./costs";
 import { money, weight } from "./format";
+import { filamentColors } from "./labels";
 import type { Expense, Filament, InventoryItemType, Material } from "./types";
 
 /** Anything with stock: a filament, another material or a finished product. */
@@ -8,7 +9,9 @@ export type Item = {
   id: string;
   name: string;
   detail: string;
-  color?: string;
+  /** Colours of a filament, the main one first. */
+  colors?: string[];
+  glow?: boolean;
   unit: "g" | "ml" | "pza";
   stock: number;
   /** Real cost of one gram, millilitre or piece (from purchases; the reference while there are none). */
@@ -44,7 +47,8 @@ export const filamentItem = (filament: Filament): Item => ({
   id: filament.id,
   name: filamentName(filament),
   detail: "Filamento",
-  color: filament.color_hex,
+  colors: filamentColors(filament),
+  glow: filament.glow,
   unit: "g",
   stock: filament.stock_g,
   unitCost: costPerGram(filament),

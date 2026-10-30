@@ -3,10 +3,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useData, useSave } from "@/lib/data";
 import { num } from "@/lib/format";
-import { brandOptions } from "@/lib/labels";
+import { brandOptions, filamentColors } from "@/lib/labels";
 import { useSession } from "@/lib/session";
 import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
 import type { CatalogFilament, Filament } from "@/lib/types";
+import { ColorsField, Swatch } from "./Swatch";
 
 const MATERIALS = ["PLA", "PLA+", "PLA Silk", "PLA Matte", "PETG", "Rapid PETG", "ABS", "ASA", "TPU", "Shoe3D", "PC", "Nylon"];
 
@@ -59,17 +60,17 @@ function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilamen
             onClick={() => onPick(item)}
             className="flex flex-col gap-2 rounded-lg border border-line p-2 text-left hover:border-brand"
           >
-            <span className="relative block aspect-square w-full overflow-hidden rounded-md" style={{ background: item.color_hex }}>
+            <Swatch colors={filamentColors(item)} glow={item.glow} className="relative block aspect-square w-full overflow-hidden rounded-md">
               {item.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element -- public catalog photos
                 <img src={item.image_url} alt="" className="absolute inset-0 size-full object-cover" />
               )}
-            </span>
+            </Swatch>
             <span className="text-sm font-semibold">
               {item.brand} {item.material}
             </span>
             <span className="flex items-center gap-1 text-xs text-muted">
-              <span className="inline-block size-3 rounded-full border border-line" style={{ background: item.color_hex }} />
+              <Swatch colors={filamentColors(item)} glow={item.glow} className="inline-block size-3 shrink-0 rounded-full border border-line" />
               {item.color_name}
             </span>
           </button>
@@ -93,7 +94,8 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
   const [material, setMaterial] = useState(filament?.material ?? "PLA");
   const [brand, setBrand] = useState(filament?.brand ?? "");
   const [color, setColor] = useState(filament?.color ?? "");
-  const [colorHex, setColorHex] = useState(filament?.color_hex ?? "#ffffff");
+  const [colors, setColors] = useState(filament ? filamentColors(filament) : ["#ffffff"]);
+  const [glow, setGlow] = useState(filament?.glow ?? false);
   const [photo, setPhoto] = useState<string | null>(filament?.image_url ?? null);
   const [uploading, setUploading] = useState(false);
   const [stock, setStock] = useState("");
@@ -107,7 +109,8 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
     setMaterial(item.material);
     setBrand(item.brand);
     setColor(item.color_name);
-    setColorHex(item.color_hex);
+    setColors(filamentColors(item));
+    setGlow(item.glow);
     setPhoto(item.image_url);
     if (item.reference_price_kg > 0) setCostPerKg(String(item.reference_price_kg));
     setLowStock(String(Math.round(item.spool_g * 0.2)));
@@ -132,7 +135,9 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
       material: material.trim(),
       brand: brand.trim(),
       color: color.trim(),
-      color_hex: colorHex,
+      color_hex: colors[0],
+      extra_colors: colors.slice(1),
+      glow,
       image_url: photo,
       catalog_id: catalogId,
       cost_per_kg: num(costPerKg),
@@ -150,12 +155,12 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
   return (
     <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
       <div className="flex items-center gap-3 sm:col-span-2">
-        <span className="relative size-20 shrink-0 overflow-hidden rounded-lg border border-line" style={{ background: colorHex }}>
+        <Swatch colors={colors} glow={glow} className="relative size-20 shrink-0 overflow-hidden rounded-lg border border-line">
           {photo && (
             // eslint-disable-next-line @next/next/no-img-element -- public photo of the spool
             <img src={photo} alt="" className="absolute inset-0 size-full object-cover" />
           )}
-        </span>
+        </Swatch>
         <div className="flex flex-col gap-1">
           <p className="font-semibold">{[material, color, brand].filter(Boolean).join(" ") || "Filamento"}</p>
           {catalogId && <p className="text-xs text-brand">Del catálogo Kubbo</p>}
@@ -205,15 +210,15 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
         Nombre del color
         <input className="input" value={color} onChange={(event) => setColor(event.target.value)} placeholder="Verde bosque, Gris espacial…" required />
       </label>
-      <label className="label">
-        Color
-        <span className="flex items-center gap-2">
-          <input className="input h-11 w-16 p-1" type="color" value={colorHex} onChange={(event) => setColorHex(event.target.value)} />
-          <span className="rounded-full border border-line px-3 py-1 text-xs" style={{ background: colorHex, color: luminance(colorHex) > 0.6 ? "#101315" : "#ffffff" }}>
-            {color || "Así se verá en las listas"}
-          </span>
+      <div className="label">
+        Colores
+        <ColorsField colors={colors} onColors={setColors} glow={glow} onGlow={setGlow} />
+        <span className="flex items-center gap-2 font-normal">
+          <Swatch colors={colors} glow={glow} className="inline-block size-4 shrink-0 rounded-full border border-line" />
+          {color || "Así se verá en las listas"}
+          {colors.length > 1 && " · el primero es el principal"}
         </span>
-      </label>
+      </div>
       {!filament && (
         <label className="label">
           Existencia inicial (g)
@@ -270,10 +275,4 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
       </div>
     </form>
   );
-}
-
-/** 0 (black) … 1 (white), to pick a readable text colour over a swatch. */
-function luminance(hex: string) {
-  const value = parseInt(hex.replace("#", "").slice(0, 6), 16) || 0;
-  return (0.299 * ((value >> 16) & 255) + 0.587 * ((value >> 8) & 255) + 0.114 * (value & 255)) / 255;
 }

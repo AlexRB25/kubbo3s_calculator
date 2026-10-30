@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Swatch } from "@/components/Swatch";
 import { cleanUrl, money } from "@/lib/format";
 import { admin, must } from "@/lib/supabase/admin";
 
@@ -9,6 +10,10 @@ export type CatalogFilament = {
   material: string;
   color_name: string;
   color_hex: string;
+  /** The other colours of a bicolor, tricolor or rainbow filament, after color_hex. */
+  extra_colors: string[];
+  /** Glow in the dark. */
+  glow: boolean;
   image_url: string | null;
   spool_g: number;
   reference_price_kg: number;
@@ -18,6 +23,8 @@ export type CatalogFilament = {
   active: boolean;
   sort: number;
 };
+
+const colorsOf = (filament: CatalogFilament) => [filament.color_hex, ...(filament.extra_colors ?? [])];
 
 /** Filaments Kubbo3D preloads: users pick one when they add a filament and only fill in their own data. */
 export default async function FilamentCatalogPage() {
@@ -62,16 +69,17 @@ export default async function FilamentCatalogPage() {
                 <tr key={filament.id}>
                   <td>
                     <div className="flex items-center gap-3">
-                      <div className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-line" style={{ background: filament.color_hex }}>
+                      <Swatch colors={colorsOf(filament)} glow={filament.glow} className="relative size-12 shrink-0 overflow-hidden rounded-lg border border-line">
                         {filament.image_url && <Image src={cleanUrl(filament.image_url)} alt="" fill sizes="48px" className="object-cover" />}
-                      </div>
+                      </Swatch>
                       <div>
                         <p className="font-semibold">
                           {filament.brand} · {filament.color_name || "Sin nombre de color"}
                         </p>
                         <p className="flex items-center gap-1 text-xs text-muted">
-                          <span className="inline-block size-3 rounded-full border border-line" style={{ background: filament.color_hex }} />
-                          {filament.color_hex}
+                          <Swatch colors={colorsOf(filament)} glow={filament.glow} className="inline-block size-3 shrink-0 rounded-full border border-line" />
+                          {colorsOf(filament).join(" · ")}
+                          {filament.glow && " · fosforescente"}
                         </p>
                       </div>
                     </div>

@@ -200,11 +200,15 @@ export async function deleteCatalogPrinter(form: FormData) {
 export async function saveCatalogFilament(form: FormData) {
   await requireAdmin();
   const id = text(form, "id");
+  // The main colour first, then the others of a bicolor or rainbow filament.
+  const colors = form.getAll("colors").map(String).filter((color) => /^#[0-9a-f]{6}$/i.test(color)).slice(0, 12);
   const row = {
     brand: text(form, "brand"),
     material: text(form, "material"),
     color_name: text(form, "color_name"),
-    color_hex: text(form, "color_hex") || "#9A9AA8",
+    color_hex: colors[0] ?? "#9A9AA8",
+    extra_colors: colors.slice(1),
+    glow: flag(form, "glow"),
     image_url: form.getAll("images").map(String).filter(Boolean).map(cleanUrl)[0] ?? null,
     spool_g: number(form, "spool_g") || 1000,
     reference_price_kg: number(form, "reference_price_kg"),

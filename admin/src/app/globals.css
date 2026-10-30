@@ -57,3 +57,24 @@ h2 {
 .table .num {
   @apply text-right tabular-nums;
 }
+
+/* Glow-in-the-dark filaments: their swatch pulses with its own colour (set as --glow). */
+.swatch-glow {
+  box-shadow:
+    0 0 6px 1px var(--glow),
+    0 0 18px 4px color-mix(in srgb, var(--glow) 60%, transparent);
+  animation: swatch-glow 2.4s ease-in-out infinite;
+}
+@keyframes swatch-glow {
+  50% {
+    box-shadow:
+      0 0 3px 0 var(--glow),
+      0 0 8px 1px color-mix(in srgb, var(--glow) 35%, transparent);
+    filter: brightness(1.2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swatch-glow {
+    animation: none;
+  }
+}

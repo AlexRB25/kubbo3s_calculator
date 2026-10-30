@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PurchaseForm } from "@/components/app/PurchaseForm";
 import { CountForm, StockHistory } from "@/components/app/StockDialogs";
 import { materialFields } from "@/components/app/MaterialFields";
+import { Swatch } from "@/components/app/Swatch";
 import { Empty, FieldsForm, Modal, PageHeader, Stat, TableCard } from "@/components/app/ui";
 import { productCost } from "@/lib/costs";
 import { useData } from "@/lib/data";
@@ -112,7 +113,7 @@ export default function InventoryPage() {
               {shown.map((item) => (
                 <tr key={`${item.type}-${item.id}`}>
                   <td>
-                    {item.color && <span className="mr-2 inline-block size-4 rounded-full border border-line align-middle" style={{ background: item.color }} />}
+                    {item.colors && <Swatch colors={item.colors} glow={item.glow} className="mr-2 inline-block size-4 rounded-full border border-line align-middle" />}
                     {item.name}
                     {item.detail && <span className="block text-xs text-muted">{item.detail}</span>}
                   </td>

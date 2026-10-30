@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Button, Empty, ListItem, Row, Screen, Stat, Swatch } from '@/components/ui';
 import { costPerGram, filamentName } from '@/lib/costs';
 import { money, weight } from '@/lib/format';
+import { filamentColors } from '@/lib/labels';
 import { useData } from '@/store/data';
 
 export default function FilamentsScreen() {
@@ -24,7 +25,7 @@ export default function FilamentsScreen() {
       {filaments.map((filament) => (
         <ListItem
           key={filament.id}
-          left={<Swatch color={filament.color_hex} />}
+          left={<Swatch colors={filamentColors(filament)} glow={filament.glow} />}
           title={filamentName(filament)}
           subtitle={
             filament.avg_cost_per_g > 0

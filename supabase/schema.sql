@@ -2638,3 +2638,18 @@ grant execute on function public.can_read_model_file(text) to authenticated;
 drop policy if exists kubbo_model_files_buyers on storage.objects;
 create policy kubbo_model_files_buyers on storage.objects for select to authenticated
   using (bucket_id = 'model-files' and public.can_read_model_file(name));
+
+-- ───────────────────────── Filamentos de varios colores y fosforescentes ─────────────────────────
+-- color_hex sigue siendo el color principal (con él se comparan los colores del laminador);
+-- extra_colors son los demás de un filamento bicolor, tricolor o arcoíris, en orden.
+-- glow: brilla en la oscuridad; las listas muestran su muestra con un brillo.
+
+alter table public.filament_catalog add column if not exists extra_colors text[] not null default '{}';
+alter table public.filament_catalog add column if not exists glow boolean not null default false;
+alter table public.filaments add column if not exists extra_colors text[] not null default '{}';
+alter table public.filaments add column if not exists glow boolean not null default false;
+
+alter table public.filament_catalog drop constraint if exists filament_catalog_extra_colors_check;
+alter table public.filament_catalog add constraint filament_catalog_extra_colors_check check (cardinality(extra_colors) <= 11);
+alter table public.filaments drop constraint if exists filaments_extra_colors_check;
+alter table public.filaments add constraint filaments_extra_colors_check check (cardinality(extra_colors) <= 11);

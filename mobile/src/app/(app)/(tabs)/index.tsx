@@ -7,6 +7,7 @@ import { Button, Card, ErrorText, Heading, Line, ListItem, Muted, Row, Screen, S
 import { Colors, Spacing } from '@/constants/theme';
 import { filamentName } from '@/lib/costs';
 import { day, isoDay, money, weight } from '@/lib/format';
+import { filamentColors } from '@/lib/labels';
 import { useData } from '@/store/data';
 
 /** Days ahead that a scheduled maintenance starts showing up as pending. */
@@ -107,7 +108,7 @@ export default function HomeScreen() {
           {lowFilaments.map((filament) => (
             <ListItem
               key={filament.id}
-              left={<Swatch color={filament.color_hex} />}
+              left={<Swatch colors={filamentColors(filament)} glow={filament.glow} />}
               title={filamentName(filament)}
               subtitle={`Aviso al bajar de ${weight(filament.low_stock_g)}`}
               value={weight(filament.stock_g)}
