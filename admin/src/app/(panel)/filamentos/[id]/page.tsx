@@ -5,7 +5,7 @@ import { ImagesInput } from "@/components/ImagesInput";
 import { admin, must } from "@/lib/supabase/admin";
 import type { CatalogFilament } from "../page";
 
-const MATERIALS = ["PLA", "PLA+", "PLA Silk", "PLA Matte", "PETG", "ABS", "ASA", "TPU", "PC", "Nylon", "PLA-CF", "PETG-CF"];
+const MATERIALS = ["PLA", "PLA+", "PLA Silk", "PLA Matte", "PETG", "Rapid PETG", "ABS", "ASA", "TPU", "PC", "Nylon", "PLA-CF", "PETG-CF"];
 
 export default async function CatalogFilamentPage({ params }: PageProps<"/filamentos/[id]">) {
   const { id } = await params;
