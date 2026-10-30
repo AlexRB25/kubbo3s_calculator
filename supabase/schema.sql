@@ -376,7 +376,7 @@ grant update (name, business_name, kwh_price, margin_pct, waste_rules) on public
 -- (precios de referencia del catálogo, en pesos mexicanos) se convierte al tipo de cambio del día.
 alter table public.profiles add column if not exists currency text not null default 'MXN';
 alter table public.profiles drop constraint if exists profiles_currency_check;
-alter table public.profiles add constraint profiles_currency_check check (currency in ('MXN', 'USD', 'COP'));
+alter table public.profiles add constraint profiles_currency_check check (currency ~ '^[A-Z]{3}$');
 grant update (currency) on public.profiles to authenticated;
 
 -- La ganancia deseada se mide sobre el precio de venta (vendo en 100, me quedan 50: 50 %), ya no sobre
