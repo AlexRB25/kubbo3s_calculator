@@ -9,7 +9,7 @@ import { brandOptions } from '@/lib/labels';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
 
-const MATERIALS = ['PLA', 'PLA+', 'PETG', 'Rapid PETG', 'ABS', 'ASA', 'TPU', 'Shoe3D', 'Resina'];
+const MATERIALS = ['PLA', 'PLA Basic', 'PLA+', 'PETG', 'Rapid PETG', 'ABS', 'ASA', 'TPU', 'Shoe3D', 'Resina'];
 
 const SWATCHES = [
   '#FFFFFF', '#111111', '#9AA7AD', '#E53935', '#FF6B2C', '#F5B83D', '#FFEB3B',
