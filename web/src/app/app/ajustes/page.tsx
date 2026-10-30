@@ -1,23 +1,15 @@
 "use client";
 
+import { CurrencySettings } from "@/components/app/CurrencySettings";
 import { OverheadCosts } from "@/components/app/OverheadCosts";
 import { WasteRules } from "@/components/app/WasteRules";
 import { FieldsForm, PageHeader, type FieldDef } from "@/components/app/ui";
-import { CURRENCIES } from "@/lib/currency";
 import { useData } from "@/lib/data";
 import { supabase } from "@/lib/supabase";
 
 const FIELDS: FieldDef[] = [
   { name: "name", label: "Tu nombre" },
   { name: "business_name", label: "Nombre del negocio" },
-  {
-    name: "currency",
-    label: "Moneda",
-    type: "select",
-    options: CURRENCIES.map((currency) => ({ value: currency.code, label: currency.label })),
-    hint: "Tus costos y precios se escriben y se muestran en ella. Lo que te recomendamos en pesos mexicanos (como el precio de referencia de los filamentos del catálogo) se convierte al tipo de cambio del día. Cambiarla no convierte lo que ya escribiste.",
-    wide: true,
-  },
   {
     name: "kwh_price",
     label: "Precio de la luz por kWh ($)",
@@ -40,8 +32,11 @@ export default function SettingsPage() {
   return (
     <>
       <PageHeader title="Ajustes" />
+      <CurrencySettings />
+      {/* Keyed by currency: after converting, the forms start again from the converted amounts. */}
       <div className="card max-w-2xl">
         <FieldsForm
+          key={profile?.currency}
           fields={FIELDS}
           initial={profile ?? undefined}
           onSubmit={(values) => {
@@ -51,7 +46,7 @@ export default function SettingsPage() {
           }}
         />
       </div>
-      <OverheadCosts />
+      <OverheadCosts key={profile?.currency} />
       <WasteRules />
     </>
   );

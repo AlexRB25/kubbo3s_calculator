@@ -2661,3 +2661,76 @@ alter table public.filament_catalog drop constraint if exists filament_catalog_e
 alter table public.filament_catalog add constraint filament_catalog_extra_colors_check check (cardinality(extra_colors) <= 11);
 alter table public.filaments drop constraint if exists filaments_extra_colors_check;
 alter table public.filaments add constraint filaments_extra_colors_check check (cardinality(extra_colors) <= 11);
+
+-- ───────────────────────── Cambio de moneda del taller ─────────────────────────
+-- El dueño cambia la moneda y, si quiere, todo su dinero se convierte al tipo de cambio que la app le
+-- mostró (p_factor = cuánto vale 1 de la moneda anterior en la nueva), en una sola transacción.
+-- p_from evita convertir dos veces si la pantalla estaba vieja. Corre con los permisos del usuario.
+create or replace function public.change_currency(p_from text, p_to text, p_factor numeric) returns void
+language plpgsql set search_path = '' as $$
+declare
+  v_shop uuid := auth.uid();
+  f numeric := p_factor;
+begin
+  if v_shop is null or public.current_shop() is distinct from v_shop then
+    raise exception using errcode = 'P0001', message = 'Solo el dueño del taller cambia su moneda, desde su propio taller.';
+  end if;
+  if p_to !~ '^[A-Z]{3}$' then
+    raise exception using errcode = 'P0001', message = 'Moneda no válida.';
+  end if;
+  if not exists (select 1 from public.profiles where id = v_shop and currency = p_from) then
+    raise exception using errcode = 'P0001', message = 'Tu moneda ya cambió. Recarga la página e inténtalo de nuevo.';
+  end if;
+  if f is null then
+    update public.profiles set currency = p_to where id = v_shop;
+    return;
+  end if;
+  if not (f > 0) then
+    raise exception using errcode = 'P0001', message = 'Tipo de cambio no válido.';
+  end if;
+
+  update public.profiles set
+    currency = p_to,
+    kwh_price = round(kwh_price * f, 4),
+    overheads = coalesce((
+      select jsonb_agg(case when jsonb_typeof(o -> 'amount') = 'number'
+                            then jsonb_set(o, '{amount}', to_jsonb(round((o ->> 'amount')::numeric * f, 2))) else o end
+                       order by i)
+      from jsonb_array_elements(overheads) with ordinality as x (o, i)), '[]'::jsonb)
+  where id = v_shop;
+
+  update public.printers set hourly_cost = round(hourly_cost * f, 2), purchase_price = round(purchase_price * f, 2) where user_id = v_shop;
+  update public.filaments set cost_per_kg = round(cost_per_kg * f, 2) where user_id = v_shop;
+  update public.materials set cost_per_unit = round(cost_per_unit * f, 4) where user_id = v_shop;
+  update public.channels set fixed_fee = round(fixed_fee * f, 2), shipping_cost = round(shipping_cost * f, 2) where user_id = v_shop;
+  update public.packaging set cost = round(cost * f, 2) where user_id = v_shop;
+  update public.carriers set
+    prices = coalesce(array(select round(p * f, 2) from unnest(prices) with ordinality as x (p, i) order by i), '{}'),
+    rates = coalesce((
+      select jsonb_agg(coalesce((
+               select jsonb_agg(case when jsonb_typeof(c) = 'number' then to_jsonb(round((c #>> '{}')::numeric * f, 2)) else c end order by j)
+               from jsonb_array_elements(r) with ordinality as y (c, j)), '[]'::jsonb) order by i)
+      from jsonb_array_elements(rates) with ordinality as x (r, i)), '[]'::jsonb)
+  where user_id = v_shop;
+  update public.products set
+    extra_cost = round(extra_cost * f, 2),
+    prices = coalesce((
+      select jsonb_object_agg(k, case when jsonb_typeof(v) = 'number' then to_jsonb(round((v #>> '{}')::numeric * f, 2)) else v end)
+      from jsonb_each(prices) as x (k, v)), '{}'::jsonb)
+  where user_id = v_shop;
+  update public.sales set
+    unit_price = round(unit_price * f, 2),
+    fees = round(fees * f, 2),
+    shipping_cost = round(shipping_cost * f, 2),
+    unit_cost = round(unit_cost * f, 2),
+    packaging_cost = round(packaging_cost * f, 2),
+    list_price = round(list_price * f, 2)
+  where user_id = v_shop;
+  update public.maintenance set cost = round(cost * f, 2) where user_id = v_shop;
+  update public.printer_wear set amount = round(amount * f, 2) where user_id = v_shop;
+  update public.print_job_filaments set cost = round(cost * f, 2) where user_id = v_shop;
+  -- Sus triggers recalculan el costo real por gramo / unidad con los montos nuevos.
+  update public.expenses set amount = round(amount * f, 2) where user_id = v_shop;
+end $$;
+revoke all on function public.change_currency(text, text, numeric) from public, anon;
+grant execute on function public.change_currency(text, text, numeric) to authenticated;
