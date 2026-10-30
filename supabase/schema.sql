@@ -2749,3 +2749,44 @@ alter table public.subscriptions add column if not exists stripe_subscription_id
 alter table public.subscriptions drop constraint if exists subscriptions_source_check;
 alter table public.subscriptions add constraint subscriptions_source_check check (source in ('mercadopago', 'admin', 'stripe'));
 alter table public.subscriptions alter column source set default 'stripe';
+
+-- ───────────────────────── Reclamos de derechos de autor (marketplace) ─────────────────────────
+-- Quien tenga los derechos de un modelo (o los represente) lo reclama con sus datos de contacto, dónde
+-- está el original y su evidencia, aunque no tenga cuenta. Los guarda el servidor del sitio (llave
+-- secreta) y solo el panel admin los lee; nadie los ve desde el navegador.
+create table if not exists public.model_claims (
+  id uuid primary key default gen_random_uuid(),
+  model_id uuid not null references public.models (id) on delete cascade,
+  -- Si quien reclama tenía sesión iniciada.
+  user_id uuid references auth.users (id) on delete set null,
+  claimant_name text not null check (char_length(claimant_name) between 2 and 120),
+  claimant_email text not null check (claimant_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' and char_length(claimant_email) <= 200),
+  claimant_phone text not null default '' check (char_length(claimant_phone) <= 40),
+  company text not null default '' check (char_length(company) <= 160),
+  country text not null default '' check (char_length(country) <= 80),
+  -- 'owner': es el autor o dueño de los derechos; 'agent': los representa.
+  relationship text not null check (relationship in ('owner', 'agent')),
+  -- Dónde está publicada la obra original.
+  original_url text not null default '' check (char_length(original_url) <= 1000),
+  description text not null check (char_length(description) between 20 and 5000),
+  evidence_links text[] not null default '{}' check (cardinality(evidence_links) <= 10),
+  -- Rutas en el bucket privado model-claims (<reclamo>/<archivo>).
+  evidence_files text[] not null default '{}' check (cardinality(evidence_files) <= 5),
+  -- Declaraciones de buena fe y de veracidad, y el nombre completo como firma.
+  good_faith boolean not null check (good_faith),
+  accurate boolean not null check (accurate),
+  signature text not null check (char_length(signature) between 2 and 120),
+  status text not null default 'new' check (status in ('new', 'accepted', 'rejected')),
+  admin_note text not null default '' check (char_length(admin_note) <= 2000),
+  created_at timestamptz not null default now(),
+  resolved_at timestamptz
+);
+create index if not exists model_claims_status_idx on public.model_claims (status, created_at);
+-- Un mismo correo no abre dos reclamos pendientes del mismo modelo.
+create unique index if not exists model_claims_open_idx on public.model_claims (model_id, lower(claimant_email)) where status = 'new';
+alter table public.model_claims enable row level security;
+revoke all on public.model_claims from anon, authenticated;
+
+-- Evidencias: privadas; el servidor da enlaces de subida de un solo uso y el panel admin las lee.
+insert into storage.buckets (id, name, public, file_size_limit) values ('model-claims', 'model-claims', false, 10485760)
+on conflict (id) do nothing;

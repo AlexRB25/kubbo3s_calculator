@@ -190,12 +190,17 @@ export function ModelActions({ modelId, ownerId, price, title }: Props) {
       )}
       {price > 0 && !access && !mine && <p className="text-xs text-muted">Pago único: lo descargas cuando quieras desde Mi biblioteca.</p>}
       {!mine && <Report modelId={modelId} title={title} />}
+      {!mine && (
+        <Link href={`/modelos/${modelId}/reclamo`} className="text-sm text-muted underline hover:text-white">
+          ¿Es tu diseño? Reportar por derechos de autor
+        </Link>
+      )}
     </div>
   );
 }
 
 function Report({ modelId, title }: { modelId: string; title: string }) {
-  const [reason, setReason] = useState<string>(REPORT_REASONS[0].value);
+  const [reason, setReason] = useState<string>(REPORT_REASONS[1].value);
   const [details, setDetails] = useState("");
   const [state, setState] = useState<"idle" | "sent" | "error">("idle");
 
@@ -214,7 +219,7 @@ function Report({ modelId, title }: { modelId: string; title: string }) {
       ) : (
         <form onSubmit={send} className="mt-2 flex flex-col gap-2">
           <select className="input" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo">
-            {REPORT_REASONS.map((item) => (
+            {REPORT_REASONS.filter((item) => item.value !== "copyright").map((item) => (
               <option key={item.value} value={item.value}>
                 {item.label}
               </option>

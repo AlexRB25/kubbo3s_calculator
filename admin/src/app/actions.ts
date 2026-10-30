@@ -362,3 +362,30 @@ export async function processPayout(form: FormData) {
   );
   revalidatePath("/retiros");
 }
+
+/**
+ * Settles a copyright claim. Accepting it takes the model down (with the claim as the reason, so the seller
+ * sees why); rejecting it only keeps the note. The claimant is answered by email from the panel.
+ */
+export async function resolveClaim(form: FormData) {
+  await requireAdmin();
+  const accepted = text(form, "decision") === "accepted";
+  const now = new Date().toISOString();
+  must(
+    await admin()
+      .from("model_claims")
+      .update({ status: accepted ? "accepted" : "rejected", admin_note: text(form, "note"), resolved_at: now })
+      .eq("id", text(form, "id"))
+      .eq("status", "new"),
+  );
+  if (accepted) {
+    must(
+      await admin()
+        .from("models")
+        .update({ blocked: true, blocked_reason: "Retirado por un reclamo de derechos de autor." })
+        .eq("id", text(form, "model_id")),
+    );
+  }
+  revalidatePath("/derechos");
+  revalidatePath("/marketplace");
+}

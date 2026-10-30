@@ -18,6 +18,7 @@ const LINKS = [
   { href: "/catalogos", label: "Catálogos y dominios" },
   { href: "/marketplace", label: "Modelos 3D" },
   { href: "/retiros", label: "Modelos 3D: retiros" },
+  { href: "/derechos", label: "Modelos 3D: derechos de autor" },
 ];
 
 // Every page here reads live data with the admin's session: never prerender them at build time.
@@ -33,7 +34,14 @@ export default async function PanelLayout({ children }: LayoutProps<"/">) {
   // Before the marketplace part of the schema runs these tables do not exist: the counts just stay empty.
   const { count: modelReports } = await admin().from("model_reports").select("id", { count: "exact", head: true }).eq("status", "new");
   const { count: payouts } = await admin().from("maker_payouts").select("id", { count: "exact", head: true }).eq("status", "requested");
-  const badges: Record<string, number | null> = { "/pedidos": pending, "/reportes": newReports, "/marketplace": modelReports, "/retiros": payouts };
+  const { count: claims } = await admin().from("model_claims").select("id", { count: "exact", head: true }).eq("status", "new");
+  const badges: Record<string, number | null> = {
+    "/pedidos": pending,
+    "/reportes": newReports,
+    "/marketplace": modelReports,
+    "/retiros": payouts,
+    "/derechos": claims,
+  };
 
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col md:flex-row">
