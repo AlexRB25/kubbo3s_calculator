@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
+import { VerifyEmail } from "@/components/VerifyEmail";
 import { authErrorMessage, supabase, supabaseConfigured } from "@/lib/supabase";
 
 function SignInForm() {
@@ -18,6 +19,8 @@ function SignInForm() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // Signed up (or tried to enter) without confirming the email yet: wait for it, then enter by itself.
+  const [waiting, setWaiting] = useState<{ email: string; password: string } | null>(null);
 
   // Also covers arriving here while already signed in.
   useEffect(() => {
@@ -37,12 +40,25 @@ function SignInForm() {
       : await supabase().auth.signInWithPassword({ email: form.email, password: form.password });
     setBusy(false);
 
-    if (error) setError(authErrorMessage(error));
+    if (error?.code === "email_not_confirmed") setWaiting({ email: form.email, password: form.password });
+    else if (error) setError(authErrorMessage(error));
     else if (!data.session && data.user?.identities?.length === 0) setError("Ya existe una cuenta con ese correo.");
-    else if (!data.session) {
-      setNotice("Te enviamos un correo. Confirma tu cuenta y luego entra aquí.");
-      setIsRegister(false);
-    }
+    else if (!data.session) setWaiting({ email: form.email, password: form.password });
+  }
+
+  if (waiting) {
+    return (
+      <div className="card relative flex w-full max-w-sm flex-col gap-4">
+        <VerifyEmail
+          email={waiting.email}
+          password={waiting.password}
+          onBack={() => {
+            setWaiting(null);
+            setIsRegister(true);
+          }}
+        />
+      </div>
+    );
   }
 
   return (

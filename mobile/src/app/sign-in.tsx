@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, ErrorText, Muted } from '@/components/ui';
@@ -16,6 +16,8 @@ export default function SignInScreen() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const isRegister = mode === 'register';
+  // Signed up (or tried to enter) without confirming the email yet: wait for it and then enter by itself.
+  const [waiting, setWaiting] = useState(false);
 
   async function submit() {
     setError('');
@@ -33,12 +35,25 @@ export default function SignInScreen() {
     setBusy(false);
 
     // On success with a session, the root layout swaps to the app screens by itself.
-    if (error) setError(authErrorMessage(error));
+    if (error?.code === 'email_not_confirmed') setWaiting(true);
+    else if (error) setError(authErrorMessage(error));
     else if (!data.session && data.user?.identities?.length === 0) setError('Ya existe una cuenta con ese correo.');
-    else if (!data.session) {
-      setNotice('Te enviamos un correo. Confirma tu cuenta y luego entra aquí.');
-      setMode('login');
-    }
+    else if (!data.session) setWaiting(true);
+  }
+
+  if (waiting) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <WaitForEmail
+          email={email.trim()}
+          password={password}
+          onBack={() => {
+            setWaiting(false);
+            setMode('register');
+          }}
+        />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -98,6 +113,93 @@ export default function SignInScreen() {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** Seconds between checks: Supabase limits sign-ins per IP, so not much more often than this. */
+const CHECK_EVERY = 12;
+const RESEND_WAIT = 60;
+
+/**
+ * Waits for the email to be confirmed (from this phone or another device) and then signs in with the
+ * password just typed, kept only in memory, so it is never typed again. It checks every few seconds while
+ * the app is open, when it comes back from the email app, and with "Ya lo confirmé".
+ */
+function WaitForEmail({ email, password, onBack }: { email: string; password: string; onBack: () => void }) {
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [resendIn, setResendIn] = useState(RESEND_WAIT);
+  const done = useRef(false);
+
+  const check = useCallback(
+    async (byHand: boolean) => {
+      if (done.current) return;
+      if (byHand) setChecking(true);
+      // Once it works the root layout swaps to the app screens by itself.
+      const { error: failed } = await supabase.auth.signInWithPassword({ email, password });
+      if (byHand) setChecking(false);
+      if (!failed) {
+        done.current = true;
+        setStatus('¡Correo confirmado! Entrando…');
+      } else if (failed.code === 'email_not_confirmed') {
+        if (byHand) setStatus('Todavía no vemos la confirmación. Abre el enlace del correo y vuelve a intentar.');
+      } else {
+        if (failed.code === 'invalid_credentials') done.current = true;
+        setError(authErrorMessage(failed));
+      }
+    },
+    [email, password],
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') check(false);
+    }, CHECK_EVERY * 1000);
+    // Back from the email app: check right away.
+    const subscription = AppState.addEventListener('change', (state) => state === 'active' && check(false));
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [check]);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setTimeout(() => setResendIn((value) => value - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+
+  async function resend() {
+    setError('');
+    setStatus('');
+    const { error: failed } = await supabase.auth.resend({ type: 'signup', email });
+    if (failed) return setError(authErrorMessage(failed));
+    setResendIn(RESEND_WAIT);
+    setStatus('Te enviamos el correo otra vez.');
+  }
+
+  return (
+    <View style={styles.center}>
+      <View style={styles.form}>
+        <Text style={[styles.title, { textAlign: 'center' }]}>Confirma tu correo</Text>
+        <Muted style={{ textAlign: 'center' }}>
+          Te enviamos un enlace a <Text style={{ color: Colors.text, fontWeight: '700' }}>{email}</Text>. Ábrelo desde este celular o desde otro
+          dispositivo: en cuanto lo confirmes entras solo, sin volver a escribir tu contraseña.
+        </Muted>
+        <Text style={styles.notice}>{status || 'Esperando tu confirmación…'}</Text>
+        <ErrorText>{error}</ErrorText>
+        <Button label={checking ? 'Revisando…' : 'Ya lo confirmé'} onPress={() => check(true)} loading={checking} />
+        <Button
+          variant="secondary"
+          label={resendIn > 0 ? `Reenviar correo (${resendIn} s)` : 'Reenviar correo'}
+          onPress={resend}
+          disabled={resendIn > 0}
+        />
+        <Muted style={{ textAlign: 'center' }}>¿No te llega? Revisa spam o promociones.</Muted>
+        <Button variant="secondary" label="Usar otro correo" onPress={onBack} />
+      </View>
+    </View>
   );
 }
 
