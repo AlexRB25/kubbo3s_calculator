@@ -6,7 +6,18 @@ import { strFromU8, unzipSync } from 'fflate';
 import type { Filament, Printer } from './types';
 
 export type SlicedFilament = { slot: number; type: string; color: string; grams: number };
-export type SlicedPlate = { index: number; minutes: number; filaments: SlicedFilament[]; objects: string[]; thumbnail: Uint8Array | null };
+export type SlicedPlate = {
+  index: number;
+  minutes: number;
+  filaments: SlicedFilament[];
+  objects: string[];
+  thumbnail: Uint8Array | null;
+  /** The slicer's id of each object (same order as `objects`); its colour in `pick` is R + G·256 + B·65536. */
+  objectIds?: number[];
+  /** Bambu/Orca plate seen from above, and the same view with every object painted in its id colour. */
+  top?: Uint8Array | null;
+  pick?: Uint8Array | null;
+};
 export type SliceReport = { slicer: string; printerModel: string; plates: SlicedPlate[]; warnings: string[] };
 
 /** Bambu's internal printer codes, for files that do not name the model. */
@@ -96,7 +107,7 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
   let files: Record<string, Uint8Array>;
   try {
     // Never the G-code itself unless needed: it can weigh tens of MB.
-    files = unzipSync(bytes, { filter: (file) => /^Metadata\/(slice_info\.config|project_settings\.config|plate_\d+\.png)$/i.test(file.name) });
+    files = unzipSync(bytes, { filter: (file) => /^Metadata\/(slice_info\.config|project_settings\.config|(plate|top|pick)_\d+\.png)$/i.test(file.name) });
   } catch {
     throw new Error('No se pudo abrir el 3MF: ¿está completo?');
   }
@@ -123,10 +134,21 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
       const slot = Number(item.id) || 1;
       return grams > 0 ? [{ slot, type: item.type || settingTypes[slot - 1] || '', color: normalHex(item.color || settingColours[slot - 1] || ''), grams }] : [];
     });
-    const objects = [...body.matchAll(/<object\s+([^>]*?)\/?>/g)].map((match) => attributes(match[1])).filter((item) => item.skipped !== 'true').map((item) => item.name ?? '');
+    const listed = [...body.matchAll(/<object\s+([^>]*?)\/?>/g)].map((match) => attributes(match[1])).filter((item) => item.skipped !== 'true');
+    const objects = listed.map((item) => item.name ?? '');
+    const objectIds = listed.map((item) => Number(item.identify_id) || 0);
     const minutes = Number(meta.prediction) / 60;
     if (!minutes && !filaments.length) continue;
-    plates.push({ index, minutes, filaments, objects, thumbnail: files[`Metadata/plate_${index}.png`] ?? null });
+    plates.push({
+      index,
+      minutes,
+      filaments,
+      objects,
+      objectIds,
+      thumbnail: files[`Metadata/plate_${index}.png`] ?? null,
+      top: files[`Metadata/top_${index}.png`] ?? null,
+      pick: files[`Metadata/pick_${index}.png`] ?? null,
+    });
   }
 
   let slicer = /Orca/i.test(info) ? 'OrcaSlicer' : /X-BBL|Bambu/i.test(info) ? 'Bambu Studio / OrcaSlicer' : 'Laminador';

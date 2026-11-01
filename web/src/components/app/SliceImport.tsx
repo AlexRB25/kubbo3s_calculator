@@ -7,6 +7,7 @@ import { filamentName } from "@/lib/costs";
 import { duration, weight } from "@/lib/format";
 import { filamentColors } from "@/lib/labels";
 import { fitsPrinter, matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice, type SliceReport } from "@/lib/slice";
+import { pieceThumbnails } from "@/lib/slice-thumbs";
 import type { Filament, Printer } from "@/lib/types";
 
 /** One plate as it goes into the product form: grams already by the user's filament ids. */
@@ -39,6 +40,8 @@ const STEPS = [
 export function SliceImport({ filaments, printers, onApply }: { filaments: Filament[]; printers: Printer[]; onApply: (result: SliceImportResult) => void }) {
   const [help, setHelp] = useState(false);
   const [review, setReview] = useState<Review | null>(null);
+  // A picture of each piece (cut out of the plate seen from above), so pieces named alike can be told apart.
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -59,6 +62,8 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
       const needed = neededPerProduct(totals.map((group) => group.count));
       const pieces = totals.map((group, index) => ({ key: group.name, name: group.name, needed: String(needed[index]) }));
       setReview({ report, fileName: file.name, printerId: matchPrinter(report.printerModel, printers)?.id ?? "", choices, pieces });
+      setThumbs({});
+      pieceThumbnails(report).then(setThumbs);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -231,6 +236,17 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
                     .join(", ");
                   return (
                     <div key={piece.key} className="flex flex-wrap items-center gap-2 text-sm">
+                      {thumbs[piece.key] ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- picture made in the browser from the file
+                        <img
+                          src={thumbs[piece.key]}
+                          alt={`Así se ve ${piece.key} en la placa`}
+                          title={piece.key}
+                          className="relative size-12 shrink-0 rounded-md border border-line bg-[#8b95a1] object-contain p-0.5 transition-transform hover:z-10 hover:scale-[3]"
+                        />
+                      ) : (
+                        <span className="size-12 shrink-0 rounded-md border border-dashed border-line" aria-hidden />
+                      )}
                       <input className="input min-w-40 flex-1" value={piece.name} aria-label={`Nombre de ${piece.key}`} onChange={(event) => setPiece(index, { name: event.target.value })} />
                       <span className="w-32 text-muted">{copies}</span>
                       <label className="flex items-center gap-1 text-xs text-muted">
