@@ -17,7 +17,7 @@ export function SiteHeader() {
           <Image src="/brand/logo.png" alt="" width={32} height={32} priority />
           KUBBO<span className="text-brand">3D</span>
         </Link>
-        <nav className="flex flex-1 items-center gap-5 text-sm font-medium text-muted">
+        <nav className="flex flex-1 items-center gap-5 overflow-x-auto text-sm font-medium text-muted">
           <Link href="/#funciones" className="hover:text-white">
             Funciones
           </Link>
@@ -26,6 +26,12 @@ export function SiteHeader() {
           </Link>
           <Link href="/tienda" className="hover:text-white">
             Tienda
+          </Link>
+          <Link href="/equipos" className="hover:text-white">
+            Equipos
+          </Link>
+          <Link href="/servicio-tecnico" className="whitespace-nowrap hover:text-white">
+            Servicio técnico
           </Link>
         </nav>
         <CurrencySelect />

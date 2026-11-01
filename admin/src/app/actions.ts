@@ -389,3 +389,32 @@ export async function resolveClaim(form: FormData) {
   revalidatePath("/derechos");
   revalidatePath("/marketplace");
 }
+
+// ── Equipos de usuarios y servicio técnico: el admin oculta anuncios o técnicos y borra calificaciones ──
+
+export async function setListingBlocked(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("equipment_listings").update({ blocked: text(form, "blocked") === "true" }).eq("id", text(form, "id")));
+  revalidatePath("/equipos");
+}
+
+export async function deleteListing(form: FormData) {
+  await requireAdmin();
+  const db = admin();
+  const { data } = await db.from("equipment_listings").select("images").eq("id", text(form, "id")).maybeSingle();
+  must(await db.from("equipment_listings").delete().eq("id", text(form, "id")));
+  if (data?.images?.length) await db.storage.from("equipment").remove(data.images);
+  revalidatePath("/equipos");
+}
+
+export async function setProviderBlocked(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("tech_providers").update({ blocked: text(form, "blocked") === "true" }).eq("user_id", text(form, "id")));
+  revalidatePath("/tecnicos");
+}
+
+export async function deleteTechReview(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("tech_reviews").delete().eq("id", text(form, "id")));
+  revalidatePath("/tecnicos");
+}

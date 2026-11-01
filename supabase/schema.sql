@@ -2815,3 +2815,169 @@ revoke all on public.model_claims from anon, authenticated;
 -- Evidencias: privadas; el servidor da enlaces de subida de un solo uso y el panel admin las lee.
 insert into storage.buckets (id, name, public, file_size_limit) values ('model-claims', 'model-claims', false, 10485760)
 on conflict (id) do nothing;
+
+-- ───────────────────────── Equipos de usuarios y servicio técnico ─────────────────────────
+
+-- Equipos que venden los usuarios (Kubbo3D no vende ni cobra): el cliente los contacta por WhatsApp.
+create table if not exists public.equipment_listings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  category text not null check (category in ('printer', 'ams', 'resin', 'laser', 'scanner', 'dryer', 'parts', 'other')),
+  title text not null check (char_length(title) between 3 and 120),
+  brand text not null default '' check (char_length(brand) <= 60),
+  model text not null default '' check (char_length(model) <= 80),
+  condition text not null check (condition in ('new', 'like_new', 'used', 'for_parts')),
+  price numeric(12, 2) not null check (price >= 0),
+  currency text not null default 'MXN' check (currency ~ '^[A-Z]{3}$'),
+  description text not null default '' check (char_length(description) <= 4000),
+  -- Lo que incluye (boquillas, placas, filamento…) y detalles técnicos (horas de uso, volumen…).
+  includes text not null default '' check (char_length(includes) <= 1000),
+  -- Rutas en el bucket público "equipment" (<user_id>/<archivo>); la primera es la portada.
+  images text[] not null default '{}' check (cardinality(images) <= 8),
+  city text not null default '' check (char_length(city) <= 80),
+  state text not null default '' check (char_length(state) <= 80),
+  country text not null default 'México' check (char_length(country) <= 60),
+  -- Solo dígitos con lada del país (521…, 57…).
+  whatsapp text not null check (whatsapp ~ '^[0-9]{10,15}$'),
+  free_shipping boolean not null default false,
+  shipping_note text not null default '' check (char_length(shipping_note) <= 200),
+  status text not null default 'active' check (status in ('active', 'paused', 'sold')),
+  -- Lo oculta el admin (fraude, contenido indebido); el dueño no lo puede cambiar.
+  blocked boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists equipment_listings_public_idx on public.equipment_listings (category, created_at desc) where status = 'active' and not blocked;
+create index if not exists equipment_listings_user_idx on public.equipment_listings (user_id);
+alter table public.equipment_listings enable row level security;
+revoke all on public.equipment_listings from anon, authenticated;
+grant select on public.equipment_listings to anon, authenticated;
+grant insert (category, title, brand, model, condition, price, currency, description, includes, images, city, state, country, whatsapp, free_shipping, shipping_note, status)
+  on public.equipment_listings to authenticated;
+grant update (category, title, brand, model, condition, price, currency, description, includes, images, city, state, country, whatsapp, free_shipping, shipping_note, status, updated_at)
+  on public.equipment_listings to authenticated;
+grant delete on public.equipment_listings to authenticated;
+drop policy if exists equipment_public on public.equipment_listings;
+create policy equipment_public on public.equipment_listings for select to anon, authenticated
+  using ((status = 'active' and not blocked) or user_id = (select auth.uid()));
+drop policy if exists equipment_own_insert on public.equipment_listings;
+create policy equipment_own_insert on public.equipment_listings for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists equipment_own_update on public.equipment_listings;
+create policy equipment_own_update on public.equipment_listings for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists equipment_own_delete on public.equipment_listings;
+create policy equipment_own_delete on public.equipment_listings for delete to authenticated using (user_id = (select auth.uid()));
+
+-- Fotos de equipos y de técnicos: públicas; cada usuario sube solo a su carpeta.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('equipment', 'equipment', true, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+drop policy if exists kubbo_equipment_own_folder on storage.objects;
+create policy kubbo_equipment_own_folder on storage.objects for all to authenticated
+  using (bucket_id = 'equipment' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'equipment' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- Técnicos: un perfil por usuario con sus servicios, marcas, zona y WhatsApp.
+create table if not exists public.tech_providers (
+  user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 2 and 80),
+  about text not null default '' check (char_length(about) <= 2000),
+  services text[] not null default '{}' check (cardinality(services) between 1 and 12
+    and services <@ array['repair', 'maintenance', 'calibration', 'install', 'upgrade', 'firmware', 'training', 'parts', 'resin', 'laser']),
+  brands text[] not null default '{}' check (cardinality(brands) <= 20),
+  -- En su taller, a domicilio, en línea.
+  modes text[] not null default '{}' check (cardinality(modes) between 1 and 3 and modes <@ array['workshop', 'home', 'remote']),
+  city text not null default '' check (char_length(city) <= 80),
+  state text not null default '' check (char_length(state) <= 80),
+  country text not null default 'México' check (char_length(country) <= 60),
+  whatsapp text not null check (whatsapp ~ '^[0-9]{10,15}$'),
+  photo_path text check (photo_path is null or char_length(photo_path) <= 300),
+  active boolean not null default true,
+  blocked boolean not null default false,
+  rating_avg numeric(3, 2) not null default 0,
+  rating_count int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists tech_providers_public_idx on public.tech_providers (rating_avg desc, rating_count desc) where active and not blocked;
+alter table public.tech_providers enable row level security;
+revoke all on public.tech_providers from anon, authenticated;
+grant select on public.tech_providers to anon, authenticated;
+grant insert (name, about, services, brands, modes, city, state, country, whatsapp, photo_path, active) on public.tech_providers to authenticated;
+grant update (name, about, services, brands, modes, city, state, country, whatsapp, photo_path, active, updated_at) on public.tech_providers to authenticated;
+grant delete on public.tech_providers to authenticated;
+drop policy if exists tech_public on public.tech_providers;
+create policy tech_public on public.tech_providers for select to anon, authenticated
+  using ((active and not blocked) or user_id = (select auth.uid()));
+drop policy if exists tech_own on public.tech_providers;
+create policy tech_own on public.tech_providers for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- Calificaciones: una por usuario y técnico (la puede cambiar), con comentario; el técnico responde.
+create table if not exists public.tech_reviews (
+  id uuid primary key default gen_random_uuid(),
+  provider_id uuid not null references public.tech_providers (user_id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  -- Lo pone el servidor: el nombre (primer nombre) del perfil de quien califica.
+  author_name text not null default '',
+  stars smallint not null check (stars between 1 and 5),
+  comment text not null default '' check (char_length(comment) <= 1000),
+  reply text not null default '' check (char_length(reply) <= 1000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (provider_id, user_id),
+  check (provider_id <> user_id)
+);
+create index if not exists tech_reviews_provider_idx on public.tech_reviews (provider_id, created_at desc);
+alter table public.tech_reviews enable row level security;
+revoke all on public.tech_reviews from anon, authenticated;
+grant select on public.tech_reviews to anon, authenticated;
+grant insert (provider_id, stars, comment) on public.tech_reviews to authenticated;
+grant update (stars, comment, updated_at) on public.tech_reviews to authenticated;
+grant delete on public.tech_reviews to authenticated;
+drop policy if exists tech_reviews_public on public.tech_reviews;
+create policy tech_reviews_public on public.tech_reviews for select to anon, authenticated using (true);
+drop policy if exists tech_reviews_own on public.tech_reviews;
+create policy tech_reviews_own on public.tech_reviews for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()) and provider_id <> (select auth.uid()));
+
+-- El nombre que se muestra sale del perfil (solo el primer nombre), no lo escribe quien califica.
+create or replace function public.tech_review_author() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.author_name := coalesce(nullif(split_part(trim((select p.name from public.profiles p where p.id = new.user_id)), ' ', 1), ''), 'Usuario');
+  return new;
+end $$;
+drop trigger if exists tech_review_author on public.tech_reviews;
+create trigger tech_review_author before insert on public.tech_reviews
+  for each row execute function public.tech_review_author();
+
+create or replace function public.tech_reviews_count() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_provider uuid := coalesce(new.provider_id, old.provider_id);
+begin
+  update public.tech_providers t
+  set rating_avg = coalesce(r.avg, 0), rating_count = r.n
+  from (select round(avg(stars), 2) as avg, count(*)::int as n from public.tech_reviews where provider_id = v_provider) r
+  where t.user_id = v_provider;
+  return null;
+end $$;
+drop trigger if exists tech_reviews_count on public.tech_reviews;
+create trigger tech_reviews_count after insert or update or delete on public.tech_reviews
+  for each row execute function public.tech_reviews_count();
+
+-- El técnico contesta las calificaciones de su perfil (solo la respuesta).
+create or replace function public.reply_tech_review(p_review uuid, p_reply text) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if char_length(coalesce(p_reply, '')) > 1000 then raise exception 'La respuesta es muy larga'; end if;
+  update public.tech_reviews set reply = trim(coalesce(p_reply, ''))
+  where id = p_review and provider_id = (select auth.uid());
+  if not found then raise exception 'Solo el técnico puede responder sus calificaciones'; end if;
+end $$;
+revoke all on function public.reply_tech_review(uuid, text) from public, anon;
+grant execute on function public.reply_tech_review(uuid, text) to authenticated;
+revoke all on function public.tech_review_author() from public, anon, authenticated;
+revoke all on function public.tech_reviews_count() from public, anon, authenticated;

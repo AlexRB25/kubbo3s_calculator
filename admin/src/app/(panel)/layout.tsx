@@ -19,6 +19,8 @@ const LINKS = [
   { href: "/marketplace", label: "Modelos 3D" },
   { href: "/retiros", label: "Modelos 3D: retiros" },
   { href: "/derechos", label: "Modelos 3D: derechos de autor" },
+  { href: "/equipos", label: "Equipos de usuarios" },
+  { href: "/tecnicos", label: "Servicio técnico" },
 ];
 
 // Every page here reads live data with the admin's session: never prerender them at build time.
