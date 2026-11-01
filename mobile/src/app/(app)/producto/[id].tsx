@@ -4,7 +4,8 @@ import { Text, View } from 'react-native';
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Card, Empty, Heading, Line, Muted, Row, Screen } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
-import { channelFees, costPerGram, filamentName, packagingName, overheadPerPiece, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { channelFees, costPerGram, filamentName, packagingName, overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { levelsLine } from '@/lib/levels';
 import { duration, money, weight } from '@/lib/format';
 import { useData } from '@/store/data';
 
@@ -17,7 +18,8 @@ export default function ProductScreen() {
   const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile));
   const machines = printers.filter((printer) => product.printer_ids.includes(printer.id));
   const box = packaging.find((item) => item.id === product.packaging_id);
-  const margin = profile?.margin_pct ?? 0;
+  const levels = priceLevels(profile, product);
+  const margin = levels.normal;
 
   return (
     <Screen>
@@ -81,6 +83,7 @@ export default function ProductScreen() {
             <Card key={channel.id}>
               <Line strong label={channel.name} value="Sin precio" />
               <Muted>{suggested}</Muted>
+              <Muted>Con envío: {levelsLine(cost.total, channel, levels, shippingAt)}</Muted>
               {at > 0 && (
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600' }}>Ganancia estimada al sugerido</Text>
@@ -112,6 +115,7 @@ export default function ProductScreen() {
             <Line label="Embalaje" value={`− ${money(box?.cost ?? 0)}`} />
             {profitLine('Ganancia con envío', withShipping)}
             <Muted>{suggested}</Muted>
+            <Muted>Con envío: {levelsLine(cost.total, channel, levels, shippingAt)}</Muted>
           </Card>
         );
       })}

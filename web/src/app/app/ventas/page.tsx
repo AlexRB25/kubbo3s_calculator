@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { channelFees, overheadPerPiece, productCost, shippingQuotes } from "@/lib/costs";
+import { channelFees, LEVEL_LABEL, levelOf, levelPrices, overheadPerPiece, priceLevels, productCost, shippingFor, shippingQuotes } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { day, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
@@ -49,6 +49,13 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const totalPackaging = shipped && packagingCost !== "" ? num(packagingCost) : autoPackaging;
   const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile)).total : num(customCost);
   const profit = pieces * unitPrice - totalFees - totalShipping - totalPackaging - pieces * unitCost;
+  // How far down it may go: the product's price levels in this channel (shipped when it ships).
+  const levels = priceLevels(profile, product);
+  const atLevel = product && channel ? levelPrices(unitCost, channel, levels, shipped ? (at) => shippingFor(channel, carriers, grams, box, at) : undefined) : null;
+  const wholesale = pieces >= levels.wholesale_min;
+  const level = atLevel && unitPrice > 0 ? levelOf(unitPrice, atLevel, levels) : null;
+  // Below the discount floor (or the wholesale one for a wholesale order) earns less than set in Ajustes.
+  const tooLow = level === "below" || (level === "wholesale" && !wholesale);
 
   function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -134,6 +141,15 @@ function SaleForm({ onDone }: { onDone: () => void }) {
                 ? `${money(-discount)} arriba de tu precio de lista de ${money(listPrice)}.`
                 : `Tu precio de lista es ${money(listPrice)}.`}
         </span>
+        {atLevel && (
+          <span className={`font-normal ${tooLow ? "text-warn" : ""}`}>
+            {level && `Es precio ${LEVEL_LABEL[level]}. `}
+            {wholesale
+              ? `Son ${pieces} piezas: a mayoreo puedes bajar hasta ${money(atLevel.wholesale)} c/u.`
+              : `En oferta puedes bajar hasta ${money(atLevel.discount)}; a mayoreo (desde ${levels.wholesale_min} piezas) hasta ${money(atLevel.wholesale)}.`}
+            {tooLow && " Ojo: ganas menos de lo que pusiste en Ajustes."}
+          </span>
+        )}
       </label>
       <label className="label">
         Comisiones e impuestos ($)

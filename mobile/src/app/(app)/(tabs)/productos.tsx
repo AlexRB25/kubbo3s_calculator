@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Empty, Field, ListItem, Screen } from '@/components/ui';
-import { overheadPerPiece, productCost, shippingFor, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { money } from '@/lib/format';
 import type { Product } from '@/lib/types';
 import { useData } from '@/store/data';
@@ -26,7 +26,7 @@ export default function ProductsScreen() {
       const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
       let price = product.prices[channel.id] ?? 0;
       if (!price) {
-        price = suggestedPriceWithShipping(cost, channel, profile?.margin_pct ?? 0, shippingAt);
+        price = suggestedPriceWithShipping(cost, channel, priceLevels(profile, product).normal, shippingAt);
         estimated = true;
       }
       return price > 0 ? [unitProfit(price, cost, channel, shippingAt(price))] : [];

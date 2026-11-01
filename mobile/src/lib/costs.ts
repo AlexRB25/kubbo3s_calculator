@@ -243,9 +243,9 @@ export function shippingFor(channel: Channel, carriers: Carrier[], productGrams:
  * shipping and what the channel takes of it (commission and taxes) — the profit is not asked of the
  * shipping. When the carrier charges by the price range it is worked out a few times until it settles.
  */
-export function suggestedPriceWithShipping(cost: number, channel: Channel, marginPct: number, shippingAt: (price: number) => number) {
-  const plain = suggestedPrice(cost, channel, marginPct);
-  const profit = (plain * marginPct) / 100;
+export function suggestedPriceWithShipping(cost: number, channel: Channel, markupPct: number, shippingAt: (price: number) => number) {
+  const plain = suggestedPrice(cost, channel, markupPct);
+  const profit = (cost * markupPct) / 100;
   const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100;
   if (kept <= 0.01 || plain <= 0) return 0;
   const priceFor = (shipping: number) => (cost + channel.fixed_fee + shipping + profit) / kept;
@@ -265,14 +265,57 @@ export function unitProfit(price: number, cost: number, channel: Channel, shippi
 }
 
 /**
- * Price that leaves `marginPct` percent of the price itself as profit once the product, the
- * channel's commission, taxes and fixed fee, and `shipping` are paid: sell at 100 with 50 of costs
- * and the profit is 50 %. 0 when the channel and margin leave nothing to price with.
+ * Price that leaves `markupPct` percent of the production cost as profit once the product, the
+ * channel's commission, taxes and fixed fee, and `shipping` are paid: a piece that costs 50 at
+ * 100 % leaves 50 of profit. 0 when the channel takes everything.
  */
-export function suggestedPrice(cost: number, channel: Channel, marginPct: number, shipping = 0) {
-  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100 - marginPct / 100;
+export function suggestedPrice(cost: number, channel: Channel, markupPct: number, shipping = 0) {
+  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100;
   if (kept <= 0.01) return 0;
-  return (cost + channel.fixed_fee + shipping) / kept;
+  return (cost * (1 + markupPct / 100) + channel.fixed_fee + shipping) / kept;
+}
+
+/**
+ * How much to earn, as % of the production cost: the usual price, the most it comes down in an
+ * offer, and the wholesale price from `wholesale_min` pieces. `list_extra` is the % over the usual
+ * price that is published, to have room to discount and still earn the usual.
+ */
+export type PriceLevels = { normal: number; discount: number; wholesale: number; wholesale_min: number; list_extra: number };
+
+export const DEFAULT_PRICE_LEVELS: PriceLevels = { normal: 100, discount: 75, wholesale: 50, wholesale_min: 10, list_extra: 0 };
+
+/** The workshop's levels, with what a product sets apart on top (the rest follow the workshop's). */
+export function priceLevels(profile: { price_levels?: Partial<PriceLevels> | null } | null | undefined, product?: { price_levels?: Partial<PriceLevels> | null } | null) {
+  return { ...DEFAULT_PRICE_LEVELS, ...(profile?.price_levels ?? {}), ...(product?.price_levels ?? {}) } as PriceLevels;
+}
+
+export type LevelPrices = { list: number; normal: number; discount: number; wholesale: number };
+
+/** The price of each level in a channel; with `shippingAt`, shipped (the profit is not asked of the shipping). */
+export function levelPrices(cost: number, channel: Channel, levels: PriceLevels, shippingAt?: (price: number) => number): LevelPrices {
+  const at = (pct: number) => (shippingAt ? suggestedPriceWithShipping(cost, channel, pct, shippingAt) : suggestedPrice(cost, channel, pct));
+  const normal = at(levels.normal);
+  return { list: normal * (1 + levels.list_extra / 100), normal, discount: at(levels.discount), wholesale: at(levels.wholesale) };
+}
+
+export type PriceLevel = keyof LevelPrices | 'below';
+
+export const LEVEL_LABEL: Record<PriceLevel, string> = {
+  list: 'de lista',
+  normal: 'normal',
+  discount: 'con descuento',
+  wholesale: 'de mayoreo',
+  below: 'abajo del mayoreo',
+};
+
+/** Which level a price reaches (rounding cents aside): the highest one it covers. */
+export function levelOf(price: number, prices: LevelPrices, levels: PriceLevels): PriceLevel {
+  const reaches = (at: number) => price >= at - 0.5;
+  if (levels.list_extra > 0 && reaches(prices.list)) return 'list';
+  if (reaches(prices.normal)) return 'normal';
+  if (reaches(prices.discount)) return 'discount';
+  if (reaches(prices.wholesale)) return 'wholesale';
+  return 'below';
 }
 
 /** "Caja chica · 20×15×10 cm"-style label: measures only when there are any. */

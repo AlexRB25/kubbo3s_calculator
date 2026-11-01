@@ -3,7 +3,10 @@ import { Alert } from 'react-native';
 
 import { Button, Chips, ErrorText, Field, Muted, Screen } from '@/components/ui';
 import { CURRENCIES, loadRates, type Currency } from '@/lib/currency';
-import { field, moneyIn, num } from '@/lib/format';
+import { levelPrices, priceLevels } from '@/lib/costs';
+import { field, money, moneyIn, num } from '@/lib/format';
+import { draftOf, marginOnPrice, readLevels } from '@/lib/levels';
+import type { Channel } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
 
@@ -14,14 +17,23 @@ export default function SettingsScreen() {
   const [name, setName] = useState(profile?.name ?? '');
   const [businessName, setBusinessName] = useState(profile?.business_name ?? '');
   const [kwhPrice, setKwhPrice] = useState(field(profile?.kwh_price));
-  const [margin, setMargin] = useState(String(profile?.margin_pct ?? 50));
+  const [levels, setLevels] = useState(() => draftOf(priceLevels(profile)));
+  const typed = readLevels(levels);
+  // A piece that costs 100 in a channel without commission: what each level charges.
+  const example = 'levels' in typed ? levelPrices(100, { commission_pct: 0, tax_pct: 0, fixed_fee: 0 } as Channel, typed.levels) : null;
 
   function submit() {
-    if (!(num(margin) >= 0 && num(margin) < 95)) return setError('La ganancia sobre la venta va de 0% a 94%.');
+    if ('error' in typed) return setError(typed.error);
     save(() =>
       supabase
         .from('profiles')
-        .update({ name: name.trim(), business_name: businessName.trim(), kwh_price: num(kwhPrice), margin_pct: num(margin) })
+        .update({
+          name: name.trim(),
+          business_name: businessName.trim(),
+          kwh_price: num(kwhPrice),
+          price_levels: typed.levels,
+          margin_pct: marginOnPrice(typed.levels.normal),
+        })
         .eq('id', profile!.id),
     );
   }
@@ -67,14 +79,27 @@ export default function SettingsScreen() {
         placeholder="0"
         hint="Viene en tu recibo. Con el consumo de cada impresora suma la electricidad al costo de las piezas."
       />
+      <Muted>
+        Ganancia sobre lo que te cuesta hacer la pieza: 100% = ganas lo mismo que te cuesta. Descuento y mayoreo son tu límite para bajar. Valen para todos los productos;
+        uno puede tener los suyos al editarlo.
+      </Muted>
+      <Field label="Ganancia normal" unit="%" numeric value={levels.normal} onChangeText={(text) => setLevels({ ...levels, normal: text })} hint="Tu precio de siempre." />
+      <Field label="Con descuento" unit="%" numeric value={levels.discount} onChangeText={(text) => setLevels({ ...levels, discount: text })} hint="Lo más que bajas en una oferta." />
+      <Field label="Mayoreo" unit="%" numeric value={levels.wholesale} onChangeText={(text) => setLevels({ ...levels, wholesale: text })} hint="Lo más que bajas por volumen." />
+      <Field label="Mayoreo desde" unit="pzs" numeric value={levels.wholesale_min} onChangeText={(text) => setLevels({ ...levels, wholesale_min: text })} />
       <Field
-        label="Ganancia deseada sobre la venta"
+        label="Margen extra para descontar"
         unit="%"
         numeric
-        value={margin}
-        onChangeText={setMargin}
-        hint="Lo que te queda del precio de venta ya pagados producción, comisiones e impuestos (el envío aparte). Vendes en $100, te cuesta $50: ganas 50%."
+        value={levels.list_extra}
+        onChangeText={(text) => setLevels({ ...levels, list_extra: text })}
+        hint="Se suma al precio normal para publicar; así al descontar sigues ganando lo normal. 0 = sin extra."
       />
+      {example && 'levels' in typed && (
+        <Muted>
+          {`Pieza que cuesta ${money(100)}, sin comisión:${typed.levels.list_extra > 0 ? ` lista ${money(example.list)},` : ''} normal ${money(example.normal)} (ganas ${money(example.normal - 100)}, ${example.normal > 0 ? Math.round(((example.normal - 100) / example.normal) * 100) : 0}% de la venta), descuento ${money(example.discount)}, mayoreo ${money(example.wholesale)}. En cada producto ves estos precios ya con comisión y envío.`}
+        </Muted>
+      )}
 
       <ErrorText>{error}</ErrorText>
       <Button label="Guardar" onPress={submit} loading={busy} />

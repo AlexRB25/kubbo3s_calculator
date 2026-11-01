@@ -390,6 +390,31 @@ alter table public.profiles alter column margin_on_price set default true;
 alter table public.profiles alter column margin_pct set default 50;
 alter table public.profiles drop constraint if exists profiles_margin_pct_check;
 alter table public.profiles add constraint profiles_margin_pct_check check (margin_pct >= 0 and margin_pct < 95);
+
+-- Niveles de precio: la ganancia se mide sobre el costo de producción (me cuesta $50 y gano 100 %:
+-- me quedan $50). Normal, con descuento (lo más que baja una oferta) y mayoreo (desde cierta cantidad
+-- de piezas), más un margen extra opcional sobre el normal para publicar y tener de dónde descontar.
+-- Cada producto puede tener los suyos (solo los que cambian); los demás siguen los del taller.
+alter table public.profiles add column if not exists price_levels jsonb;
+-- Una sola vez: el normal sale de la ganancia sobre la venta de antes (50 % sobre la venta = 100 % sobre
+-- el costo), así los precios sugeridos no cambian; descuento y mayoreo, 3/4 y la mitad del normal.
+update public.profiles p
+set price_levels = jsonb_build_object(
+  'normal', n.normal, 'discount', round(n.normal * 0.75), 'wholesale', round(n.normal * 0.5),
+  'wholesale_min', 10, 'list_extra', 0)
+from (select id, round(margin_pct * 100 / (100 - least(margin_pct, 94))) as normal from public.profiles) n
+where n.id = p.id and p.price_levels is null;
+alter table public.profiles alter column price_levels
+  set default '{"normal": 100, "discount": 75, "wholesale": 50, "wholesale_min": 10, "list_extra": 0}';
+alter table public.profiles alter column price_levels set not null;
+alter table public.profiles drop constraint if exists profiles_price_levels_check;
+alter table public.profiles add constraint profiles_price_levels_check check (jsonb_typeof(price_levels) = 'object');
+grant update (price_levels) on public.profiles to authenticated;
+
+alter table public.products add column if not exists price_levels jsonb;
+alter table public.products drop constraint if exists products_price_levels_check;
+alter table public.products add constraint products_price_levels_check
+  check (price_levels is null or jsonb_typeof(price_levels) = 'object');
 revoke all on public.activity_days from anon, authenticated;
 
 do $$

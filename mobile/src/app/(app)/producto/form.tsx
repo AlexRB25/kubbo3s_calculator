@@ -8,7 +8,8 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { costPerGram, filamentName, packagingName, overheadPerPiece, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { costPerGram, filamentName, LEVEL_LABEL, levelOf, levelPrices, packagingName, overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { draftOf, levelsLine, ownLevelsOnly, readLevels } from '@/lib/levels';
 import { field, money, num, weight } from '@/lib/format';
 import { matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice } from '@/lib/slice';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
@@ -57,6 +58,12 @@ export default function ProductFormScreen() {
   const [printerIds, setPrinterIds] = useState<string[]>(product?.printer_ids ?? []);
   const [packagingId, setPackagingId] = useState<string | null>(product?.packaging_id ?? null);
   const box = packaging.find((item) => item.id === packagingId);
+  // Profit levels: the workshop's, or ones of its own (only those that differ are saved).
+  const workshopLevels = priceLevels(profile);
+  const [ownLevels, setOwnLevels] = useState(Object.keys(product?.price_levels ?? {}).length > 0);
+  const [levelsDraft, setLevelsDraft] = useState(() => draftOf(priceLevels(profile, product)));
+  const typedLevels = readLevels(levelsDraft);
+  const levels = ownLevels && 'levels' in typedLevels ? typedLevels.levels : workshopLevels;
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
   );
@@ -151,6 +158,7 @@ export default function ProductFormScreen() {
       imagePath = upload.path;
     }
 
+    if (ownLevels && 'error' in typedLevels) return { error: { message: typedLevels.error } };
     const row = {
       name: name.trim(),
       sku: sku.trim(),
@@ -160,6 +168,7 @@ export default function ProductFormScreen() {
       ...draft,
       packaging_id: packagingId,
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
+      price_levels: ownLevels && 'levels' in typedLevels ? ownLevelsOnly(typedLevels.levels, workshopLevels) : null,
       // Stock is typed only for a new product; later prints, sales and arqueos move it.
       ...(product ? {} : { stock: Math.round(num(stock)) }),
     };
@@ -331,10 +340,33 @@ export default function ProductFormScreen() {
       {packaging.length === 0 && <Muted>Registra tus cajas, sobres y bolsas en Más → Embalaje para sumarlos al precio con envío.</Muted>}
 
       <Heading>Precio de venta</Heading>
+      <Chips
+        label="Ganancia sobre el costo"
+        options={[
+          { value: 'workshop', label: 'La de Ajustes' },
+          { value: 'own', label: 'Propia de este producto' },
+        ]}
+        value={ownLevels ? 'own' : 'workshop'}
+        onChange={(value) => setOwnLevels(value === 'own')}
+      />
+      {ownLevels ? (
+        <>
+          <Field label="Ganancia normal" unit="%" numeric value={levelsDraft.normal} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, normal: text })} hint={`La del taller: ${workshopLevels.normal}%`} />
+          <Field label="Con descuento" unit="%" numeric value={levelsDraft.discount} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, discount: text })} hint={`La del taller: ${workshopLevels.discount}%`} />
+          <Field label="Mayoreo" unit="%" numeric value={levelsDraft.wholesale} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, wholesale: text })} hint={`La del taller: ${workshopLevels.wholesale}%`} />
+          <Field label="Mayoreo desde" unit="pzs" numeric value={levelsDraft.wholesale_min} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, wholesale_min: text })} hint={`El del taller: ${workshopLevels.wholesale_min} piezas`} />
+          <Field label="Margen extra para descontar" unit="%" numeric value={levelsDraft.list_extra} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, list_extra: text })} hint={`El del taller: ${workshopLevels.list_extra}%`} />
+          {'error' in typedLevels && <ErrorText>{typedLevels.error}</ErrorText>}
+        </>
+      ) : (
+        <Muted>
+          {`Normal ${workshopLevels.normal}%, descuento ${workshopLevels.discount}%, mayoreo ${workshopLevels.wholesale}% desde ${workshopLevels.wholesale_min} piezas${workshopLevels.list_extra > 0 ? `, ${workshopLevels.list_extra}% extra para descontar` : ''}.`}
+        </Muted>
+      )}
       <Muted>Con envío suma el embalaje y el envío del canal; sin envío, el cliente recoge o paga el envío.</Muted>
       {channels.map((channel) => {
         const price = num(prices[channel.id] ?? '');
-        const margin = profile?.margin_pct ?? 0;
+        const margin = levels.normal;
         // Quoted with the channel's carriers for this weight and box.
         const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
         const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
@@ -350,8 +382,8 @@ export default function ProductFormScreen() {
             placeholder={`Sugerido ${suggestedPrice(cost.total, channel, margin).toFixed(2)}`}
             hint={
               price > 0
-                ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
-                : `Sugerido con envío: ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))}`
+                ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío · es precio ${LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
+                : `Sugerido con envío: ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
             }
           />
         );

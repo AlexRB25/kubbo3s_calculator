@@ -26,8 +26,14 @@ import {
   suggestedPriceWithShipping,
   suggestedPrice,
   unitProfit,
+  levelOf,
+  levelPrices,
+  priceLevels,
+  LEVEL_LABEL,
   type Combo,
+  type PriceLevels,
 } from "@/lib/costs";
+import { LevelPricesInfo, LevelsFields, draftOf, readLevels } from "@/components/app/PriceLevels";
 import { useData, useSave } from "@/lib/data";
 import { filamentColors } from "@/lib/labels";
 import { duration, field, money, num } from "@/lib/format";
@@ -137,6 +143,12 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   // Where it is listed in each channel; the public catalog shows these as buttons.
   const [links, setLinks] = useState<Record<string, string>>(product?.links ?? {});
   const [inCatalog, setInCatalog] = useState(product?.in_catalog ?? true);
+  // Profit levels: the workshop's, or ones of its own (only those that differ are saved, the rest follow the workshop).
+  const workshopLevels = priceLevels(profile);
+  const [ownLevels, setOwnLevels] = useState(Object.keys(product?.price_levels ?? {}).length > 0);
+  const [levelsDraft, setLevelsDraft] = useState(() => draftOf(priceLevels(profile, product)));
+  const typedLevels = readLevels(levelsDraft);
+  const levels = ownLevels && "levels" in typedLevels ? typedLevels.levels : workshopLevels;
 
   const parts: Part[] = partRows.map((row, index) => ({
     id: row.id,
@@ -244,6 +256,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       if (upload.error) return { error: { message: `No se pudo subir ${photo.file!.name}: ${upload.error.message}` } };
       paths.push(upload.path);
     }
+    if (ownLevels && "error" in typedLevels) return { error: { message: typedLevels.error } };
+    const ownOnly = ownLevels && "levels" in typedLevels
+      ? Object.fromEntries((Object.keys(workshopLevels) as (keyof PriceLevels)[]).flatMap((key) => (typedLevels.levels[key] !== workshopLevels[key] ? [[key, typedLevels.levels[key]]] : [])))
+      : {};
     const row = {
       name: name.trim(),
       sku: sku.trim(),
@@ -258,6 +274,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         Object.entries(links).flatMap(([channel, link]) => (link.trim() && channels.some((item) => item.id === channel) ? [[channel, link.trim()]] : [])),
       ),
       in_catalog: inCatalog,
+      price_levels: Object.keys(ownOnly).length ? ownOnly : null,
       // Stock is typed only for a new product; later prints, sales and arqueos move it.
       ...(product ? {} : { stock: Math.round(num(stock)) }),
     };
@@ -729,9 +746,27 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         </span>
       </label>
 
+      <div className="flex flex-col gap-3 rounded-lg border border-line p-3 sm:col-span-2">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={ownLevels} onChange={(event) => setOwnLevels(event.target.checked)} />
+          Este producto tiene su propia ganancia
+        </label>
+        {ownLevels ? (
+          <>
+            <LevelsFields draft={levelsDraft} onChange={setLevelsDraft} base={workshopLevels} />
+            {"error" in typedLevels && <p className="text-sm text-bad">{typedLevels.error}</p>}
+          </>
+        ) : (
+          <p className="text-xs text-muted">
+            Usa la de Ajustes: normal {workshopLevels.normal}%, descuento {workshopLevels.discount}%, mayoreo {workshopLevels.wholesale}% desde {workshopLevels.wholesale_min} piezas
+            {workshopLevels.list_extra > 0 ? `, ${workshopLevels.list_extra}% extra para descontar` : ""} (sobre el costo).
+          </p>
+        )}
+      </div>
+
       {channels.map((channel) => {
         const price = num(prices[channel.id] ?? "");
-        const margin = profile?.margin_pct ?? 0;
+        const margin = levels.normal;
         // Shipping is quoted with the channel's carriers for this weight and box (and price, when they charge by it).
         const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
         const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
@@ -752,9 +787,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
             />
             <span className="font-normal">
               {price > 0
-                ? `Ganas ${money(unitProfit(price, cost.total, channel))} (${Math.round((unitProfit(price, cost.total, channel) / price) * 100)}% de la venta) sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío`
+                ? `Ganas ${money(unitProfit(price, cost.total, channel))} (${Math.round((unitProfit(price, cost.total, channel) / price) * 100)}% de la venta) sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío · es precio ${LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}`
                 : `Sugerido con envío: ${money(suggestedShipped)}`}
             </span>
+            <LevelPricesInfo cost={cost.total} channel={channel} levels={levels} shippingAt={shippingAt} />
             {quotes.length > 0 && (
               <span className="font-normal">
                 {quotes.length === 1
@@ -874,7 +910,8 @@ export default function ProductsPage() {
                 const photo = imageUrl(product.image_path);
                 const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
                 const box = packaging.find((item) => item.id === product.packaging_id);
-                const margin = profile?.margin_pct ?? 0;
+                const levels = priceLevels(profile, product);
+                const margin = levels.normal;
                 const tone = (profit: number) => (profit >= 0 ? "text-money" : "text-bad");
                 return (
                   <tr key={product.id}>
@@ -935,6 +972,18 @@ export default function ProductsPage() {
                           <TipLine label="Sugerido sin envío" value={money(suggestedPlain)} />
                           <TipLine label="Sugerido con envío" value={money(suggestedShipped)} />
                           <p className="text-[11px] text-muted">Con envío ganas los mismos pesos que sin envío: se suma el envío y lo que el canal cobra sobre él.</p>
+                          {(() => {
+                            const atLevel = levelPrices(cost, channel, levels, shippingAt);
+                            return (
+                              <>
+                                <p className="mt-1 font-semibold">Niveles con envío{Object.keys(product.price_levels ?? {}).length ? " (de este producto)" : ""}</p>
+                                {levels.list_extra > 0 && <TipLine label={`De lista (+${levels.list_extra}%)`} value={money(atLevel.list)} />}
+                                <TipLine label={`Normal (${levels.normal}%)`} value={money(atLevel.normal)} />
+                                <TipLine label={`Con descuento (${levels.discount}%)`} value={money(atLevel.discount)} />
+                                <TipLine label={`Mayoreo ${levels.wholesale_min}+ (${levels.wholesale}%)`} value={money(atLevel.wholesale)} />
+                              </>
+                            );
+                          })()}
                           <TipLine label={`Comisión e impuestos (${(channel.commission_pct + Number(channel.tax_pct ?? 0)).toFixed(1)}%)`} value={`− ${money(channelFees(channel, at))}`} />
                           {quotes.length > 0 ? (
                             <>

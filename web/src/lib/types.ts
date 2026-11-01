@@ -1,3 +1,4 @@
+import type { PriceLevels } from './costs';
 import type { Currency } from './currency';
 
 // Rows as they come from Supabase (see supabase/schema.sql).
@@ -8,7 +9,10 @@ export type Profile = {
   name: string;
   business_name: string;
   kwh_price: number;
+  /** Old single margin (% of the price); kept in step for older app versions. Prices use price_levels. */
   margin_pct: number;
+  /** How much to earn by level, as % of the production cost. */
+  price_levels: Partial<PriceLevels> | null;
   /** Costs and prices of the workshop are typed and shown in it. */
   currency: Currency;
   /** Extra filament quoted per plate by how many pieces it carries (waste, failed pieces). */
@@ -210,6 +214,8 @@ export type Product = {
   links: Record<string, string>;
   /** Whether it shows in the public catalog. */
   in_catalog: boolean;
+  /** Levels of its own (only those that differ); null = the workshop's. */
+  price_levels: Partial<PriceLevels> | null;
 };
 
 /** The user's public catalog: kubbo3d…/c/<slug>, or their own domain once Kubbo3D connects it. */
