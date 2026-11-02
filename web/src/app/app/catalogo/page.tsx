@@ -106,13 +106,29 @@ function CatalogSettings({ catalog, onSaved }: { catalog: Catalog | null; onSave
   const [about, setAbout] = useState(catalog?.about ?? "");
   const [whatsapp, setWhatsapp] = useState(catalog?.whatsapp ?? "");
   const [showPrices, setShowPrices] = useState(catalog?.show_prices ?? true);
-  const [published, setPublished] = useState(catalog?.published ?? false);
   const [domain, setDomain] = useState(catalog?.domain ?? "");
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const published = catalog?.published ?? false;
+  // Unsaved when what is typed differs from what is stored (a new catalog counts as unsaved).
+  const dirty =
+    !catalog ||
+    slug !== catalog.slug ||
+    title !== (catalog.title ?? "") ||
+    about !== (catalog.about ?? "") ||
+    whatsapp !== (catalog.whatsapp ?? "") ||
+    showPrices !== catalog.show_prices ||
+    cleanDomain(domain) !== (catalog.domain ?? "");
+  useLeaveWarning(catalog ? dirty : !!(title || about || whatsapp || domain));
   const address = CATALOG_DOMAIN ? `${slug || "tu-taller"}.${CATALOG_DOMAIN}` : `${window.location.host}/c/${slug || "tu-taller"}`;
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    const button = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    write(button?.value === "publish" ? true : button?.value === "unpublish" ? false : published);
+  }
+
+  function write(published: boolean) {
     const cleanSlug = slug.trim().toLowerCase();
     if (!SLUG.test(cleanSlug)) return setError("La dirección lleva de 2 a 40 letras sin acentos, números o guiones (sin espacios), por ejemplo mi-taller-3d.");
     let phone = whatsapp.replace(/\D/g, "");
@@ -170,10 +186,6 @@ function CatalogSettings({ catalog, onSaved }: { catalog: Catalog | null; onSave
           <input type="checkbox" checked={showPrices} onChange={(event) => setShowPrices(event.target.checked)} />
           Mostrar el precio de cada canal
         </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={published} onChange={(event) => setPublished(event.target.checked)} />
-          Publicado (cualquiera con la dirección lo puede ver)
-        </label>
       </div>
 
       <fieldset className="flex flex-col gap-2 rounded-lg border border-line p-3 sm:col-span-2">
@@ -200,12 +212,81 @@ function CatalogSettings({ catalog, onSaved }: { catalog: Catalog | null; onSave
           {error}
         </p>
       )}
-      {saved && !error && <p className="text-sm text-brand sm:col-span-2">Guardado.</p>}
-      <button className="btn btn-primary justify-self-start" disabled={busy}>
-        {busy ? "Guardando…" : catalog ? "Guardar catálogo" : "Crear catálogo"}
-      </button>
+      <div className="flex flex-col gap-3 rounded-lg border border-line p-3 sm:col-span-2">
+        <p className="text-sm">
+          {published ? (
+            <>
+              <strong className="text-brand">Publicado.</strong> Cualquiera con la dirección lo puede ver.
+            </>
+          ) : catalog ? (
+            <>
+              <strong className="text-warn">Borrador.</strong> Está guardado pero nadie más lo ve hasta que lo publiques.
+            </>
+          ) : (
+            <>
+              <strong className="text-warn">Sin guardar.</strong> Llena los datos y guárdalo o publícalo.
+            </>
+          )}
+          {dirty && catalog && <span className="text-warn"> Tienes cambios sin guardar.</span>}
+          {saved && !dirty && !error && <span className="text-brand"> Guardado.</span>}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {published ? (
+            <>
+              <button className="btn btn-primary" value="save" disabled={busy || !dirty}>
+                {busy ? "Guardando…" : "Guardar cambios"}
+              </button>
+              <a href={publicUrl(catalog!)} target="_blank" rel="noopener noreferrer" className="btn">
+                Ver catálogo ↗
+              </a>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => navigator.clipboard?.writeText(publicUrl(catalog!)).then(() => setCopied(true))}
+              >
+                {copied ? "Enlace copiado" : "Copiar enlace"}
+              </button>
+              <button className="btn" value="unpublish" disabled={busy}>
+                Dejar de publicar
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-primary" value="publish" disabled={busy}>
+                {busy ? "Guardando…" : "Publicar catálogo"}
+              </button>
+              <button className="btn" value="save" disabled={busy || (!!catalog && !dirty)}>
+                Guardar borrador
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </form>
   );
+}
+
+/** Asks before leaving the page (closing the tab or following a link in the app) while `active`. */
+function useLeaveWarning(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const message = "Tienes cambios sin guardar en tu catálogo. ¿Salir sin guardar?";
+    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    const click = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!link || link.target === "_blank" || event.defaultPrevented) return;
+      if (!window.confirm(message)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", click, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", click, true);
+    };
+  }, [active]);
 }
 
 function CatalogPreview({ catalog }: { catalog: Catalog | null }) {
