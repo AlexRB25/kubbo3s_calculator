@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useSession } from "@/lib/session";
+import { GoogleButton } from "@/components/GoogleButton";
 import { VerifyEmail } from "@/components/VerifyEmail";
 import { authErrorMessage, supabase, supabaseConfigured } from "@/lib/supabase";
 
@@ -16,7 +17,8 @@ function SignInForm() {
   // Only paths inside this site, so the link cannot send people elsewhere after signing in.
   const wanted = params.get("next") ?? "/app";
   const next = wanted.startsWith("/") && !wanted.startsWith("//") ? wanted : "/app";
-  const [error, setError] = useState("");
+  // Google sends back here with error_description when the person cancels or something fails.
+  const [error, setError] = useState(params.get("error_description") ? "No se pudo entrar con Google. Vuelve a intentarlo." : "");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   // Signed up (or tried to enter) without confirming the email yet: wait for it, then enter by itself.
@@ -104,6 +106,10 @@ function SignInForm() {
       <button className="btn btn-primary" disabled={busy}>
         {busy ? "Un momento…" : isRegister ? "Crear cuenta" : "Entrar"}
       </button>
+      <div className="flex items-center gap-3 text-xs text-muted" aria-hidden>
+        <span className="h-px flex-1 bg-current opacity-30" />o<span className="h-px flex-1 bg-current opacity-30" />
+      </div>
+      <GoogleButton next={next} onError={setError} />
       <button
         type="button"
         className="btn"

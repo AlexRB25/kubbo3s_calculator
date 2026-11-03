@@ -379,6 +379,9 @@ alter table public.profiles drop constraint if exists profiles_currency_check;
 alter table public.profiles add constraint profiles_currency_check check (currency ~ '^[A-Z]{3}$');
 grant update (currency) on public.profiles to authenticated;
 
+-- Foto de perfil: la que da Google al entrar con su cuenta. La pone el servidor (alta y touch()).
+alter table public.profiles add column if not exists avatar_url text not null default '';
+
 -- La ganancia deseada se mide sobre el precio de venta (vendo en 100, me quedan 50: 50 %), ya no sobre
 -- el costo. Una sola vez, los perfiles de antes pasan su porcentaje a su equivalente sobre la venta
 -- (100 % sobre el costo = 50 % sobre la venta), así sus precios sugeridos no cambian.
@@ -437,8 +440,14 @@ end $$;
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
-  insert into public.profiles (id, email, name)
-  values (new.id, coalesce(new.email, ''), coalesce(new.raw_user_meta_data ->> 'name', ''))
+  -- Con Google, el nombre llega como name o full_name y la foto como avatar_url o picture.
+  insert into public.profiles (id, email, name, avatar_url)
+  values (
+    new.id,
+    coalesce(new.email, ''),
+    left(coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), new.raw_user_meta_data ->> 'full_name', ''), 40),
+    coalesce(nullif(new.raw_user_meta_data ->> 'avatar_url', ''), new.raw_user_meta_data ->> 'picture', '')
+  )
   on conflict (id) do nothing;
 
   -- Comisiones de arranque: son aproximadas y cada usuario las ajusta en "Canales de venta".
@@ -459,6 +468,11 @@ select u.id, coalesce(u.email, ''), coalesce(u.raw_user_meta_data ->> 'name', ''
 from auth.users u
 on conflict (id) do nothing;
 
+update public.profiles p
+set avatar_url = coalesce(nullif(u.raw_user_meta_data ->> 'avatar_url', ''), u.raw_user_meta_data ->> 'picture', '')
+from auth.users u
+where u.id = p.id and p.avatar_url = '';
+
 insert into public.channels (user_id, name, commission_pct, sort)
 select u.id, c.name, c.commission_pct, c.sort
 from auth.users u
@@ -473,7 +487,13 @@ begin
   if v_user is null then
     return;
   end if;
-  update public.profiles set last_seen_at = now() where id = v_user;
+  -- Una cuenta de correo que luego entra con Google (mismo correo) toma su foto, y su nombre si no tenía.
+  update public.profiles p
+  set last_seen_at = now(),
+      avatar_url = coalesce(nullif(u.raw_user_meta_data ->> 'avatar_url', ''), nullif(u.raw_user_meta_data ->> 'picture', ''), p.avatar_url),
+      name = case when p.name = '' then left(coalesce(nullif(u.raw_user_meta_data ->> 'name', ''), u.raw_user_meta_data ->> 'full_name', ''), 40) else p.name end
+  from auth.users u
+  where p.id = v_user and u.id = v_user;
   insert into public.activity_days (user_id, day)
   values (v_user, (now() at time zone 'America/Mexico_City')::date)
   on conflict do nothing;

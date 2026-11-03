@@ -8,6 +8,8 @@ export type Profile = {
   email: string;
   name: string;
   business_name: string;
+  /** Profile photo Google shares when the account enters with it; empty otherwise. */
+  avatar_url: string;
   kwh_price: number;
   /** Old single margin (% of the price); kept in step for older app versions. Prices use price_levels. */
   margin_pct: number;

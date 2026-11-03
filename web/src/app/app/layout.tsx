@@ -266,7 +266,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <Nav pathname={pathname} />
           <div className="mt-auto flex flex-col gap-3 pt-6">
             <Extras />
-            <p className="truncate px-1 text-xs text-muted">{session.user.email}</p>
+            <div className="flex items-center gap-2 px-1">
+              {session.user.user_metadata.avatar_url && (
+                // eslint-disable-next-line @next/next/no-img-element -- the Google photo, from Google's own servers
+                <img src={session.user.user_metadata.avatar_url} alt="" referrerPolicy="no-referrer" className="h-8 w-8 shrink-0 rounded-full" />
+              )}
+              <p className="truncate text-xs text-muted">{session.user.email}</p>
+            </div>
             <button className="btn flex items-center justify-center gap-2" onClick={() => supabase().auth.signOut()}>
               <NavIcon name="salir" size={16} />
               Salir
