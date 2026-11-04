@@ -17,7 +17,7 @@ const BUCKET = "user-files";
 
 export function fileKind(name: string): UserFile["kind"] {
   if (/\.(stl|obj|3mf)$/i.test(name)) return "model";
-  if (/\.(png|jpe?g|webp|gif|svg)$/i.test(name)) return "image";
+  if (/\.(png|jpe?g|jfif|pjpeg|pjp|webp|gif|bmp|avif|svg)$/i.test(name)) return "image";
   return "other";
 }
 
@@ -30,7 +30,8 @@ export function fileSize(bytes: number) {
 export async function listFiles(): Promise<UserFile[]> {
   const { data, error } = await supabase().from("user_files").select("*").order("created_at", { ascending: false }).limit(500);
   if (error) throw new Error(`No se pudieron leer tus archivos: ${error.message}`);
-  return data ?? [];
+  // Files saved before more image types were known (.jfif, .bmp…) were stored as "other".
+  return (data ?? []).map((file: UserFile) => (file.kind === "other" ? { ...file, kind: fileKind(file.name) } : file));
 }
 
 /**
