@@ -1137,16 +1137,19 @@ create table if not exists public.plans (
   active boolean not null default true
 );
 
+-- Precio de antes (tachado) cuando el plan está en promoción; vacío (null) = sin promoción.
+alter table public.plans add column if not exists compare_usd numeric(10,2) check (compare_usd >= 0);
+
 -- Solo se insertan si no existen: lo que cambies después en Supabase no se pisa al volver a correr esto.
-insert into public.plans (id, name, price_usd, tagline, sort, max_products, max_printers, tool_runs_month, storage_mb, color_export, features, highlighted)
+insert into public.plans (id, name, price_usd, compare_usd, tagline, sort, max_products, max_printers, tool_runs_month, storage_mb, color_export, features, highlighted)
 values
-  ('free', 'Gratis', 0, 'Para probar y para tu primer impresora', 0, 15, 2, 10, 500, false,
+  ('free', 'Gratis', 0, null, 'Para probar y para tu primer impresora', 0, 15, 2, 10, 500, false,
     array['Calculadora en la web y en la app', 'Costos, precios por canal y ganancias', 'Todas las herramientas 3D', 'Soporte por correo'], false),
-  ('maker', 'Maker', 25, 'Para quien ya vende sus piezas', 1, 150, 5, 150, 5120, true,
+  ('maker', 'Maker', 4.99, 25, 'Para quien ya vende sus piezas', 1, 150, 5, 150, 5120, true,
     array['Todo lo de Gratis', 'Inventario de filamento y productos', 'Ventas, gastos y mantenimiento', 'Descargas con colores para tu laminador'], false),
-  ('taller', 'Taller', 49, 'Para un taller con varias impresoras', 2, null, 15, 600, 20480, true,
+  ('taller', 'Taller', 19.99, 49, 'Para un taller con varias impresoras', 2, null, 15, 600, 20480, true,
     array['Todo lo de Maker', 'Soporte prioritario'], true),
-  ('fabrica', 'Fábrica', 99, 'Para una granja de impresoras', 3, null, null, null, 102400, true,
+  ('fabrica', 'Fábrica', 24.99, 99, 'Para una granja de impresoras', 3, null, null, null, 102400, true,
     array['Todo lo de Taller', 'Soporte por WhatsApp', 'Una sesión de configuración de tu cuenta'], false)
 on conflict (id) do nothing;
 
