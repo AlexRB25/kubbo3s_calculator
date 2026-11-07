@@ -8,7 +8,7 @@
     "scheme": "kubbo3d",
     "userInterfaceStyle": "dark",
     "ios": {
-      "bundleIdentifier": "com.alexr.kubbo3d",
+      "bundleIdentifier": "com.kubbo3d.app",
       "supportsTablet": false
     },
     "android": {
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.alexr.kubbo3d"
+      "package": "com.kubbo3d.app"
     },
     "plugins": [
       "expo-router",
