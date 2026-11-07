@@ -9,7 +9,10 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "bundleIdentifier": "com.kubbo3d.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +22,13 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.kubbo3d.app"
+      "package": "com.kubbo3d.app",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -35,9 +44,11 @@
         "expo-image-picker",
         {
           "photosPermission": "Kubbo3D usa tus fotos para ponerle imagen a tus productos.",
-          "cameraPermission": "Kubbo3D usa la cámara para fotografiar tus productos."
+          "cameraPermission": "Kubbo3D usa la cámara para fotografiar tus productos.",
+          "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/withUploadSigning"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -47,6 +58,13 @@
     "platforms": [
       "ios",
       "android"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "60470b68-6456-4bf4-be7b-648d53c262f7"
+      }
+    },
+    "owner": "alexrb25"
   }
 }
