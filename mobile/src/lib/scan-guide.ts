@@ -71,6 +71,24 @@ export function lightFromExif(exif: Record<string, unknown> | undefined | null):
   return 'ok';
 }
 
+/** Reads the light from the pixels of a small frame (RGBA, e.g. a 64×48 canvas): too dark, burnt by direct light, or fine. */
+export function lightFromPixels(data: ArrayLike<number>): Light {
+  let sum = 0;
+  let burnt = 0;
+  let count = 0;
+  for (let index = 0; index + 2 < data.length; index += 4) {
+    const luma = 0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2];
+    sum += luma;
+    if (luma >= 250) burnt++;
+    count++;
+  }
+  if (!count) return 'ok';
+  const mean = sum / count;
+  if (mean < 55) return 'dark';
+  if (mean > 215 || burnt / count > 0.2) return 'bright';
+  return 'ok';
+}
+
 export type Capture = {
   mode: Mode;
   ring: number; // current lap (index into RINGS); RINGS.length when finished
@@ -104,10 +122,10 @@ export type Advice = { key: string; text: string; tone: 'go' | 'warn' | 'done'; 
 const SIDE = (sign: number) => (sign < 0 ? 'derecha' : 'izquierda'); // walking to your right around the object lowers the heading
 
 /**
- * What to tell the user now, and whether this is a good moment for a photo. `light` is from the last photo;
- * `sinceShot` is ms since the last photo.
+ * What to tell the user now, and whether this is a good moment for a photo. `light` is from the last photo
+ * (or, with `live`, from the preview right now); `sinceShot` is ms since the last photo.
  */
-export function advise(capture: Capture, reading: Reading | null, light: Light, sinceShot: number): Advice {
+export function advise(capture: Capture, reading: Reading | null, light: Light, sinceShot: number, live = false): Advice {
   if (finished(capture)) return { key: 'done', text: '¡Listo! Ya tienes las fotos. Toca Terminar.', tone: 'done', shoot: false };
   if (!reading) return { key: 'wait', text: 'Preparando la cámara…', tone: 'warn', shoot: false };
   const ring = RINGS[capture.ring];
@@ -115,9 +133,9 @@ export function advise(capture: Capture, reading: Reading | null, light: Light, 
 
   if (speed > 70) return { key: 'slow', text: 'Más despacio', tone: 'warn', shoot: false };
   if (light === 'dark') {
-    if (sinceShot < 2500) return { key: 'dark', text: 'Falta luz: prende más luces o acércate a una ventana', tone: 'warn', shoot: false };
+    if (live || sinceShot < 2500) return { key: 'dark', text: 'Falta luz: prende más luces o acércate a una ventana', tone: 'warn', shoot: false };
   }
-  if (light === 'bright' && sinceShot < 2500) return { key: 'bright', text: 'Demasiada luz o sol directo: busca luz pareja, sin sombras duras', tone: 'warn', shoot: false };
+  if (light === 'bright' && (live || sinceShot < 2500)) return { key: 'bright', text: 'Demasiada luz o sol directo: busca luz pareja, sin sombras duras', tone: 'warn', shoot: false };
   if (direction.elevation > ring.max)
     return { key: `down-${capture.ring}`, text: capture.ring === 0 ? 'Inclina el teléfono un poco hacia abajo, hacia el objeto' : 'Sube el teléfono y apunta hacia abajo, al objeto', tone: 'warn', shoot: false, arrow: 'up' };
   if (direction.elevation < ring.min)

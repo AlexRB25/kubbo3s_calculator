@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ScanCamera } from "@/components/app/ScanCamera";
 import { Empty, PageHeader } from "@/components/app/ui";
 import { getWorkshopCurrency } from "@/lib/format";
-import { SCAN_FORMATS as FORMATS, SCAN_MAX_BYTES, SCAN_STATUS, SCAN_TIPS as TIPS, type ScanBalance as Balance, type ScanItem as Scan } from "@/lib/scan";
+import { SCAN_FORMATS as FORMATS, SCAN_MAX_BYTES, SCAN_STATUS, type ScanBalance as Balance, type ScanItem as Scan } from "@/lib/scan";
 import { supabase } from "@/lib/supabase";
 
 type Pack = { id: string; scans: number };
@@ -22,7 +23,7 @@ export default function ScannerPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"photos" | "video">("photos");
+  const [camera, setCamera] = useState(false);
   const [format, setFormat] = useState("stl");
   const [files, setFiles] = useState<File[]>([]);
 
@@ -75,12 +76,11 @@ export default function ScannerPage() {
 
   async function scan() {
     setError("");
-    if (kind === "photos" && (files.length < 20 || files.length > 300)) return setError(`Elige de 20 a 300 fotos (llevas ${files.length}).`);
-    if (kind === "video" && files.length !== 1) return setError("Elige un video.");
+    if (files.length < 20 || files.length > 300) return setError(`Se necesitan de 20 a 300 fotos (llevas ${files.length}).`);
     const total = files.reduce((sum, file) => sum + file.size, 0);
-    if (total > SCAN_MAX_BYTES) return setError("Los archivos pesan más de 250 MB: reduce el número de fotos o la duración del video.");
+    if (total > SCAN_MAX_BYTES) return setError("Las fotos pesan más de 250 MB: escanea de nuevo con menos fotos.");
     setBusy("Apartando tu escaneo…");
-    const claimed = await supabase().rpc("claim_scan", { p_name: name.trim() || files[0]?.name.replace(/\.[^.]+$/, "") || "Escaneo", p_kind: kind, p_format: format });
+    const claimed = await supabase().rpc("claim_scan", { p_name: name.trim() || "Escaneo", p_kind: "photos", p_format: format });
     if (claimed.error) {
       setBusy("");
       return setError(claimed.error.message);
@@ -92,7 +92,7 @@ export default function ScannerPage() {
       for (let index = 0; index < files.length; index++) {
         setBusy(`Subiendo ${index + 1} de ${files.length}…`);
         const file = files[index];
-        const extension = file.name.split(".").pop()?.toLowerCase() || (kind === "video" ? "mp4" : "jpg");
+        const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
         const uploaded = await supabase()
           .storage.from("scans")
           .upload(`${user}/${id}/in/${String(index + 1).padStart(4, "0")}.${extension}`, file, { contentType: file.type || undefined });
@@ -154,17 +154,10 @@ export default function ScannerPage() {
       {balance?.active && (
         <section className="card flex flex-col gap-4">
           <h2>Nuevo escaneo</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="label">
               Nombre
               <input className="input" value={name} placeholder="Figura de mi abuela" onChange={(event) => setName(event.target.value)} />
-            </label>
-            <label className="label">
-              Con
-              <select className="input" value={kind} onChange={(event) => (setKind(event.target.value as "photos" | "video"), setFiles([]))}>
-                <option value="photos">Fotos (20 a 300)</option>
-                <option value="video">Un video (hasta 3 min, 1080p)</option>
-              </select>
             </label>
             <label className="label">
               Formato del modelo
@@ -177,25 +170,27 @@ export default function ScannerPage() {
               </select>
             </label>
           </div>
-          <label className="btn btn-primary cursor-pointer self-start">
-            {files.length ? `${files.length} ${kind === "video" ? "video" : "fotos"} elegidos · cambiar` : kind === "video" ? "Elegir video" : "Elegir fotos"}
-            <input
-              type="file"
-              className="hidden"
-              multiple={kind === "photos"}
-              accept={kind === "video" ? "video/mp4,video/quicktime,video/*" : "image/jpeg,image/png"}
-              onChange={(event) => setFiles([...(event.target.files ?? [])])}
-            />
-          </label>
-          <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-muted">
-            {TIPS.map((tip) => (
-              <li key={tip}>{tip}</li>
-            ))}
-          </ul>
+          <button className={`btn ${files.length ? "" : "btn-primary"} self-start`} disabled={!!busy} onClick={() => setCamera(true)}>
+            {files.length ? `${files.length} fotos tomadas · volver a escanear` : "Abrir la cámara y escanear"}
+          </button>
+          <p className="text-sm text-muted">
+            Funciona desde el navegador de tu celular o con una webcam en la computadora. La cámara te va guiando (hacia dónde girar, si vas muy rápido o si falta luz) y toma las fotos sola.
+          </p>
           <button className="btn btn-primary self-start" disabled={!!busy || !files.length || left <= 0} onClick={scan}>
-            {busy || (left > 0 ? "Escanear (usa 1 escaneo)" : "Sin escaneos disponibles")}
+            {busy || (left <= 0 ? "Sin escaneos disponibles" : files.length ? "Enviar a procesar (usa 1 escaneo)" : "Primero toma las fotos")}
           </button>
         </section>
+      )}
+
+      {camera && (
+        <ScanCamera
+          onCancel={() => setCamera(false)}
+          onDone={(taken) => {
+            setCamera(false);
+            setError("");
+            setFiles(taken);
+          }}
+        />
       )}
 
       <section className="flex flex-col gap-2">
