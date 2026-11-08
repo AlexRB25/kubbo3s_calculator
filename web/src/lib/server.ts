@@ -19,8 +19,8 @@ export function adminClient(): SupabaseClient {
   }));
 }
 
-/** What a Stripe Checkout Session pays for, in its metadata: a store order or a marketplace purchase. */
-export type CheckoutKind = "order" | "model";
+/** What a Stripe Checkout Session pays for, in its metadata: a store order, a marketplace purchase or a pack of scans. */
+export type CheckoutKind = "order" | "model" | "scans";
 
 type Confirm = { result: "paid" | "waiting" | "ignored" | "retry" };
 
@@ -38,11 +38,11 @@ export async function confirmCheckout(sessionId: string): Promise<Confirm> {
   const session = await response.json();
   const kind = session.metadata?.kind as CheckoutKind | undefined;
   const id = String(session.metadata?.id ?? "");
-  if (!UUID.test(id) || (kind !== "order" && kind !== "model")) return { result: "ignored" };
+  if (!UUID.test(id) || (kind !== "order" && kind !== "model" && kind !== "scans")) return { result: "ignored" };
   if (session.payment_status !== "paid") return { result: session.status === "complete" ? "waiting" : "ignored" };
 
   const db = adminClient();
-  const table = kind === "order" ? "store_orders" : "model_purchases";
+  const table = kind === "order" ? "store_orders" : kind === "model" ? "model_purchases" : "scan_purchases";
   const paid = {
     status: "paid",
     payment_id: String(session.payment_intent ?? session.id),
@@ -68,7 +68,9 @@ export async function confirmCheckout(sessionId: string): Promise<Confirm> {
 export async function refundPayment(paymentIntent: string): Promise<"ok" | "retry"> {
   if (!/^pi_\w+$/.test(paymentIntent)) return "ok";
   const update = await adminClient().from("model_purchases").update({ status: "refunded" }).eq("payment_id", paymentIntent).eq("status", "paid");
-  return update.error ? "retry" : "ok";
+  // A pack of scans paid back takes its scans away too.
+  const scans = await adminClient().from("scan_purchases").update({ status: "refunded" }).eq("payment_id", paymentIntent).eq("status", "paid");
+  return update.error || scans.error ? "retry" : "ok";
 }
 
 type CheckoutLine = { name: string; mxn: number; quantity: number };

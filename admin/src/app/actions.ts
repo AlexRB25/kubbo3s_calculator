@@ -195,6 +195,36 @@ export async function deleteCatalogPrinter(form: FormData) {
   redirect("/impresoras");
 }
 
+// ── Escáner 3D (KIRI Engine) ──
+
+export async function saveScanSettings(form: FormData) {
+  await requireAdmin();
+  must(
+    await admin()
+      .from("scan_settings")
+      .update({ api_cost_usd: number(form, "api_cost_usd"), margin_pct: number(form, "margin_pct"), enabled: flag(form, "enabled"), updated_at: new Date().toISOString() })
+      .eq("id", true),
+  );
+  revalidatePath("/escaner");
+  redirect("/escaner");
+}
+
+export async function saveScanPack(form: FormData) {
+  await requireAdmin();
+  const id = text(form, "id");
+  const row = { scans: Math.max(1, Math.round(number(form, "scans"))), sort: number(form, "sort"), active: flag(form, "active") };
+  must(id ? await admin().from("scan_packs").update(row).eq("id", id) : await admin().from("scan_packs").insert(row));
+  revalidatePath("/escaner");
+  redirect("/escaner");
+}
+
+export async function deleteScanPack(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("scan_packs").delete().eq("id", text(form, "id")));
+  revalidatePath("/escaner");
+  redirect("/escaner");
+}
+
 // ── Cursos (sección Aprende) ──
 
 export async function saveCourse(form: FormData) {

@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/impresoras", label: "Catálogo de impresoras" },
   { href: "/empaques", label: "Catálogo de empaques" },
   { href: "/cursos", label: "Cursos (Aprende)" },
+  { href: "/escaner", label: "Escáner 3D" },
   { href: "/categorias", label: "Categorías de productos" },
   { href: "/catalogos", label: "Catálogos y dominios" },
   { href: "/marketplace", label: "Modelos 3D" },

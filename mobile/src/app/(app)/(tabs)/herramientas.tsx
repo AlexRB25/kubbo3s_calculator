@@ -89,6 +89,12 @@ export default function ToolsScreen() {
     <Screen>
       <Muted>Elige una foto o un archivo 3D, ajusta y guarda el STL o el 3MF. Funcionan en tu teléfono, sin internet.</Muted>
       {error ? <ErrorText>{error}</ErrorText> : null}
+      <ListItem
+        left={<Ionicons name="scan" size={22} color={Colors.accent} />}
+        title="Escáner 3D"
+        subtitle="Convierte un objeto en modelo 3D con fotos o video"
+        onPress={() => router.push('/escaner')}
+      />
       {NATIVE.map((tool) => (
         <ListItem
           key={tool.slug}

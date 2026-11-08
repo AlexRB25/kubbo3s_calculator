@@ -71,6 +71,7 @@ export default function AppLayout() {
           <Stack.Screen name="clientes/campos" options={{ title: 'Campos de facturación' }} />
           <Stack.Screen name="eliminar-cuenta" options={{ title: 'Eliminar mi cuenta' }} />
           <Stack.Screen name="herramienta/[slug]" options={{ title: 'Herramienta' }} />
+          <Stack.Screen name="escaner" options={{ title: 'Escáner 3D' }} />
           <Stack.Screen name="calculadora" options={{ title: 'Cálculo rápido' }} />
           <Stack.Screen name="cotizaciones/index" options={{ title: 'Cotizaciones' }} />
           <Stack.Screen name="cotizaciones/form" options={{ title: 'Cotización' }} />

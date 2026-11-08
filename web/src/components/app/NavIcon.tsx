@@ -15,6 +15,7 @@ const PATHS = {
   calculadora: "M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z M7 5h10v4H7z M8 13h.01 M12 13h.01 M16 13h.01 M8 17h.01 M12 17h.01 M16 17h.01",
   biblioteca: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20 M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z M9 7h7 M9 11h5",
   clientes: `M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 ${circle(9, 7, 4)} M19 8v6 M22 11h-6`,
+  escaner: `M3 7V5a2 2 0 0 1 2-2h2 M17 3h2a2 2 0 0 1 2 2v2 M21 17v2a2 2 0 0 1-2 2h-2 M7 21H5a2 2 0 0 1-2-2v-2 M12 7l5 3v5l-5 3-5-3v-5z M7 10l5 3 5-3 M12 13v5`,
   gastos: "M5 2h14v20l-3-2-2 2-2-2-2 2-2-2-3 2z M9 7h6 M9 11h6 M9 15h4",
   embalaje: "M3 7l9-4 9 4v10l-9 4-9-4z M3 7l9 4 9-4 M12 11v10 M7.5 5l9 4",
   paqueterias: `M1 4h14v12H1z M15 8h4l4 4v4h-8 ${circle(5.5, 18.5, 2)} ${circle(18.5, 18.5, 2)}`,

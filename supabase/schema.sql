@@ -3260,3 +3260,167 @@ create policy courses_read on public.courses for select to anon, authenticated u
 drop policy if exists course_lessons_read on public.course_lessons;
 create policy course_lessons_read on public.course_lessons for select to anon, authenticated
   using (published and exists (select 1 from public.courses c where c.id = course_id and c.published));
+
+-- ───────────────────────── Escáner 3D (KIRI Engine) ─────────────────────────
+-- Escanear un objeto con fotos o video (fotogrametría de KIRI Engine). Hace falta una suscripción activa.
+-- Cada plan trae escaneos al mes (plans.scans_month) y además se compran paquetes de escaneos ("scans"),
+-- un saldo aparte de los créditos de herramientas. Precio de un escaneo = lo que cobra KIRI × (1 + margen).
+-- Se gasta primero lo del plan del mes y luego lo comprado; un escaneo que falla no cuenta.
+alter table public.plans add column if not exists scans_month int not null default 0 check (scans_month >= 0);
+update public.plans set scans_month = 5 where id = 'fabrica' and scans_month = 0;
+update public.plans set scans_month = 2 where id = 'taller' and scans_month = 0;
+
+-- Lo que cobra KIRI por escaneo (USD) y el margen de Kubbo3D. Una sola fila; la edita el panel admin.
+create table if not exists public.scan_settings (
+  id boolean primary key default true check (id),
+  api_cost_usd numeric(10,2) not null default 1 check (api_cost_usd >= 0),
+  margin_pct numeric(6,2) not null default 25 check (margin_pct >= 0),
+  enabled boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+insert into public.scan_settings (id) values (true) on conflict (id) do nothing;
+alter table public.scan_settings enable row level security;
+revoke insert, update, delete on public.scan_settings from anon, authenticated;
+drop policy if exists scan_settings_read on public.scan_settings;
+create policy scan_settings_read on public.scan_settings for select to anon, authenticated using (true);
+
+-- Paquetes que se venden (cuántos escaneos); el precio sale de scan_settings.
+create table if not exists public.scan_packs (
+  id uuid primary key default gen_random_uuid(),
+  scans int not null unique check (scans between 1 and 1000),
+  active boolean not null default true,
+  sort int not null default 0
+);
+insert into public.scan_packs (scans, sort) values (5, 1), (10, 2), (25, 3), (50, 4) on conflict (scans) do nothing;
+alter table public.scan_packs enable row level security;
+revoke insert, update, delete on public.scan_packs from anon, authenticated;
+drop policy if exists scan_packs_read on public.scan_packs;
+create policy scan_packs_read on public.scan_packs for select to anon, authenticated using (active);
+
+-- Precio de un escaneo en USD con el margen (redondeado al centavo).
+create or replace function public.scan_price_usd() returns numeric
+language sql stable security definer set search_path = '' as $$
+  select round(s.api_cost_usd * (1 + s.margin_pct / 100), 2) from public.scan_settings s where s.id;
+$$;
+grant execute on function public.scan_price_usd() to anon, authenticated;
+
+-- Compras de paquetes: se crean pendientes con buy_scans() y el webhook de Stripe las marca pagadas.
+create table if not exists public.scan_purchases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  scans int not null check (scans > 0),
+  price_usd numeric(10,2) not null check (price_usd >= 0),
+  status text not null default 'pending' check (status in ('pending', 'paid', 'refunded')),
+  payment_id text,
+  paid_at timestamptz,
+  paid_amount numeric(14,2),
+  paid_currency text,
+  created_at timestamptz not null default now()
+);
+create index if not exists scan_purchases_user_idx on public.scan_purchases (user_id, created_at desc);
+alter table public.scan_purchases enable row level security;
+revoke insert, update, delete on public.scan_purchases from anon, authenticated;
+drop policy if exists scan_purchases_own on public.scan_purchases;
+create policy scan_purchases_own on public.scan_purchases for select to authenticated using (user_id = (select auth.uid()));
+
+-- Cada escaneo. Lo crea claim_scan() (que cobra el escaneo); el servidor lo manda a KIRI y lo actualiza.
+create table if not exists public.scans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null default '' check (char_length(name) <= 120),
+  kind text not null check (kind in ('photos', 'video')),
+  file_format text not null default 'stl' check (file_format in ('stl', 'obj', 'glb', 'ply', 'fbx')),
+  -- De dónde salió: del plan del mes o de un paquete comprado.
+  source text not null check (source in ('plan', 'pack')),
+  status text not null default 'uploading' check (status in ('uploading', 'queued', 'processing', 'done', 'failed', 'expired')),
+  kiri_serialize text unique,
+  result_path text,
+  error text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists scans_user_idx on public.scans (user_id, created_at desc);
+alter table public.scans enable row level security;
+revoke insert, update, delete on public.scans from anon, authenticated;
+drop policy if exists scans_own on public.scans;
+create policy scans_own on public.scans for select to authenticated using (user_id = (select auth.uid()));
+
+-- Fotos, videos y resultados: bucket privado, cada quien en su carpeta <user_id>/<scan_id>/.
+insert into storage.buckets (id, name, public) values ('scans', 'scans', false) on conflict (id) do nothing;
+drop policy if exists kubbo_scans_own_folder on storage.objects;
+create policy kubbo_scans_own_folder on storage.objects for all to authenticated
+  using (bucket_id = 'scans' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'scans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- Cuántos escaneos le quedan al usuario: los del plan este mes y los comprados.
+create or replace function public.scan_balance() returns jsonb
+language sql stable security definer set search_path = '' as $$
+  with me as (select auth.uid() as uid),
+  plan as (select p.* from me, public.plan_of(me.uid) p),
+  month_start as (select (date_trunc('month', now() at time zone 'America/Mexico_City') at time zone 'America/Mexico_City') as at),
+  used_plan as (
+    select count(*)::int as n from public.scans s, me, month_start
+    where s.user_id = me.uid and s.source = 'plan' and s.status not in ('failed', 'expired') and s.created_at >= month_start.at),
+  bought as (select coalesce(sum(p.scans), 0)::int as n from public.scan_purchases p, me where p.user_id = me.uid and p.status = 'paid'),
+  used_pack as (select count(*)::int as n from public.scans s, me where s.user_id = me.uid and s.source = 'pack' and s.status not in ('failed', 'expired'))
+  select jsonb_build_object(
+    'plan', (select id from plan),
+    'active', (select id from plan) <> 'free',
+    'enabled', coalesce((select enabled from public.scan_settings where id), false),
+    'plan_scans', (select scans_month from plan),
+    'plan_left', greatest(0, (select scans_month from plan) - (select n from used_plan)),
+    'pack_left', greatest(0, (select n from bought) - (select n from used_pack)),
+    'price_usd', public.scan_price_usd())
+  from me where me.uid is not null;
+$$;
+revoke all on function public.scan_balance() from public, anon;
+grant execute on function public.scan_balance() to authenticated;
+
+-- Aparta (cobra) un escaneo: requiere suscripción activa y escaneos disponibles. Devuelve el id del escaneo,
+-- cuya carpeta en el bucket scans es <user_id>/<id>/ para subir las fotos o el video.
+create or replace function public.claim_scan(p_name text, p_kind text, p_format text default 'stl') returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := auth.uid();
+  v_balance jsonb;
+  v_source text;
+  v_id uuid;
+begin
+  if v_uid is null then raise exception using errcode = 'P0001', message = 'Entra a tu cuenta para escanear.'; end if;
+  -- Uno a la vez por usuario: dos pestañas no pueden gastar el mismo escaneo.
+  perform pg_advisory_xact_lock(hashtext('scan:' || v_uid::text));
+  v_balance := public.scan_balance();
+  if not (v_balance ->> 'enabled')::boolean then raise exception using errcode = 'P0001', message = 'El escáner está en mantenimiento. Intenta más tarde.'; end if;
+  if not (v_balance ->> 'active')::boolean then raise exception using errcode = 'P0001', message = 'Para escanear necesitas una suscripción activa.'; end if;
+  if (v_balance ->> 'plan_left')::int > 0 then v_source := 'plan';
+  elsif (v_balance ->> 'pack_left')::int > 0 then v_source := 'pack';
+  else raise exception using errcode = 'P0001', message = 'Ya no te quedan escaneos. Compra un paquete de escaneos para seguir.';
+  end if;
+  insert into public.scans (user_id, name, kind, file_format, source)
+  values (v_uid, left(coalesce(trim(p_name), ''), 120), p_kind, coalesce(nullif(p_format, ''), 'stl'), v_source)
+  returning id into v_id;
+  return v_id;
+end $$;
+revoke all on function public.claim_scan(text, text, text) from public, anon;
+grant execute on function public.claim_scan(text, text, text) to authenticated;
+
+-- Crea la compra pendiente de un paquete (el precio lo pone la base, no el navegador).
+create or replace function public.buy_scans(p_pack uuid) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := auth.uid();
+  v_scans int;
+  v_id uuid;
+begin
+  if v_uid is null then raise exception using errcode = 'P0001', message = 'Entra a tu cuenta para comprar.'; end if;
+  if (public.plan_of(v_uid)).id = 'free' then
+    raise exception using errcode = 'P0001', message = 'Los paquetes de escaneos son para quien tiene una suscripción activa.';
+  end if;
+  select scans into v_scans from public.scan_packs where id = p_pack and active;
+  if v_scans is null then raise exception using errcode = 'P0001', message = 'Ese paquete ya no está disponible.'; end if;
+  insert into public.scan_purchases (user_id, scans, price_usd) values (v_uid, v_scans, v_scans * public.scan_price_usd())
+  returning id into v_id;
+  return v_id;
+end $$;
+revoke all on function public.buy_scans(uuid) from public, anon;
+grant execute on function public.buy_scans(uuid) to authenticated;
