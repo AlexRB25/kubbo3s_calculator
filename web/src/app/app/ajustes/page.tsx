@@ -1,5 +1,6 @@
 "use client";
 
+import { DeleteAccount } from "@/components/app/DeleteAccount";
 import { CurrencySettings } from "@/components/app/CurrencySettings";
 import { PriceLevelsSettings } from "@/components/app/PriceLevels";
 import { NumberFormatSettings } from "@/components/app/NumberFormatSettings";
@@ -24,7 +25,15 @@ const FIELDS: FieldDef[] = [
 export default function SettingsPage() {
   const { profile, shop } = useData();
   // Settings are the owner's: they set the costs and prices of the whole shop.
-  if (shop && shop.role !== "owner") return <p className="text-muted">Los ajustes de la tienda (luz, ganancia, gastos fijos, merma) solo los cambia el dueño.</p>;
+  if (shop && shop.role !== "owner") {
+    return (
+      <>
+        <PageHeader title="Ajustes" />
+        <p className="text-muted">Los ajustes de la tienda (luz, ganancia, gastos fijos, merma) solo los cambia el dueño.</p>
+        <DeleteAccount />
+      </>
+    );
+  }
 
   return (
     <>
@@ -44,6 +53,7 @@ export default function SettingsPage() {
       <OverheadCosts key={profile?.currency} />
       <WasteRules />
       <QuoteSettings />
+      <DeleteAccount />
     </>
   );
 }

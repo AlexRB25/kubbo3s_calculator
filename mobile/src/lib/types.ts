@@ -27,6 +27,8 @@ export type Profile = {
   quote_settings?: QuoteSettings | null;
   /** How numbers and amounts are shown (missing on older schemas). */
   number_format?: NumberFormat | null;
+  /** Name of the tax id and the client fields the workshop asked for (missing on older schemas). */
+  client_fields?: ClientFields | null;
 };
 
 /** The workshop's details on its quotes and what a new quote proposes. */
@@ -49,6 +51,29 @@ export type NumberFormat = { decimals?: 'auto' | 'dot' | 'comma'; code?: boolean
 /** A line of a quote. */
 export type QuoteItem = { name: string; detail: string; quantity: number; unit_price: number };
 
+/** A field of client data the workshop asked for (its invoices need it); `on_quote` prints it on quotes. */
+export type ClientField = { id: string; label: string; on_quote: boolean };
+
+/** How the workshop describes its clients: the name of the tax id and its own fields. */
+export type ClientFields = { tax_label?: string; fields?: ClientField[] };
+
+/** A client of the workshop (table clients); `extra` holds the values of the workshop's own fields by id. */
+export type Client = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  /** Name for invoices (razón social). */
+  legal_name: string;
+  /** RFC, NIT, CUIT… as the workshop calls it. */
+  tax_id: string;
+  extra: Record<string, string>;
+  notes: string;
+  created_at: string;
+};
+
 /** A quote for a client (table quotes); in the currency it was made in. */
 export type Quote = {
   id: string;
@@ -57,6 +82,13 @@ export type Quote = {
   client_email: string;
   client_phone: string;
   client_city: string;
+  /** The saved client it was made for, if any (missing on older schemas). */
+  client_id?: string | null;
+  client_legal_name?: string;
+  client_tax_id?: string;
+  client_tax_label?: string;
+  /** The workshop's own client fields printed on the quote. */
+  client_extra?: { label: string; value: string }[];
   items: QuoteItem[];
   currency: string;
   discount_pct: number;

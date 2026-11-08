@@ -5,7 +5,7 @@ import { isCurrency } from "./currency";
 import { rememberCurrency } from "./display-currency";
 import { setNumberFormat, setWorkshopCurrency } from "./format";
 import { supabase } from "./supabase";
-import type { Carrier, Channel, Expense, Filament, Maintenance, Material, Packaging, PrintJob, Printer, Product, Profile, Quote, Sale, ShopInfo, Supplier, PrinterWear } from "./types";
+import type { Carrier, Client, Channel, Expense, Filament, Maintenance, Material, Packaging, PrintJob, Printer, Product, Profile, Quote, Sale, ShopInfo, Supplier, PrinterWear } from "./types";
 
 // Web twin of mobile/src/store/data.tsx: same tables, same queries, same Supabase project.
 
@@ -29,6 +29,8 @@ type Tables = {
   carriers: Carrier[];
   /** Quotes for clients, newest first (empty until the quotes table exists). */
   quotes: Quote[];
+  /** Clients of the workshop, by name (empty until the clients table exists). */
+  clients: Client[];
 };
 
 type DataState = Tables & {
@@ -55,6 +57,7 @@ const EMPTY: Tables = {
   wear: [],
   carriers: [],
   quotes: [],
+  clients: [],
 };
 
 /** History tables load their most recent rows; older ones stay in the database. */
@@ -76,7 +79,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
   // schema) the user is the owner of their own shop.
   const mine = await db.rpc("my_shop");
   const shop: ShopInfo = mine.data ?? { shop_id: userId, role: "owner", shops: [], seats: null };
-  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers, quotes] = await Promise.all([
+  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers, quotes, clients] = await Promise.all([
     db.from("profiles").select("*").eq("id", shop.shop_id).maybeSingle(),
     db.from("suppliers").select("*").order("name"),
     db.from("printers").select("*").order("name"),
@@ -96,6 +99,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
     db.from("printer_wear").select("*").order("happened_at", { ascending: false }).order("created_at", { ascending: false }).limit(HISTORY_LIMIT),
     db.from("carriers").select("*").order("name"),
     db.from("quotes").select("*").order("created_at", { ascending: false }).limit(HISTORY_LIMIT),
+    db.from("clients").select("*").order("name"),
   ]);
 
   const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers].find(
@@ -125,6 +129,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       carriers: carriers.data ?? [],
       // Before the quotes table exists its query fails; the rest of the workshop still loads.
       quotes: quotes.error ? [] : (quotes.data ?? []),
+      clients: clients.error ? [] : (clients.data ?? []),
     },
   };
 }

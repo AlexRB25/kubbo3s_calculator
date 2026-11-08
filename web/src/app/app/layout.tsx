@@ -16,6 +16,7 @@ const LINKS: { href: string; label: string; icon: NavIconName; roles?: ShopRole[
   { href: "/app", icon: "resumen", label: "Resumen" },
   { href: "/app/calculadora", icon: "calculadora", label: "Cálculo rápido" },
   { href: "/app/cotizaciones", icon: "cotizaciones", label: "Cotizaciones" },
+  { href: "/app/clientes", icon: "clientes", label: "Clientes" },
   { href: "/app/inventario", icon: "inventario", label: "Inventario" },
   { href: "/app/productos", icon: "productos", label: "Productos" },
   { href: "/app/catalogo", icon: "catalogo", label: "Mi catálogo", roles: ["owner", "admin"] },
@@ -32,7 +33,7 @@ const LINKS: { href: string; label: string; icon: NavIconName; roles?: ShopRole[
   { href: "/app/canales", icon: "canales", label: "Canales de venta", roles: ["owner", "admin"] },
   { href: "/app/equipo", icon: "equipo", label: "Equipo" },
   { href: "/app/biblioteca", icon: "biblioteca", label: "Biblioteca" },
-  { href: "/app/ajustes", icon: "ajustes", label: "Ajustes", roles: ["owner"] },
+  { href: "/app/ajustes", icon: "ajustes", label: "Ajustes" },
 ];
 
 const ROLE_NAMES: Record<ShopRole, string> = { owner: "Dueño", admin: "Administrador", staff: "Colaborador" };

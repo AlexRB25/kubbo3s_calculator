@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ClientForm } from "@/components/app/Clients";
 import { publicFile } from "@/components/app/QuoteSettings";
 import { Empty, Modal, PageHeader, TableCard } from "@/components/app/ui";
+import { quoteClientFields } from "@/lib/clients";
 import { overheadPerPiece, priceLevels, productCost } from "@/lib/costs";
 import { getWorkshopCurrency, isoDay, moneyIn, num } from "@/lib/format";
 import { useData, useSave } from "@/lib/data";
 import { blankItem, DRAFT_KEY, QUOTE_STATUS, quoteFolio, quoteHtml, quoteMessage, quoteTotals, type QuoteDraft } from "@/lib/quotes";
 import { supabase } from "@/lib/supabase";
 import type { Currency } from "@/lib/currency";
-import type { Quote, QuoteItem } from "@/lib/types";
+import type { Client, Quote, QuoteItem } from "@/lib/types";
 
 const STATUS_STYLE: Record<Quote["status"], string> = {
   pending: "bg-warn/15 text-warn",
@@ -168,8 +170,11 @@ export default function QuotesPage() {
 const inDays = (days: number) => isoDay(new Date(Date.now() + days * 86400000));
 
 function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft: QuoteDraft | null; onDone: () => void; onPdf: (quote: Quote, page: Window | null) => void }) {
-  const { profile, products, filaments, printers, materials } = useData();
+  const { profile, products, filaments, printers, materials, clients } = useData();
   const { busy, error, setError, save } = useSave();
+  // Before the clients table exists a quote keeps only the typed contact.
+  const withClients = profile?.client_fields !== undefined;
+  const [adding, setAdding] = useState(false);
   const settings = profile?.quote_settings ?? {};
   const currency = (quote?.currency ?? getWorkshopCurrency()) as Currency;
   const validity = Number(settings.validity_days ?? 15);
@@ -180,6 +185,21 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
     client_email: quote?.client_email ?? "",
     client_city: quote?.client_city ?? "",
   });
+  // The saved client it is for and the copy of their invoice data (it does not change if the client is edited later).
+  const [fiscal, setFiscal] = useState(() => ({
+    client_id: quote?.client_id ?? null,
+    client_legal_name: quote?.client_legal_name ?? "",
+    client_tax_id: quote?.client_tax_id ?? "",
+    client_tax_label: quote?.client_tax_label ?? "",
+    client_extra: quote?.client_extra ?? [],
+  }));
+
+  function pickClient(picked: Client | null) {
+    const copy = quoteClientFields(picked, profile?.client_fields, currency);
+    const { client_id, client_legal_name, client_tax_id, client_tax_label, client_extra } = copy;
+    setFiscal({ client_id, client_legal_name, client_tax_id, client_tax_label, client_extra });
+    if (picked) setClient({ client_name: picked.name, client_phone: picked.phone, client_email: picked.email, client_city: picked.city });
+  }
   const [items, setItems] = useState<QuoteItem[]>(quote?.items ?? draft?.items ?? [blankItem()]);
   const [numbers, setNumbers] = useState({
     discount_pct: String(quote?.discount_pct ?? draft?.discount_pct ?? ""),
@@ -195,6 +215,7 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
 
   const row = {
     ...client,
+    ...(withClients ? fiscal : {}),
     ...texts,
     valid_until: texts.valid_until || null,
     items: items.filter((item) => item.name.trim()).map((item) => ({ ...item, name: item.name.trim(), detail: item.detail.trim(), quantity: num(String(item.quantity)) || 1, unit_price: num(String(item.unit_price)) })),
@@ -238,6 +259,34 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
 
   return (
     <div className="flex flex-col gap-5">
+      {withClients && (
+        <section className="flex flex-wrap items-end gap-2">
+          <label className="label min-w-60 flex-1">
+            Cliente guardado
+            <select
+              className="input"
+              value={fiscal.client_id ?? ""}
+              onChange={(event) => pickClient(clients.find((item) => item.id === event.target.value) ?? null)}
+            >
+              <option value="">— Escribir los datos a mano —</option>
+              {clients.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                  {item.tax_id ? ` · ${item.tax_id}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="btn" onClick={() => setAdding(true)}>
+            + Nuevo cliente
+          </button>
+        </section>
+      )}
+      {fiscal.client_tax_id || fiscal.client_legal_name || fiscal.client_extra.length ? (
+        <p className="rounded-lg border border-line p-3 text-xs text-muted">
+          En el PDF: {[fiscal.client_legal_name, fiscal.client_tax_id && `${fiscal.client_tax_label}: ${fiscal.client_tax_id}`, ...fiscal.client_extra.map((item) => `${item.label}: ${item.value}`)].filter(Boolean).join(" · ")}
+        </p>
+      ) : null}
       <section className="grid gap-3 sm:grid-cols-2">
         <label className="label">
           Cliente
@@ -256,6 +305,18 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
           {text(client.client_city, (value) => setClient({ ...client, client_city: value }))}
         </label>
       </section>
+
+      {adding && (
+        <Modal title="Nuevo cliente" wide onClose={() => setAdding(false)}>
+          <ClientForm
+            client={null}
+            onDone={(saved) => {
+              setAdding(false);
+              if (saved) pickClient(saved);
+            }}
+          />
+        </Modal>
+      )}
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">

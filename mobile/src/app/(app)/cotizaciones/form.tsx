@@ -1,16 +1,17 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Row, Screen, Select } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
+import { quoteClientFields } from '@/lib/clients';
 import { overheadPerPiece, priceLevels, productCost } from '@/lib/costs';
 import { type Currency } from '@/lib/currency';
 import { getWorkshopCurrency, isIsoDay, isoDay, moneyIn, num } from '@/lib/format';
-import { sendQuoteWhatsApp, shareQuotePdf, takeQuoteDraft } from '@/lib/quote-share';
+import { sendQuoteWhatsApp, shareQuotePdf, takePickedClient, takeQuoteDraft } from '@/lib/quote-share';
 import { blankItem, QUOTE_STATUS, quoteFolio, quoteTotals } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
-import type { Quote, QuoteItem } from '@/lib/types';
+import type { Client, Quote, QuoteItem } from '@/lib/types';
 import { useData, useSave } from '@/store/data';
 
 type ItemDraft = { name: string; detail: string; quantity: string; unit_price: string };
@@ -27,7 +28,7 @@ const inDays = (days: number) => isoDay(new Date(Date.now() + days * 86400000));
 
 export default function QuoteFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { quotes, profile, products, filaments, printers, materials } = useData();
+  const { quotes, profile, products, filaments, printers, materials, clients } = useData();
   const { busy, error, setError, save } = useSave();
   const quote = quotes.find((item) => item.id === id) ?? null;
   const settings = profile?.quote_settings ?? {};
@@ -42,6 +43,31 @@ export default function QuoteFormScreen() {
     client_email: quote?.client_email ?? '',
     client_city: quote?.client_city ?? '',
   });
+  // Before the clients table exists a quote keeps only the typed contact.
+  const withClients = profile?.client_fields !== undefined;
+  // The saved client it is for and the copy of their invoice data (it does not change if the client is edited later).
+  const [fiscal, setFiscal] = useState(() => ({
+    client_id: quote?.client_id ?? null,
+    client_legal_name: quote?.client_legal_name ?? '',
+    client_tax_id: quote?.client_tax_id ?? '',
+    client_tax_label: quote?.client_tax_label ?? '',
+    client_extra: quote?.client_extra ?? [],
+  }));
+
+  function pickClient(picked: Client | null) {
+    const { client_id, client_legal_name, client_tax_id, client_tax_label, client_extra } = quoteClientFields(picked, profile?.client_fields, currency);
+    setFiscal({ client_id, client_legal_name, client_tax_id, client_tax_label, client_extra });
+    if (picked) setClient({ client_name: picked.name, client_phone: picked.phone, client_email: picked.email, client_city: picked.city });
+  }
+
+  // Coming back from "Nuevo cliente": the one just saved is chosen.
+  useFocusEffect(
+    useCallback(() => {
+      const added = takePickedClient();
+      if (added) pickClient(added);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
   const [lines, setLines] = useState<ItemDraft[]>((quote?.items ?? draft?.items ?? [blankItem()]).map(toLine));
   const [discount, setDiscount] = useState(String(quote?.discount_pct ?? draft?.discount_pct ?? '') || '');
   const [tax, setTax] = useState(String(quote?.tax_pct ?? draft?.tax_pct ?? settings.tax_pct ?? 16));
@@ -56,6 +82,7 @@ export default function QuoteFormScreen() {
     .map((line) => ({ name: line.name.trim(), detail: line.detail.trim(), quantity: num(line.quantity) || 1, unit_price: num(line.unit_price) }));
   const row = {
     ...client,
+    ...(withClients ? fiscal : {}),
     items,
     discount_pct: num(discount),
     tax_pct: num(tax),
@@ -118,6 +145,26 @@ export default function QuoteFormScreen() {
 
       <Card>
         <Heading>Cliente</Heading>
+        {withClients && (
+          <>
+            <Select
+              label="Cliente guardado"
+              value={fiscal.client_id}
+              onChange={(value) => pickClient(clients.find((item) => item.id === value) ?? null)}
+              none="Escribir los datos a mano"
+              options={clients.map((item) => ({ value: item.id, label: item.name, hint: item.tax_id || item.phone || undefined }))}
+            />
+            <Button variant="secondary" icon="person-add" label="Nuevo cliente" onPress={() => router.push({ pathname: '/clientes/form', params: { pick: '1' } })} />
+          </>
+        )}
+        {fiscal.client_tax_id || fiscal.client_legal_name || fiscal.client_extra.length ? (
+          <Text style={{ color: Colors.textSecondary, fontSize: 12 }}>
+            En el PDF:{' '}
+            {[fiscal.client_legal_name, fiscal.client_tax_id && `${fiscal.client_tax_label}: ${fiscal.client_tax_id}`, ...fiscal.client_extra.map((item) => `${item.label}: ${item.value}`)]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+        ) : null}
         <Field label="Nombre o empresa" value={client.client_name} onChangeText={(value) => setClient({ ...client, client_name: value })} />
         <Field
           label="WhatsApp o teléfono"

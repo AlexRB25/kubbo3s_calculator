@@ -63,6 +63,10 @@ export default function AppLayout() {
           <Stack.Screen name="ajustes" options={{ title: 'Ajustes' }} />
           <Stack.Screen name="bienvenida" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
           <Stack.Screen name="biblioteca" options={{ title: 'Biblioteca' }} />
+          <Stack.Screen name="clientes/index" options={{ title: 'Clientes' }} />
+          <Stack.Screen name="clientes/form" options={{ title: 'Cliente' }} />
+          <Stack.Screen name="clientes/campos" options={{ title: 'Campos de facturación' }} />
+          <Stack.Screen name="eliminar-cuenta" options={{ title: 'Eliminar mi cuenta' }} />
           <Stack.Screen name="calculadora" options={{ title: 'Cálculo rápido' }} />
           <Stack.Screen name="cotizaciones/index" options={{ title: 'Cotizaciones' }} />
           <Stack.Screen name="cotizaciones/form" options={{ title: 'Cotización' }} />

@@ -4,7 +4,7 @@ import { Alert, Linking } from 'react-native';
 
 import { quoteFolio, quoteHtml, quoteMessage, type QuoteBusiness, type QuoteDraft } from './quotes';
 import { supabase } from './supabase';
-import type { Profile, Quote } from './types';
+import type { Client, Profile, Quote } from './types';
 
 /** Public address of a file in the products bucket (logos and product photos). */
 export const publicFile = (path?: string | null) => (path ? supabase.storage.from('products').getPublicUrl(path).data.publicUrl : null);
@@ -42,4 +42,15 @@ export const takeQuoteDraft = () => {
   const draft = pendingDraft;
   pendingDraft = null;
   return draft;
+};
+
+/** A client just added from a quote; the quote form selects it when it comes back. */
+let pickedClient: Client | null = null;
+export const setPickedClient = (client: Client) => {
+  pickedClient = client;
+};
+export const takePickedClient = () => {
+  const client = pickedClient;
+  pickedClient = null;
+  return client;
 };

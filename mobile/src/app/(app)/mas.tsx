@@ -12,7 +12,7 @@ import { useSession } from '@/store/session';
 const ROLE_NAMES: Record<ShopRole, string> = { owner: 'Dueño', admin: 'Administrador', staff: 'Colaborador' };
 
 export default function MoreScreen() {
-  const { printers, suppliers, expenses, channels, packaging, quotes, shop, reload } = useData();
+  const { printers, suppliers, expenses, channels, packaging, quotes, clients, shop, reload } = useData();
   const { session } = useSession();
   const role = shop?.role ?? 'owner';
   const userId = session?.user.id;
@@ -21,6 +21,7 @@ export default function MoreScreen() {
   const links: { href: Href; icon: IconName; title: string; subtitle: string; roles?: ShopRole[] }[] = [
     { href: '/calculadora', icon: 'calculator', title: 'Cálculo rápido', subtitle: 'El precio de una pieza sin crear producto' },
     { href: '/cotizaciones', icon: 'document-text', title: 'Cotizaciones', subtitle: `${quotes.length} · PDF y WhatsApp para tus clientes` },
+    { href: '/clientes', icon: 'people', title: 'Clientes', subtitle: `${clients.length} · contacto y datos de facturación` },
     { href: '/biblioteca', icon: 'library', title: 'Biblioteca', subtitle: 'Pruebas de calibración y valores por material' },
     { href: '/impresoras', icon: 'print', title: 'Impresoras', subtitle: `${printers.length} · mantenimientos y ajustes` },
     { href: '/proveedores', icon: 'business', title: 'Proveedores', subtitle: `${suppliers.length} registrados`, roles: ['owner', 'admin'] },
@@ -75,6 +76,7 @@ export default function MoreScreen() {
       </Muted>
       <Muted style={{ textAlign: 'center' }}>Para invitar a tu equipo entra a la calculadora web → Equipo.</Muted>
       <Button variant="secondary" icon="log-out" label="Cerrar sesión" onPress={() => supabase.auth.signOut()} />
+      <Button variant="danger" icon="trash" label="Eliminar mi cuenta" onPress={() => router.push('/eliminar-cuenta')} />
     </Screen>
   );
 }

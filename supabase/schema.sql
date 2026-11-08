@@ -3072,3 +3072,47 @@ revoke all on public.quotes from anon;
 drop trigger if exists guard_shop_role on public.quotes;
 create trigger guard_shop_role before delete on public.quotes
   for each row execute function public.guard_shop_role('data');
+
+-- ───────────────────────── Clientes ─────────────────────────
+-- Los clientes del taller con sus datos de contacto y de facturación. Como cada país factura distinto, los
+-- datos fijos son pocos (nombre fiscal e ID fiscal) y cada taller da de alta los campos que requiera en
+-- profiles.client_fields: {"tax_label": "RFC", "fields": [{"id", "label", "on_quote": bool}]}; sus valores van
+-- en clients.extra ({"<id>": "valor"}). Las cotizaciones guardan una copia de los datos del cliente al hacerse.
+alter table public.profiles add column if not exists client_fields jsonb not null default '{}'::jsonb;
+alter table public.profiles drop constraint if exists profiles_client_fields_check;
+alter table public.profiles add constraint profiles_client_fields_check check (jsonb_typeof(client_fields) = 'object');
+grant update (client_fields) on public.profiles to authenticated;
+
+create table if not exists public.clients (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default public.current_shop() references auth.users (id) on delete cascade,
+  name text not null check (char_length(trim(name)) between 1 and 200),
+  phone text not null default '' check (char_length(phone) <= 50),
+  email text not null default '' check (char_length(email) <= 200),
+  address text not null default '' check (char_length(address) <= 500),
+  city text not null default '' check (char_length(city) <= 200),
+  legal_name text not null default '' check (char_length(legal_name) <= 300),
+  tax_id text not null default '' check (char_length(tax_id) <= 50),
+  extra jsonb not null default '{}'::jsonb check (jsonb_typeof(extra) = 'object' and pg_column_size(extra) <= 8192),
+  notes text not null default '' check (char_length(notes) <= 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists clients_user_idx on public.clients (user_id, name);
+
+alter table public.clients enable row level security;
+drop policy if exists own_rows on public.clients;
+create policy own_rows on public.clients for all to authenticated
+  using (user_id = (select public.current_shop())) with check (user_id = (select public.current_shop()));
+revoke all on public.clients from anon;
+drop trigger if exists guard_shop_role on public.clients;
+create trigger guard_shop_role before delete on public.clients
+  for each row execute function public.guard_shop_role('data');
+
+-- En la cotización: el cliente de la lista (si salió de ahí) y la copia de sus datos fiscales; client_extra
+-- guarda los campos propios marcados para salir en el PDF: [{"label", "value"}].
+alter table public.quotes add column if not exists client_id uuid references public.clients (id) on delete set null;
+alter table public.quotes add column if not exists client_legal_name text not null default '' check (char_length(client_legal_name) <= 300);
+alter table public.quotes add column if not exists client_tax_id text not null default '' check (char_length(client_tax_id) <= 50);
+alter table public.quotes add column if not exists client_tax_label text not null default '' check (char_length(client_tax_label) <= 40);
+alter table public.quotes add column if not exists client_extra jsonb not null default '[]'::jsonb check (jsonb_typeof(client_extra) = 'array');
+create index if not exists quotes_client_idx on public.quotes (client_id);

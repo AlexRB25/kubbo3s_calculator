@@ -70,7 +70,17 @@ export function quoteHtml(quote: Quote, business: QuoteBusiness) {
   const cash = (amount: number) => escape(moneyIn(amount, currency));
   const totals = quoteTotals(quote);
   const contact = [business.settings.phone, business.settings.email, business.settings.address].filter((text): text is string => !!text).map((text) => lines(text)).join('<br>');
-  const client = [quote.client_email, quote.client_phone, quote.client_city].filter(Boolean).map(escape).join('<br>');
+  const client = [
+    quote.client_legal_name && quote.client_legal_name !== quote.client_name ? quote.client_legal_name : '',
+    quote.client_tax_id ? `${quote.client_tax_label || 'ID fiscal'}: ${quote.client_tax_id}` : '',
+    ...(quote.client_extra ?? []).map((field) => `${field.label}: ${field.value}`),
+    quote.client_email,
+    quote.client_phone,
+    quote.client_city,
+  ]
+    .filter((text): text is string => !!text)
+    .map((text) => escape(text))
+    .join('<br>');
   const conditions = [
     ['Condiciones de pago', quote.payment_terms],
     ['Entrega', quote.delivery],
