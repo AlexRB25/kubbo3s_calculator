@@ -3116,3 +3116,107 @@ alter table public.quotes add column if not exists client_tax_id text not null d
 alter table public.quotes add column if not exists client_tax_label text not null default '' check (char_length(client_tax_label) <= 40);
 alter table public.quotes add column if not exists client_extra jsonb not null default '[]'::jsonb check (jsonb_typeof(client_extra) = 'array');
 create index if not exists quotes_client_idx on public.quotes (client_id);
+
+-- ───────────────────────── Catálogo de empaques ─────────────────────────
+-- Cajas que Kubbo3D deja listas para elegir (como el catálogo de filamentos): medidas, precio de referencia
+-- por pieza en pesos mexicanos y, si lo hay, el de mayoreo y desde cuántas piezas. style dice cómo se dibuja
+-- en 3D: 'rsc' (caja de envío con 4 solapas) o 'mailer' (con tapa, tipo maletín o pizza).
+create table if not exists public.packaging_catalog (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  name text not null check (char_length(name) between 1 and 120),
+  kind text not null default 'box' check (kind in ('box', 'envelope', 'bag', 'other')),
+  style text not null default 'rsc' check (style in ('rsc', 'mailer')),
+  material text not null default 'kraft' check (material in ('kraft', 'blanca', 'negra')),
+  length_mm numeric(8,1) not null check (length_mm > 0),
+  width_mm numeric(8,1) not null check (width_mm > 0),
+  height_mm numeric(8,1) not null check (height_mm > 0),
+  -- Sin precio (null): no lo conocemos; el usuario escribe el suyo.
+  price_mxn numeric(10,2) check (price_mxn >= 0),
+  wholesale_price_mxn numeric(10,2) check (wholesale_price_mxn >= 0),
+  wholesale_min int check (wholesale_min > 0),
+  weight_g numeric(10,1) not null default 0 check (weight_g >= 0),
+  notes text not null default '',
+  active boolean not null default true,
+  sort int not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists packaging_catalog_list_idx on public.packaging_catalog (active, sort);
+
+-- Todos lo leen; solo el panel admin (llave secreta) lo escribe.
+alter table public.packaging_catalog enable row level security;
+revoke insert, update, delete on public.packaging_catalog from anon, authenticated;
+drop policy if exists packaging_catalog_read on public.packaging_catalog;
+create policy packaging_catalog_read on public.packaging_catalog for select to anon, authenticated using (active);
+
+-- El empaque del usuario recuerda de qué caja del catálogo salió y cómo se dibuja.
+alter table public.packaging add column if not exists catalog_id uuid references public.packaging_catalog (id) on delete set null;
+alter table public.packaging add column if not exists style text not null default 'rsc' check (style in ('rsc', 'mailer'));
+alter table public.packaging add column if not exists material text not null default 'kraft' check (material in ('kraft', 'blanca', 'negra'));
+
+insert into public.packaging_catalog (code, name, style, material, length_mm, width_mm, height_mm, price_mxn, wholesale_price_mxn, wholesale_min, notes, sort) values
+  ('dc-maletin-22x15x6', 'Caja tipo maletín kraft', 'mailer', 'kraft', 220, 150, 60, 13.79, null, null, '', 0),
+  ('dc-cubo-10', 'Caja maletín cubo 10', 'mailer', 'kraft', 100, 100, 100, 4.41, null, null, '', 1),
+  ('dc-cubo-15', 'Caja maletín cubo 15', 'mailer', 'kraft', 150, 150, 150, 9.1, null, null, '', 2),
+  ('dc-negra-15x11x8', 'Caja maletín negra', 'mailer', 'negra', 150, 110, 80, 24.16, null, null, 'Negra por fuera, kraft por dentro', 3),
+  ('dc-bota-chica', 'Caja para bota chica', 'mailer', 'kraft', 310, 205, 110, 25.36, null, null, '', 4),
+  ('dc-pizza-20-k', 'Caja para pizza 20 kraft', 'mailer', 'kraft', 200, 200, 30, 4.13, null, null, 'También sirve para piezas planas', 5),
+  ('dc-pizza-20-b', 'Caja para pizza 20 blanca', 'mailer', 'blanca', 200, 200, 30, 4.91, null, null, 'Blanca', 6),
+  ('dc-pizza-25-k', 'Caja para pizza 25 kraft', 'mailer', 'kraft', 250, 250, 30, 5.61, null, null, '', 7),
+  ('dc-pizza-25-b', 'Caja para pizza 25 blanca', 'mailer', 'blanca', 250, 250, 30, 6.68, null, null, '', 8),
+  ('dc-pizza-30-k', 'Caja para pizza 30 kraft', 'mailer', 'kraft', 300, 300, 40, 7.13, null, null, '', 9),
+  ('dc-pizza-30-b', 'Caja para pizza 30 blanca', 'mailer', 'blanca', 300, 300, 30, 8.72, null, null, '', 10),
+  ('dc-pizza-32-k', 'Caja para pizza 32 kraft', 'mailer', 'kraft', 320, 320, 30, 9.28, null, null, '', 11),
+  ('dc-pizza-32-b', 'Caja para pizza 32 blanca', 'mailer', 'blanca', 320, 320, 30, 11.04, null, null, '', 12),
+  ('dc-pizza-36-k', 'Caja para pizza 36 kraft', 'mailer', 'kraft', 360, 360, 40, 11.46, null, null, '', 13),
+  ('dc-pizza-36-b', 'Caja para pizza 36 blanca', 'mailer', 'blanca', 360, 360, 40, 13.63, null, null, '', 14),
+  ('dc-pizza-38-k', 'Caja para pizza 38 kraft', 'mailer', 'kraft', 380, 380, 30, 11.46, null, null, '', 15),
+  ('dc-pizza-41-k', 'Caja para pizza 41 kraft', 'mailer', 'kraft', 410, 410, 30, 13.11, null, null, '', 16),
+  ('dc-pizza-41-b', 'Caja para pizza 41 blanca', 'mailer', 'blanca', 410, 410, 30, 15.59, null, null, '', 17),
+  ('dc-comida-chica', 'Caja chica para llaveros', 'mailer', 'kraft', 140, 100, 50, 3.72, null, null, 'Caja de comida chica: sirve para llaveros y piezas pequeñas', 18),
+  ('dc-ventana', 'Caja con ventana', 'mailer', 'kraft', 160, 140, 55, 4.66, null, null, 'Con ventana para que se vea la pieza', 19),
+  ('dc-comida-mediana', 'Caja mediana para piezas', 'mailer', 'kraft', 160, 120, 90, 5.6, null, null, '', 20),
+  ('dc-cubo-ventana', 'Caja cubo con ventana', 'rsc', 'kraft', 90, 90, 90, 9.45, null, null, 'Para figuras chicas', 21),
+  ('ce-10x10x10', 'Caja corrugada 10×10×10', 'rsc', 'kraft', 100, 100, 100, 10, 5, 25, '', 22),
+  ('ce-15x10x10', 'Caja corrugada 15×10×10', 'rsc', 'kraft', 150, 100, 100, 12, 8, 25, '', 23),
+  ('ce-15x15x15', 'Caja corrugada 15×15×15', 'rsc', 'kraft', 150, 150, 150, 15, 9.5, 25, '', 24),
+  ('ce-20x10x10', 'Caja corrugada 20×10×10', 'rsc', 'kraft', 200, 100, 100, 15, 9.5, 25, '', 25),
+  ('ce-20x20x20', 'Caja corrugada 20×20×20', 'rsc', 'kraft', 200, 200, 200, 20, 14.99, 25, '', 26),
+  ('ce-25x25x25', 'Caja corrugada 25×25×25', 'rsc', 'kraft', 250, 250, 250, 22, 15.49, 25, '', 27),
+  ('ce-30x16x20', 'Caja corrugada 30×16×20', 'rsc', 'kraft', 300, 160, 200, 15, 10, 20, '', 28),
+  ('ce-30x25x15', 'Caja corrugada 30×25×15', 'rsc', 'kraft', 300, 250, 150, 21, 14.5, 25, '', 29),
+  ('ce-30x30x30', 'Caja corrugada 30×30×30', 'rsc', 'kraft', 300, 300, 300, 35, 22, 25, '', 30),
+  ('ce-40x30x25', 'Caja corrugada 40×30×25', 'rsc', 'kraft', 400, 300, 250, 35, 28, 20, '', 31),
+  ('ce-50x30x30', 'Caja corrugada 50×30×30', 'rsc', 'kraft', 500, 300, 300, 40, 30, 20, '', 32),
+  ('ce-50x35x50', 'Caja corrugada 50×35×50', 'rsc', 'kraft', 500, 350, 500, null, null, null, '', 33),
+  ('ce-56x44x32', 'Caja corrugada 56×44×32', 'rsc', 'kraft', 560, 440, 320, 82.99, 53.98, null, '', 34),
+  ('ce-60x30x30', 'Caja corrugada 60×30×30', 'rsc', 'kraft', 600, 300, 300, 50, 40, 20, '', 35),
+  ('ce-60x40x30', 'Caja corrugada 60×40×30', 'rsc', 'kraft', 600, 400, 300, 82, 54, 20, '', 36),
+  ('ce-60x40x60', 'Caja corrugada 60×40×60', 'rsc', 'kraft', 600, 400, 600, 80.01, 64.99, null, '', 37),
+  ('ce-60x60x60', 'Caja corrugada 60×60×60', 'rsc', 'kraft', 600, 600, 600, 105, 86.13, null, '', 38),
+  ('cr-01', 'Caja de envío CR-01', 'rsc', 'kraft', 190, 150, 150, 11.9, null, null, 'Modelo CR-01', 39),
+  ('cr-02', 'Caja de envío CR-02', 'rsc', 'kraft', 200, 160, 130, 13.46, null, null, 'Modelo CR-02', 40),
+  ('cr-08', 'Caja de envío CR-08', 'rsc', 'kraft', 250, 160, 160, 14.23, null, null, 'Modelo CR-08', 41),
+  ('cr-15', 'Caja de envío CR-15', 'rsc', 'kraft', 300, 200, 200, 27.02, null, null, 'Modelo CR-15', 42),
+  ('cr-10', 'Caja de envío CR-10', 'rsc', 'kraft', 400, 300, 200, 37.92, null, null, 'Modelo CR-10', 43),
+  ('cr-40', 'Caja de envío CR-40', 'rsc', 'kraft', 400, 300, 400, 50.72, null, null, 'Modelo CR-40', 44),
+  ('cr-35', 'Caja de envío CR-35', 'rsc', 'kraft', 450, 450, 450, 84.89, null, null, 'Modelo CR-35', 45),
+  ('cr-50', 'Caja de envío CR-50', 'rsc', 'kraft', 500, 400, 250, 61.95, null, null, 'Modelo CR-50', 46),
+  ('cr-50-dc', 'Caja de envío CR-50 doble corrugado', 'rsc', 'kraft', 500, 400, 250, 85.65, null, null, 'Doble corrugado: más resistente', 47),
+  ('cr-60x30x30', 'Caja de envío 60×30×30', 'rsc', 'kraft', 600, 300, 300, 57.66, null, null, '', 48),
+  ('cr-63', 'Caja de envío CR-63', 'rsc', 'kraft', 630, 360, 260, 65.37, null, null, 'Modelo CR-63', 49),
+  ('cr-85', 'Caja de envío CR-85', 'rsc', 'kraft', 700, 400, 400, 94.87, null, null, 'Modelo CR-85', 50),
+  ('cr-85-dc', 'Caja de envío CR-85 doble corrugado', 'rsc', 'kraft', 700, 400, 400, 127.4, null, null, 'Doble corrugado: más resistente', 51),
+  ('cr-12', 'Caja tubo CR-12', 'rsc', 'kraft', 150, 150, 960, 36.12, null, null, 'Para piezas largas', 52),
+  ('cr-archivo', 'Caja archivo grande', 'rsc', 'kraft', 365, 260, 230, null, null, null, '', 53),
+  ('cr-cuadro-ch', 'Caja para cuadro chica', 'mailer', 'kraft', 455, 380, 50, null, null, null, 'Para piezas planas grandes', 54),
+  ('cr-cuadro-gde', 'Caja para cuadro grande', 'mailer', 'kraft', 620, 550, 50, null, null, null, 'Para piezas planas grandes', 55)
+on conflict (code) do nothing;
+
+-- ───────────────────────── Medidas del producto y caja recomendada ─────────────────────────
+-- Cuánto mide el producto ya armado (se sugiere la pieza más grande del 3MF) y cuánta holgura necesita para
+-- su protección (emplayado, burbuja…): con eso se recomienda la caja más chica de su embalaje donde cabe.
+alter table public.products add column if not exists length_mm numeric(8,1) not null default 0 check (length_mm >= 0);
+alter table public.products add column if not exists width_mm numeric(8,1) not null default 0 check (width_mm >= 0);
+alter table public.products add column if not exists height_mm numeric(8,1) not null default 0 check (height_mm >= 0);
+alter table public.products add column if not exists pack_margin_mm numeric(6,1) not null default 30 check (pack_margin_mm between 0 and 500);

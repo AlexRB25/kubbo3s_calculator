@@ -244,6 +244,32 @@ export type Packaging = {
   /** Weight of the empty package, for the shipping weight. */
   weight_g: number;
   notes: string;
+  /** The Kubbo catalog box it came from, and how its 3D preview is drawn (missing on older schemas). */
+  catalog_id?: string | null;
+  style?: BoxStyle;
+  material?: BoxMaterial;
+};
+
+export type BoxStyle = 'rsc' | 'mailer';
+export type BoxMaterial = 'kraft' | 'blanca' | 'negra';
+
+/** A box Kubbo3D keeps ready to pick (table packaging_catalog); prices in Mexican pesos, null when unknown. */
+export type CatalogPackaging = {
+  id: string;
+  code: string;
+  name: string;
+  kind: PackagingKind;
+  style: BoxStyle;
+  material: BoxMaterial;
+  length_mm: number;
+  width_mm: number;
+  height_mm: number;
+  price_mxn: number | null;
+  wholesale_price_mxn: number | null;
+  wholesale_min: number | null;
+  weight_g: number;
+  notes: string;
+  sort: number;
 };
 
 export type FilamentUse = { filament_id: string; grams: number };
@@ -263,6 +289,12 @@ export type Plate = { printer_id: string; name: string; minutes: number; grams: 
 export type Product = {
   id: string;
   name: string;
+  /** Size of the finished product, in mm (missing on older schemas). */
+  length_mm?: number;
+  width_mm?: number;
+  height_mm?: number;
+  /** Room it needs around for its protection (wrap, bubble…), in mm. */
+  pack_margin_mm?: number;
   sku: string;
   description: string;
   image_path: string | null;

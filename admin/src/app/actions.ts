@@ -195,6 +195,40 @@ export async function deleteCatalogPrinter(form: FormData) {
   redirect("/impresoras");
 }
 
+// ── Catálogo de empaques ──
+
+export async function saveCatalogPackaging(form: FormData) {
+  await requireAdmin();
+  const id = text(form, "id");
+  const cmToMm = (key: string) => Math.round(number(form, key) * 10);
+  const row = {
+    code: text(form, "code") || slugify(`${text(form, "name")}-${text(form, "length")}x${text(form, "width")}x${text(form, "height")}`),
+    name: text(form, "name"),
+    style: text(form, "style") === "mailer" ? "mailer" : "rsc",
+    material: ["kraft", "blanca", "negra"].includes(text(form, "material")) ? text(form, "material") : "kraft",
+    length_mm: cmToMm("length"),
+    width_mm: cmToMm("width"),
+    height_mm: cmToMm("height"),
+    price_mxn: optionalNumber(form, "price_mxn"),
+    wholesale_price_mxn: optionalNumber(form, "wholesale_price_mxn"),
+    wholesale_min: optionalNumber(form, "wholesale_min"),
+    weight_g: number(form, "weight_g"),
+    notes: text(form, "notes"),
+    sort: number(form, "sort"),
+    active: flag(form, "active"),
+  };
+  must(id ? await admin().from("packaging_catalog").update(row).eq("id", id) : await admin().from("packaging_catalog").insert(row));
+  revalidatePath("/empaques");
+  redirect("/empaques");
+}
+
+export async function deleteCatalogPackaging(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("packaging_catalog").delete().eq("id", text(form, "id")));
+  revalidatePath("/empaques");
+  redirect("/empaques");
+}
+
 // ── Catálogo de filamentos ──
 
 export async function saveCatalogFilament(form: FormData) {

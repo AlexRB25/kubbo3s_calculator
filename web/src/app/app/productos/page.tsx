@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
+import { BoxAdvisor, ParcelFacts, type SizeDraft } from "@/components/app/BoxAdvisor";
 import { CategoryPicker } from "@/components/app/CategoryPicker";
 import { InfoTip, TipLine } from "@/components/app/InfoTip";
 import { SliceImport, type SliceImportResult } from "@/components/app/SliceImport";
@@ -137,6 +138,15 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const [plates, setPlates] = useState<Record<string, PlateRow[]>>(() => platesOf(product));
   const [packagingId, setPackagingId] = useState(product?.packaging_id ?? "");
   const box = packaging.find((item) => item.id === packagingId);
+  // The finished product's size and its protection, in cm, to recommend a box (only once the database has them).
+  const withSizes = product ? product.length_mm !== undefined : profile?.client_fields !== undefined;
+  const [sizeDraft, setSizeDraft] = useState<SizeDraft>({
+    length: field(product?.length_mm ? product.length_mm / 10 : 0),
+    width: field(product?.width_mm ? product.width_mm / 10 : 0),
+    height: field(product?.height_mm ? product.height_mm / 10 : 0),
+    margin: String((product?.pack_margin_mm ?? 30) / 10),
+  });
+  const [sizeHint, setSizeHint] = useState<string | undefined>(undefined);
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
   );
@@ -200,7 +210,13 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const setPart = (index: number, change: Partial<PartRow>) => setPartRows(partRows.map((row, position) => (position === index ? { ...row, ...change } : row)));
 
   /** Fills the plates of one printer from a sliced file; empty plates are replaced, filled ones kept. */
-  function applySlice({ printerId, plates: imported, parts: found, thumbnail }: SliceImportResult) {
+  function applySlice({ printerId, plates: imported, parts: found, thumbnail, biggest }: SliceImportResult) {
+    // The biggest piece suggests the product's size while none was typed.
+    if (biggest && !num(sizeDraft.length) && !num(sizeDraft.width) && !num(sizeDraft.height)) {
+      const cmOf = (value: number) => String(Math.round(value) / 10);
+      setSizeDraft({ ...sizeDraft, length: cmOf(biggest[0]), width: cmOf(biggest[1]), height: cmOf(biggest[2]) });
+      setSizeHint("Las tomamos de la pieza más grande del archivo. Si el producto se arma con varias piezas, ajústalas.");
+    }
     // The pieces found become the product's: same name → same piece; the single unnamed one takes the first.
     let pieceRows = partRows;
     const idOf: Record<string, string> = {};
@@ -269,6 +285,14 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       image_paths: paths.slice(1),
       ...draft,
       packaging_id: packagingId || null,
+      ...(withSizes
+        ? {
+            length_mm: Math.round(num(sizeDraft.length) * 10),
+            width_mm: Math.round(num(sizeDraft.width) * 10),
+            height_mm: Math.round(num(sizeDraft.height) * 10),
+            pack_margin_mm: Math.min(500, Math.max(0, Math.round(num(sizeDraft.margin) * 10))),
+          }
+        : {}),
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
       links: Object.fromEntries(
         Object.entries(links).flatMap(([channel, link]) => (link.trim() && channels.some((item) => item.id === channel) ? [[channel, link.trim()]] : [])),
@@ -726,6 +750,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         </div>
       </div>
 
+      {withSizes && (
+        <BoxAdvisor draft={sizeDraft} onChange={setSizeDraft} packaging={packaging} chosen={packagingId} onPick={setPackagingId} hint={sizeHint} />
+      )}
+
       <label className="label sm:col-span-2">
         Embalaje para envío
         <select className="input" value={packagingId} onChange={(event) => setPackagingId(event.target.value)}>
@@ -741,10 +769,11 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           {box && (() => {
             // Shipping weight: the plastic of one product plus the empty package.
             const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
-            return ` Peso para envío: ${Math.round(grams)} g del producto + ${Number(box.weight_g ?? 0)} g del empaque = ${Math.round(grams + Number(box.weight_g ?? 0))} g.${box.stock <= 0 ? " Ojo: no te quedan de este empaque." : ` Te quedan ${box.stock}.`}`;
+            return `${grams > 0 ? "" : " Importa el archivo del laminador para saber cuánto pesa la pieza."}${box.stock <= 0 ? " Ojo: no te quedan de este empaque." : ` Te quedan ${box.stock}.`}`;
           })()}
         </span>
       </label>
+      {box && <ParcelFacts productGrams={draft.filaments.reduce((total, use) => total + use.grams, 0)} box={box} />}
 
       <div className="flex flex-col gap-3 rounded-lg border border-line p-3 sm:col-span-2">
         <label className="flex items-center gap-2 text-sm">

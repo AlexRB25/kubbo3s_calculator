@@ -1,3 +1,4 @@
+import { boxGrams } from './box-fit';
 import type { Carrier, Channel, WasteRule, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, Printer, Product } from './types';
 
 export type CostBreakdown = {
@@ -194,7 +195,8 @@ export function shippingCost(channel: Channel, packaging: Packaging | undefined)
  * volumetric weight (length × width × height in cm ÷ divisor) when that is larger.
  */
 export function shippingWeight(productGrams: number, packaging: Packaging | undefined, divisor: number) {
-  const physical = (productGrams + Number(packaging?.weight_g ?? 0)) / 1000;
+  // A box without its weight written down counts with an estimate from its measures.
+  const physical = (productGrams + (packaging ? boxGrams(packaging).grams : 0)) / 1000;
   const cm = packaging ? [packaging.length_mm, packaging.width_mm, packaging.height_mm].map((value) => Number(value) / 10) : [];
   const volumetric = cm.length && cm.every((value) => value > 0) ? (cm[0] * cm[1] * cm[2]) / divisor : 0;
   return Math.max(physical, volumetric);

@@ -13,7 +13,14 @@ import type { Filament, Printer } from "@/lib/types";
 /** One plate as it goes into the product form: grams already by the user's filament ids. */
 export type ImportedPlate = { name: string; minutes: number; grams: Record<string, number>; pieces: Record<string, number>; objects: number };
 /** `parts` are the distinct pieces found (copies grouped), named as the user left them; empty when the file does not say. */
-export type SliceImportResult = { printerId: string; plates: ImportedPlate[]; parts: { name: string; needed: number }[]; thumbnail: File | null };
+export type SliceImportResult = {
+  printerId: string;
+  plates: ImportedPlate[];
+  parts: { name: string; needed: number }[];
+  thumbnail: File | null;
+  /** The biggest piece of the file (mm: length, width, height), to suggest the product's size. */
+  biggest?: [number, number, number] | null;
+};
 
 /** A distinct piece of the file: `key` is how the slicer calls it, `name` and `needed` what the user typed. */
 type PieceRow = { key: string; name: string; needed: string };
@@ -97,7 +104,10 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
     });
     const png = report.plates.find((plate) => plate.thumbnail)?.thumbnail;
     const thumbnail = png ? new File([png.slice()], "placa.png", { type: "image/png" }) : null;
-    onApply({ printerId, plates, parts, thumbnail });
+    // The biggest piece by its longest side (then its volume), to suggest the product's measures.
+    const biggest =
+      [...(report.sizes ?? [])].sort((a, b) => Math.max(...b.size) - Math.max(...a.size) || b.size[0] * b.size[1] * b.size[2] - a.size[0] * a.size[1] * a.size[2])[0]?.size ?? null;
+    onApply({ printerId, plates, parts, thumbnail, biggest });
     setReview(null);
   }
 

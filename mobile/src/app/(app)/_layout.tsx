@@ -58,6 +58,7 @@ export default function AppLayout() {
           <Stack.Screen name="gastos/nuevo" options={{ title: 'Registrar gasto' }} />
           <Stack.Screen name="embalaje/index" options={{ title: 'Embalaje' }} />
           <Stack.Screen name="embalaje/form" options={{ title: 'Embalaje' }} />
+          <Stack.Screen name="embalaje/catalogo" options={{ title: 'Catálogo de empaques' }} />
           <Stack.Screen name="canales/index" options={{ title: 'Canales de venta' }} />
           <Stack.Screen name="canales/form" options={{ title: 'Canal de venta' }} />
           <Stack.Screen name="ajustes" options={{ title: 'Ajustes' }} />

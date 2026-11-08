@@ -11,6 +11,7 @@ import { Colors, Radius, Spacing, themed } from '@/constants/theme';
 import { costPerGram, filamentName, LEVEL_LABEL, levelOf, levelPrices, packagingName, overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { draftOf, levelsLine, ownLevelsOnly, readLevels } from '@/lib/levels';
 import { field, money, num, weight } from '@/lib/format';
+import { BoxAdvisor, ParcelFacts, type SizeDraft } from '@/components/box-advisor';
 import { matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice } from '@/lib/slice';
 import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
 import type { Product } from '@/lib/types';
@@ -58,6 +59,15 @@ export default function ProductFormScreen() {
   const [printerIds, setPrinterIds] = useState<string[]>(product?.printer_ids ?? []);
   const [packagingId, setPackagingId] = useState<string | null>(product?.packaging_id ?? null);
   const box = packaging.find((item) => item.id === packagingId);
+  // The finished product's size and its protection, in cm, to recommend a box (only once the database has them).
+  const withSizes = product ? product.length_mm !== undefined : profile?.client_fields !== undefined;
+  const [sizeDraft, setSizeDraft] = useState<SizeDraft>({
+    length: field(product?.length_mm ? product.length_mm / 10 : 0),
+    width: field(product?.width_mm ? product.width_mm / 10 : 0),
+    height: field(product?.height_mm ? product.height_mm / 10 : 0),
+    margin: String((product?.pack_margin_mm ?? 30) / 10),
+  });
+  const [sizeHint, setSizeHint] = useState<string | undefined>(undefined);
   // Profit levels: the workshop's, or ones of its own (only those that differ are saved).
   const workshopLevels = priceLevels(profile);
   const [ownLevels, setOwnLevels] = useState(Object.keys(product?.price_levels ?? {}).length > 0);
@@ -125,6 +135,13 @@ export default function ProductFormScreen() {
           if (!close) notes.push(`${sliced.type} ${sliced.color} → ${filamentName(filament)}: color o material distinto, revísalo.`);
         }
       }
+      // The biggest piece suggests the product's size while none was typed.
+      const biggest = [...(report.sizes ?? [])].sort((a, b) => Math.max(...b.size) - Math.max(...a.size))[0]?.size;
+      if (biggest && !num(sizeDraft.length) && !num(sizeDraft.width) && !num(sizeDraft.height)) {
+        const cmOf = (value: number) => String(Math.round(value) / 10);
+        setSizeDraft({ ...sizeDraft, length: cmOf(biggest[0]), width: cmOf(biggest[1]), height: cmOf(biggest[2]) });
+        setSizeHint('Las tomamos de la pieza más grande del archivo. Si el producto se arma con varias piezas, ajústalas.');
+      }
       setRecipe(Object.entries(grams).map(([filament_id, value]) => ({ filament_id, grams: String(Math.round(value * 100) / 100) })));
       setHours(field(Math.floor(Math.round(totalMinutes) / 60)));
       setMinutes(field(Math.round(totalMinutes) % 60));
@@ -167,6 +184,14 @@ export default function ProductFormScreen() {
       image_path: imagePath,
       ...draft,
       packaging_id: packagingId,
+      ...(withSizes
+        ? {
+            length_mm: Math.round(num(sizeDraft.length) * 10),
+            width_mm: Math.round(num(sizeDraft.width) * 10),
+            height_mm: Math.round(num(sizeDraft.height) * 10),
+            pack_margin_mm: Math.min(500, Math.max(0, Math.round(num(sizeDraft.margin) * 10))),
+          }
+        : {}),
       prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
       price_levels: ownLevels && 'levels' in typedLevels ? ownLevelsOnly(typedLevels.levels, workshopLevels) : null,
       // Stock is typed only for a new product; later prints, sales and arqueos move it.
@@ -330,6 +355,9 @@ export default function ProductFormScreen() {
         <Line strong label="Costo por pieza" value={money(cost.total)} />
       </Card>
 
+      {withSizes && (
+        <BoxAdvisor draft={sizeDraft} onChange={setSizeDraft} packaging={packaging} chosen={packagingId} onPick={setPackagingId} hint={sizeHint} />
+      )}
       <Select
         label="Embalaje para envío"
         value={packagingId}
@@ -338,6 +366,7 @@ export default function ProductFormScreen() {
         options={packaging.map((item) => ({ value: item.id, label: packagingName(item), hint: money(item.cost) }))}
       />
       {packaging.length === 0 && <Muted>Registra tus cajas, sobres y bolsas en Más → Embalaje para sumarlos al precio con envío.</Muted>}
+      {box && <ParcelFacts productGrams={draft.filaments.reduce((total, use) => total + use.grams, 0)} box={box} />}
 
       <Heading>Precio de venta</Heading>
       <Chips

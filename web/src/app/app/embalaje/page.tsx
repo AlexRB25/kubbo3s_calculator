@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { BoxPreview } from "@/components/app/BoxPreview";
+import { PackagingCatalog } from "@/components/app/PackagingCatalog";
 import { Empty, FieldsForm, Modal, PageHeader, TableCard, type FieldDef } from "@/components/app/ui";
 import { packagingName } from "@/lib/costs";
 import { useData } from "@/lib/data";
@@ -21,18 +23,52 @@ const FIELDS: FieldDef[] = [
   { name: "notes", label: "Notas", type: "textarea", placeholder: "Proveedor, para qué productos sirve…" },
 ];
 
+/** How the box is drawn in 3D; only once the database has these columns. */
+const SHAPE_FIELDS: FieldDef[] = [
+  {
+    name: "style",
+    label: "Forma",
+    type: "select",
+    required: true,
+    options: [
+      { value: "rsc", label: "Caja de envío (4 solapas)" },
+      { value: "mailer", label: "Con tapa (maletín, pizza)" },
+    ],
+  },
+  {
+    name: "material",
+    label: "Color",
+    type: "select",
+    required: true,
+    options: [
+      { value: "kraft", label: "Kraft (café)" },
+      { value: "blanca", label: "Blanca" },
+      { value: "negra", label: "Negra" },
+    ],
+  },
+];
+
 // Measures are typed in centimetres and stored in millimetres.
 const toForm = (item: Packaging) => ({ ...item, length: item.length_mm / 10, width: item.width_mm / 10, height: item.height_mm / 10 });
 
 export default function PackagingPage() {
-  const { packaging, products } = useData();
+  const { packaging, products, profile } = useData();
   const [editing, setEditing] = useState<Packaging | "new" | null>(null);
+  const [browsing, setBrowsing] = useState(false);
+  // The catalog and the 3D shape came with the same database update as the clients.
+  const withShapes = profile?.client_fields !== undefined;
+  const fields = withShapes ? [...FIELDS.slice(0, 2), ...SHAPE_FIELDS, ...FIELDS.slice(2)] : FIELDS;
   const current = editing === "new" ? undefined : (editing ?? undefined);
 
   return (
     <>
       <PageHeader title="Embalaje">
-        <button className="btn btn-primary" onClick={() => setEditing("new")}>
+        {withShapes && (
+          <button className="btn btn-primary" onClick={() => setBrowsing(true)}>
+            Del catálogo Kubbo
+          </button>
+        )}
+        <button className={withShapes ? "btn" : "btn btn-primary"} onClick={() => setEditing("new")}>
           Nuevo embalaje
         </button>
       </PageHeader>
@@ -83,9 +119,14 @@ export default function PackagingPage() {
 
       {editing && (
         <Modal title={current?.name ?? "Nuevo embalaje"} onClose={() => setEditing(null)}>
+          {current && current.length_mm > 0 && current.width_mm > 0 && current.height_mm > 0 && (
+            <div className="mb-4">
+              <BoxPreview length_mm={current.length_mm} width_mm={current.width_mm} height_mm={current.height_mm} style={current.style} material={current.material} size={200} />
+            </div>
+          )}
           <FieldsForm
-            fields={FIELDS}
-            initial={current ? toForm(current) : { kind: "box", stock: 0, weight_g: 0 }}
+            fields={fields}
+            initial={current ? toForm(current) : { kind: "box", stock: 0, weight_g: 0, style: "rsc", material: "kraft" }}
             onDone={() => setEditing(null)}
             onSubmit={({ length, width, height, ...values }) => {
               const row = { ...values, length_mm: Number(length) * 10, width_mm: Number(width) * 10, height_mm: Number(height) * 10 };
@@ -94,6 +135,12 @@ export default function PackagingPage() {
             onDelete={current ? () => supabase().from("packaging").delete().eq("id", current.id) : undefined}
             deleteConfirm="Los productos que lo usan quedarán sin embalaje. ¿Eliminar?"
           />
+        </Modal>
+      )}
+
+      {browsing && (
+        <Modal title="Catálogo de empaques Kubbo" wide onClose={() => setBrowsing(false)}>
+          <PackagingCatalog onDone={() => setBrowsing(false)} />
         </Modal>
       )}
     </>

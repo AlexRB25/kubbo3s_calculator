@@ -18,7 +18,17 @@ export type SlicedPlate = {
   top?: Uint8Array | null;
   pick?: Uint8Array | null;
 };
-export type SliceReport = { slicer: string; printerModel: string; plates: SlicedPlate[]; warnings: string[] };
+export type SliceReport = {
+  slicer: string;
+  printerModel: string;
+  plates: SlicedPlate[];
+  warnings: string[];
+  /** Size of each object on the build plate (when the 3MF carries its meshes). */
+  sizes?: PieceSize[];
+};
+
+/** How big a printed piece is: the box that wraps it as it sits on the plate, in mm (length ≥ width, then height). */
+export type PieceSize = { name: string; size: [number, number, number] };
 
 /** Bambu's internal printer codes, for files that do not name the model. */
 const BAMBU_MODELS: Record<string, string> = {
@@ -107,7 +117,12 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
   let files: Record<string, Uint8Array>;
   try {
     // Never the G-code itself unless needed: it can weigh tens of MB.
-    files = unzipSync(bytes, { filter: (file) => /^Metadata\/(slice_info\.config|project_settings\.config|(plate|top|pick)_\d+\.png)$/i.test(file.name) });
+    // The meshes too (for the size of each piece), unless they are huge.
+    files = unzipSync(bytes, {
+      filter: (file) =>
+        /^Metadata\/(slice_info\.config|project_settings\.config|(plate|top|pick)_\d+\.png)$/i.test(file.name) ||
+        (/^3D\/.+\.model$/i.test(file.name) && file.originalSize < 120_000_000),
+    });
   } catch {
     throw new Error('No se pudo abrir el 3MF: ¿está completo?');
   }
@@ -174,7 +189,114 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
   if (!plates.length) {
     throw new Error('Este 3MF no está laminado. En el laminador dale a «Laminar placa» y luego, en el menú de «Imprimir placa», elige «Exportar la placa de impresión actual».');
   }
-  return { slicer, printerModel, plates: plates.sort((a, b) => a.index - b.index), warnings };
+  let sizes: PieceSize[] = [];
+  try {
+    sizes = pieceSizes(files);
+  } catch {
+    sizes = [];
+  }
+  return { slicer, printerModel, plates: plates.sort((a, b) => a.index - b.index), warnings, sizes };
+}
+
+// ── Size of the pieces, from the meshes of a 3MF ──
+
+/** A 3MF transform "m00 m01 m02 m10 m11 m12 m20 m21 m22 m30 m31 m32" (row vectors: p2 = p · M). */
+type Matrix = number[];
+const IDENTITY: Matrix = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
+
+function readMatrix(text: string | undefined): Matrix {
+  const values = (text ?? '').trim().split(/\s+/).map(Number);
+  return values.length === 12 && values.every(Number.isFinite) ? values : IDENTITY;
+}
+
+const transformPoint = (m: Matrix, [x, y, z]: number[]) => [
+  x * m[0] + y * m[3] + z * m[6] + m[9],
+  x * m[1] + y * m[4] + z * m[7] + m[10],
+  x * m[2] + y * m[5] + z * m[8] + m[11],
+];
+
+/** `inner` first, then `outer`. */
+function combine(inner: Matrix, outer: Matrix): Matrix {
+  const out: Matrix = [];
+  for (let row = 0; row < 4; row++) {
+    const [x, y, z] = [inner[row * 3], inner[row * 3 + 1], inner[row * 3 + 2]];
+    const w = row < 3 ? 0 : 1;
+    out.push(
+      x * outer[0] + y * outer[3] + z * outer[6] + w * outer[9],
+      x * outer[1] + y * outer[4] + z * outer[7] + w * outer[10],
+      x * outer[2] + y * outer[5] + z * outer[8] + w * outer[11],
+    );
+  }
+  return out;
+}
+
+type Bounds = [number, number, number, number, number, number];
+type ModelObject = { name: string; bounds: Bounds | null; components: { key: string; transform: Matrix }[] };
+
+function grow(total: Bounds | null, [x, y, z]: number[]): Bounds {
+  return total ? [Math.min(total[0], x), Math.min(total[1], y), Math.min(total[2], z), Math.max(total[3], x), Math.max(total[4], y), Math.max(total[5], z)] : [x, y, z, x, y, z];
+}
+
+/**
+ * Size of each object placed on the plate of a 3MF: its meshes (also those split into 3D/Objects/*.model by
+ * Bambu Studio and OrcaSlicer) with every rotation and scale applied. Empty when the file has no meshes.
+ */
+export function pieceSizes(files: Record<string, Uint8Array>): PieceSize[] {
+  const objects = new Map<string, ModelObject>();
+  for (const [path, content] of Object.entries(files)) {
+    if (!/^3D\/.+\.model$/i.test(path)) continue;
+    const xml = strFromU8(content);
+    for (const match of xml.matchAll(/<object\b([^>]*)>([\s\S]*?)<\/object>/g)) {
+      const head = attributes(match[1]);
+      const body = match[2];
+      let bounds: Bounds | null = null;
+      for (const vertex of body.matchAll(/<vertex\b([^>]*?)\/?>/g)) {
+        const point = attributes(vertex[1]);
+        const coords = [Number(point.x), Number(point.y), Number(point.z)];
+        if (coords.every(Number.isFinite)) bounds = grow(bounds, coords);
+      }
+      const components = [...body.matchAll(/<component\b([^>]*?)\/?>/g)].map((component) => {
+        const item = attributes(component[1]);
+        // p:path (production extension) points to another model file; without it, this same file.
+        const other = /p:path="([^"]*)"/.exec(component[1])?.[1]?.replace(/^\//, '');
+        return { key: `${other || path}#${item.objectid ?? ''}`, transform: readMatrix(item.transform) };
+      });
+      objects.set(`${path}#${head.id}`, { name: head.name ?? '', bounds, components });
+    }
+  }
+
+  /** The corners of an object and its components after `transform`, folded into one box. */
+  const boundsOf = (key: string, transform: Matrix, depth = 0): Bounds | null => {
+    const object = objects.get(key);
+    if (!object || depth > 8) return null;
+    let total: Bounds | null = null;
+    if (object.bounds) {
+      const [a, b, c, d, e, f] = object.bounds;
+      for (const x of [a, d]) for (const y of [b, e]) for (const z of [c, f]) total = grow(total, transformPoint(transform, [x, y, z]));
+    }
+    for (const component of object.components) {
+      const inner = boundsOf(component.key, combine(component.transform, transform), depth + 1);
+      if (inner) total = grow(grow(total, [inner[0], inner[1], inner[2]]), [inner[3], inner[4], inner[5]]);
+    }
+    return total;
+  };
+
+  const main = Object.keys(files).find((path) => /^3D\/3dmodel\.model$/i.test(path));
+  if (!main) return [];
+  const build = /<build\b[^>]*>([\s\S]*?)<\/build>/.exec(strFromU8(files[main]))?.[1] ?? '';
+  const sizes: PieceSize[] = [];
+  for (const match of build.matchAll(/<item\b([^>]*?)\/?>/g)) {
+    const item = attributes(match[1]);
+    if (item.printable === '0') continue;
+    const key = `${main}#${item.objectid}`;
+    const box = boundsOf(key, readMatrix(item.transform));
+    if (!box) continue;
+    const [length, width] = [box[3] - box[0], box[4] - box[1]].sort((p, q) => q - p);
+    const height = box[5] - box[2];
+    const round = (value: number) => Math.round(value * 10) / 10;
+    if (length > 0 && width > 0 && height > 0) sizes.push({ name: objects.get(key)?.name ?? '', size: [round(length), round(width), round(height)] });
+  }
+  return sizes;
 }
 
 // ── Matching what the slicer says with the user's own filaments and printers ──
