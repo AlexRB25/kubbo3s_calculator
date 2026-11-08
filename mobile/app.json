@@ -50,7 +50,22 @@
       ],
       "./plugins/withUploadSigning",
       "expo-sharing",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kubbo3D usa la cámara para fotografiar tus productos y escanear objetos en 3D.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Kubbo3D usa el movimiento del teléfono para guiarte mientras escaneas un objeto en 3D."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
