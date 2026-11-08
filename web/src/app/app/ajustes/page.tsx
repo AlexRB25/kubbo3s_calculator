@@ -2,6 +2,8 @@
 
 import { CurrencySettings } from "@/components/app/CurrencySettings";
 import { PriceLevelsSettings } from "@/components/app/PriceLevels";
+import { NumberFormatSettings } from "@/components/app/NumberFormatSettings";
+import { QuoteSettings } from "@/components/app/QuoteSettings";
 import { OverheadCosts } from "@/components/app/OverheadCosts";
 import { WasteRules } from "@/components/app/WasteRules";
 import { FieldsForm, PageHeader, type FieldDef } from "@/components/app/ui";
@@ -28,6 +30,7 @@ export default function SettingsPage() {
     <>
       <PageHeader title="Ajustes" />
       <CurrencySettings />
+      <NumberFormatSettings />
       {/* Keyed by currency: after converting, the forms start again from the converted amounts. */}
       <div className="card max-w-2xl">
         <FieldsForm
@@ -40,6 +43,7 @@ export default function SettingsPage() {
       <PriceLevelsSettings />
       <OverheadCosts key={profile?.currency} />
       <WasteRules />
+      <QuoteSettings />
     </>
   );
 }

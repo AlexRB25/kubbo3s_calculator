@@ -3,7 +3,7 @@ import { createContext, use, useCallback, useEffect, useState, type PropsWithChi
 import { AppState } from 'react-native';
 
 import { isCurrency } from '@/lib/currency';
-import { setWorkshopCurrency } from '@/lib/format';
+import { setNumberFormat, setWorkshopCurrency } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import type {
   Carrier,
@@ -18,6 +18,7 @@ import type {
   Printer,
   Product,
   Profile,
+  Quote,
   Sale,
   ShopInfo,
   Supplier,
@@ -44,6 +45,8 @@ type Tables = {
   wear: PrinterWear[];
   /** Carriers and their rates, linked to the sales channels. */
   carriers: Carrier[];
+  /** Quotes for clients, newest first (empty until the quotes table exists). */
+  quotes: Quote[];
 };
 
 type DataState = Tables & {
@@ -69,6 +72,7 @@ const EMPTY: Tables = {
   materials: [],
   wear: [],
   carriers: [],
+  quotes: [],
 };
 
 /** History tables load their most recent rows; older ones stay in the database. */
@@ -88,7 +92,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
   // Every table is the active shop's (the database decides); without my_shop (older schema) it is their own.
   const mine = await supabase.rpc('my_shop');
   const shop: ShopInfo = mine.data ?? { shop_id: userId, role: 'owner', shops: [], seats: null };
-  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers] = await Promise.all([
+  const [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers, quotes] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', shop.shop_id).maybeSingle(),
     supabase.from('suppliers').select('*').order('name'),
     supabase.from('printers').select('*').order('name'),
@@ -107,6 +111,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
     supabase.from('materials').select('*').order('name'),
     supabase.from('printer_wear').select('*').order('happened_at', { ascending: false }).limit(HISTORY_LIMIT),
     supabase.from('carriers').select('*').order('name'),
+    supabase.from('quotes').select('*').order('created_at', { ascending: false }).limit(HISTORY_LIMIT),
   ]);
 
   const failed = [profile, suppliers, printers, filaments, channels, products, jobs, sales, maintenance, expenses, packaging, materials, wear, carriers].find(
@@ -114,6 +119,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
   );
   if (failed?.error) return { error: `No se pudieron cargar tus datos: ${failed.error.message}` };
   setWorkshopCurrency(isCurrency(profile.data?.currency) ? profile.data.currency : 'MXN');
+  setNumberFormat(profile.data?.number_format);
   return {
     tables: {
       profile: profile.data,
@@ -131,6 +137,8 @@ async function fetchTables(userId: string): Promise<Loaded> {
       materials: materials.data ?? [],
       wear: wear.data ?? [],
       carriers: carriers.data ?? [],
+      // Before the quotes table exists its query fails; the rest of the workshop still loads.
+      quotes: quotes.error ? [] : (quotes.data ?? []),
     },
   };
 }

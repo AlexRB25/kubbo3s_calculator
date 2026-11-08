@@ -4,7 +4,7 @@ import { AppState, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, ErrorText, Muted } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, themed } from '@/constants/theme';
 import { authErrorMessage, supabase, supabaseConfigured } from '@/lib/supabase';
 
 export default function SignInScreen() {
@@ -203,7 +203,8 @@ function WaitForEmail({ email, password, onBack }: { email: string; password: st
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() =>
+  StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
   center: { flex: 1, justifyContent: 'center', padding: Spacing.four, gap: Spacing.two },
   mark: { width: 96, height: 96, alignSelf: 'center' },
@@ -236,4 +237,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     overflow: 'hidden',
   },
-});
+  }),
+);

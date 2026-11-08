@@ -14,6 +14,8 @@ import { supabase } from "@/lib/supabase";
 /** Who sees each page (empty = everyone): staff do the daily work; settings and team are the owner's. */
 const LINKS: { href: string; label: string; icon: NavIconName; roles?: ShopRole[] }[] = [
   { href: "/app", icon: "resumen", label: "Resumen" },
+  { href: "/app/calculadora", icon: "calculadora", label: "Cálculo rápido" },
+  { href: "/app/cotizaciones", icon: "cotizaciones", label: "Cotizaciones" },
   { href: "/app/inventario", icon: "inventario", label: "Inventario" },
   { href: "/app/productos", icon: "productos", label: "Productos" },
   { href: "/app/catalogo", icon: "catalogo", label: "Mi catálogo", roles: ["owner", "admin"] },
@@ -29,6 +31,7 @@ const LINKS: { href: string; label: string; icon: NavIconName; roles?: ShopRole[
   { href: "/app/proveedores", icon: "proveedores", label: "Proveedores", roles: ["owner", "admin"] },
   { href: "/app/canales", icon: "canales", label: "Canales de venta", roles: ["owner", "admin"] },
   { href: "/app/equipo", icon: "equipo", label: "Equipo" },
+  { href: "/app/biblioteca", icon: "biblioteca", label: "Biblioteca" },
   { href: "/app/ajustes", icon: "ajustes", label: "Ajustes", roles: ["owner"] },
 ];
 

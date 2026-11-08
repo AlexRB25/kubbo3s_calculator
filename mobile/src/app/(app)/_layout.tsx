@@ -61,6 +61,12 @@ export default function AppLayout() {
           <Stack.Screen name="canales/index" options={{ title: 'Canales de venta' }} />
           <Stack.Screen name="canales/form" options={{ title: 'Canal de venta' }} />
           <Stack.Screen name="ajustes" options={{ title: 'Ajustes' }} />
+          <Stack.Screen name="bienvenida" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
+          <Stack.Screen name="biblioteca" options={{ title: 'Biblioteca' }} />
+          <Stack.Screen name="calculadora" options={{ title: 'Cálculo rápido' }} />
+          <Stack.Screen name="cotizaciones/index" options={{ title: 'Cotizaciones' }} />
+          <Stack.Screen name="cotizaciones/form" options={{ title: 'Cotización' }} />
+          <Stack.Screen name="cotizaciones/datos" options={{ title: 'Datos de tus cotizaciones' }} />
         </Stack>
       </Gate>
     </DataProvider>

@@ -662,9 +662,9 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       </fieldset>
 
       <label className="label">
-        Otros costos por producto ($)
+        Posprocesado y otros costos por producto ($)
         <input className="input" type="number" min={0} step="any" value={extraCost} onChange={(event) => setExtraCost(event.target.value)} placeholder="0" />
-        <span className="font-normal">Lo que no llevas en Insumos: etiquetas, mano de obra… El embalaje para envío va aparte.</span>
+        <span className="font-normal">Lijar, pintar, armar y lo que no llevas en Insumos (etiquetas, mano de obra…). El embalaje para envío va aparte.</span>
       </label>
       {product ? (
         <div className="label">
@@ -707,7 +707,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           <Line label="Luz" value={money(cost.electricity)} />
           <Line label="Desgaste de máquina" value={money(cost.machine)} />
           {supplyCost > 0 && <Line label="Insumos" value={money(supplyCost)} />}
-          <Line label="Otros" value={money(cost.extra - supplyCost)} />
+          <Line label="Posprocesado y otros" value={money(cost.extra - supplyCost)} />
           {share > 0 && <Line label="Gastos fijos (renta, internet…)" value={money(share)} />}
           <Line strong label="Costo por producto (combinación más cara)" value={money(cost.total)} />
           <p className="mt-1 text-xs text-muted">
@@ -952,7 +952,7 @@ export default function ProductsPage() {
                         <TipLine label="Desgaste de máquina" value={money(breakdown.machine)} />
                         {(breakdown.supplies ?? 0) > 0 && <TipLine label="Insumos" value={money(breakdown.supplies ?? 0)} />}
                         {(breakdown.overhead ?? 0) > 0 && <TipLine label="Gastos fijos" value={money(breakdown.overhead ?? 0)} />}
-                        {breakdown.extra > 0 && <TipLine label="Otros" value={money(breakdown.extra)} />}
+                        {breakdown.extra > 0 && <TipLine label="Posprocesado y otros" value={money(breakdown.extra)} />}
                         <TipLine strong label="Costo por pieza" value={money(cost)} />
                       </InfoTip>
                     </td>

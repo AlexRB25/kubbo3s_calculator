@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { SetupChecklist } from "@/components/app/SetupChecklist";
 import { Line, PageHeader, Stat } from "@/components/app/ui";
 import { filamentName } from "@/lib/costs";
 import { useData } from "@/lib/data";
@@ -50,6 +51,20 @@ export default function SummaryPage() {
           →
         </button>
       </PageHeader>
+
+      <SetupChecklist />
+
+      <section className="flex flex-wrap gap-2">
+        <Link href="/app/calculadora" className="btn btn-primary">
+          Cálculo rápido
+        </Link>
+        <Link href="/app/cotizaciones?nueva=1" className="btn">
+          Nueva cotización
+        </Link>
+        <Link href="/app/productos" className="btn">
+          Nuevo producto
+        </Link>
+      </section>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Ventas" value={money(income)} hint={`${monthSales.length} ventas`} />

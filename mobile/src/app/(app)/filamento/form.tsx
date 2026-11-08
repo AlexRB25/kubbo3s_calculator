@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Line, Muted, Screen, Select } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, themed } from '@/constants/theme';
 import { field, num, weight } from '@/lib/format';
 import { brandOptions } from '@/lib/labels';
 import { supabase } from '@/lib/supabase';
@@ -148,9 +148,11 @@ export default function FilamentFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() =>
+  StyleSheet.create({
   label: { color: Colors.textSecondary, fontSize: 13, fontWeight: '500' },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   swatch: { width: 36, height: 36, borderRadius: Radius.pill, borderWidth: 2, borderColor: Colors.border },
   swatchSelected: { borderColor: Colors.accent, borderWidth: 3 },
-});
+  }),
+);

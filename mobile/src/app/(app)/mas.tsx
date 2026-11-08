@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 
-import { Button, ListItem, Muted, Screen, type IconName } from '@/components/ui';
+import { ThemePicker } from '@/components/theme-picker';
+import { Button, Card, Heading, ListItem, Muted, Screen, type IconName } from '@/components/ui';
 import { Colors } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import type { ShopRole } from '@/lib/types';
@@ -11,19 +12,23 @@ import { useSession } from '@/store/session';
 const ROLE_NAMES: Record<ShopRole, string> = { owner: 'Dueño', admin: 'Administrador', staff: 'Colaborador' };
 
 export default function MoreScreen() {
-  const { printers, suppliers, expenses, channels, packaging, shop, reload } = useData();
+  const { printers, suppliers, expenses, channels, packaging, quotes, shop, reload } = useData();
   const { session } = useSession();
   const role = shop?.role ?? 'owner';
   const userId = session?.user.id;
 
   // Staff do the daily work; channels and suppliers are for the owner and admins, settings only for the owner.
   const links: { href: Href; icon: IconName; title: string; subtitle: string; roles?: ShopRole[] }[] = [
+    { href: '/calculadora', icon: 'calculator', title: 'Cálculo rápido', subtitle: 'El precio de una pieza sin crear producto' },
+    { href: '/cotizaciones', icon: 'document-text', title: 'Cotizaciones', subtitle: `${quotes.length} · PDF y WhatsApp para tus clientes` },
+    { href: '/biblioteca', icon: 'library', title: 'Biblioteca', subtitle: 'Pruebas de calibración y valores por material' },
     { href: '/impresoras', icon: 'print', title: 'Impresoras', subtitle: `${printers.length} · mantenimientos y ajustes` },
     { href: '/proveedores', icon: 'business', title: 'Proveedores', subtitle: `${suppliers.length} registrados`, roles: ['owner', 'admin'] },
     { href: '/embalaje', icon: 'cube', title: 'Embalaje', subtitle: `${packaging.length} cajas, sobres y bolsas` },
     { href: '/gastos', icon: 'receipt', title: 'Gastos', subtitle: `${expenses.length} registrados` },
     { href: '/canales', icon: 'storefront', title: 'Canales de venta', subtitle: channels.map((channel) => channel.name).join(', '), roles: ['owner', 'admin'] },
     { href: '/ajustes', icon: 'settings', title: 'Ajustes', subtitle: 'Negocio, precio de la luz y ganancia deseada', roles: ['owner'] },
+    { href: '/cotizaciones/datos', icon: 'briefcase', title: 'Datos de tus cotizaciones', subtitle: 'Logo, teléfono, impuesto y condiciones', roles: ['owner'] },
   ];
 
   async function switchTo(ownerId: string) {
@@ -59,6 +64,11 @@ export default function MoreScreen() {
             onPress={() => router.push(link.href)}
           />
         ))}
+      <Card>
+        <Heading>Tema de la app</Heading>
+        <ThemePicker />
+        <Muted>Se guarda en este teléfono.</Muted>
+      </Card>
       <Muted style={{ textAlign: 'center' }}>
         {session?.user.email}
         {role !== 'owner' ? ` · ${ROLE_NAMES[role]}` : ''}

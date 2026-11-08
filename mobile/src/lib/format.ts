@@ -1,4 +1,15 @@
 import { CURRENCIES, type Currency } from './currency';
+import type { NumberFormat } from './types';
+
+/** How the workshop wants numbers: its separators and whether the currency code follows the amount. */
+let numberFormat: NumberFormat = {};
+export const setNumberFormat = (format: NumberFormat | null | undefined) => {
+  numberFormat = format ?? {};
+  formatters.clear();
+};
+
+/** Locales that give each separator style: "1,234.56" and "1.234,56". */
+const SEPARATORS = { dot: 'es-MX', comma: 'es-AR' } as const;
 
 const formatters = new Map<string, Intl.NumberFormat>();
 function formatter(currency: Currency, maxDigits?: number) {
@@ -6,16 +17,26 @@ function formatter(currency: Currency, maxDigits?: number) {
   let found = formatters.get(key);
   if (!found) {
     const { locale, digits } = CURRENCIES.find((item) => item.code === currency) ?? CURRENCIES[0];
-    found = new Intl.NumberFormat(locale, {
+    const style = numberFormat.decimals === 'dot' || numberFormat.decimals === 'comma' ? numberFormat.decimals : null;
+    const options: Intl.NumberFormatOptions = {
       style: 'currency',
       currency,
       minimumFractionDigits: digits,
       maximumFractionDigits: Math.max(digits, maxDigits ?? digits),
-    });
+    };
+    try {
+      // Another country's separators would print "US$" or "MX$"; the narrow symbol keeps "$".
+      found = new Intl.NumberFormat(style ? SEPARATORS[style] : locale, style ? { ...options, currencyDisplay: 'narrowSymbol' } : options);
+    } catch {
+      found = new Intl.NumberFormat(style ? SEPARATORS[style] : locale, options);
+    }
     formatters.set(key, found);
   }
   return found;
 }
+
+/** "$15.00" or, when the workshop asks for it, "$15.00 MXN". */
+const withCode = (text: string, currency: Currency) => (numberFormat.code ? `${text} ${currency}` : text);
 
 /** The workshop's currency: costs and prices are typed and shown in it (set when its settings load). */
 let workshopCurrency: Currency = 'MXN';
@@ -25,10 +46,11 @@ export const setWorkshopCurrency = (currency: Currency) => {
 export const getWorkshopCurrency = () => workshopCurrency;
 
 /** An amount of the workshop, in its currency. */
-export const money = (amount: number) => formatter(workshopCurrency).format(Number(amount) || 0);
+export const money = (amount: number) => withCode(formatter(workshopCurrency).format(Number(amount) || 0), workshopCurrency);
 
 /** An amount in a given currency; `maxDigits` allows more decimals (the cost of a gram). */
-export const moneyIn = (amount: number, currency: Currency, maxDigits?: number) => formatter(currency, maxDigits).format(Number(amount) || 0);
+export const moneyIn = (amount: number, currency: Currency, maxDigits?: number) =>
+  withCode(formatter(currency, maxDigits).format(Number(amount) || 0), currency);
 
 /** 1250 -> "1.25 kg", 250 -> "250 g" */
 export function weight(grams: number) {

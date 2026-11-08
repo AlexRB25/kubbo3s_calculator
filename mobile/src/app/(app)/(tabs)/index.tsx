@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { SetupChecklist, WELCOME_KEY } from '@/components/setup-checklist';
 import { Button, Card, ErrorText, Heading, Line, ListItem, Muted, Row, Screen, Stat, Swatch } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
 import { filamentName } from '@/lib/costs';
@@ -16,6 +18,15 @@ const MAINTENANCE_NOTICE_DAYS = 7;
 export default function HomeScreen() {
   const { profile, sales, expenses, filaments, jobs, printers, maintenance, error } = useData();
   const [offset, setOffset] = useState(0);
+
+  // The first time on this phone, the welcome (what Kubbo3D does and the theme).
+  useEffect(() => {
+    AsyncStorage.getItem(WELCOME_KEY)
+      .catch(() => '1')
+      .then((seen) => {
+        if (!seen) router.push('/bienvenida');
+      });
+  }, []);
 
   const now = new Date();
   const month = new Date(now.getFullYear(), now.getMonth() + offset, 1);
@@ -49,6 +60,12 @@ export default function HomeScreen() {
         <Button style={{ flex: 1 }} icon="print" label="Imprimir" onPress={() => router.push('/impresion/nueva')} />
         <Button style={{ flex: 1 }} variant="money" icon="cash" label="Vender" onPress={() => router.push('/venta/nueva')} />
         <Button style={{ flex: 1 }} variant="secondary" icon="receipt" label="Gasto" onPress={() => router.push('/gastos/nuevo')} />
+      </Row>
+      <SetupChecklist />
+
+      <Row>
+        <Button style={{ flex: 1 }} variant="secondary" icon="calculator" label="Cálculo rápido" onPress={() => router.push('/calculadora')} />
+        <Button style={{ flex: 1 }} variant="secondary" icon="document-text" label="Cotizar" onPress={() => router.push('/cotizaciones')} />
       </Row>
 
       <Row style={{ justifyContent: 'space-between' }}>

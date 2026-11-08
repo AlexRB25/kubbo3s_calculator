@@ -3004,3 +3004,71 @@ revoke all on function public.reply_tech_review(uuid, text) from public, anon;
 grant execute on function public.reply_tech_review(uuid, text) to authenticated;
 revoke all on function public.tech_review_author() from public, anon, authenticated;
 revoke all on function public.tech_reviews_count() from public, anon, authenticated;
+
+-- ───────────────────────── Cotizaciones ─────────────────────────
+-- Datos del taller que salen en el PDF de las cotizaciones y lo que se propone por defecto:
+-- {"phone", "email", "address", "logo_path", "tax_pct", "validity_days", "payment_terms", "delivery", "notes"}.
+alter table public.profiles add column if not exists quote_settings jsonb not null default '{}'::jsonb;
+alter table public.profiles drop constraint if exists profiles_quote_settings_check;
+alter table public.profiles add constraint profiles_quote_settings_check check (jsonb_typeof(quote_settings) = 'object');
+grant update (quote_settings) on public.profiles to authenticated;
+
+-- Cómo se muestran los números: {"decimals": "auto" | "dot" | "comma", "code": bool} (code = "$15.00 MXN").
+alter table public.profiles add column if not exists number_format jsonb not null default '{}'::jsonb;
+alter table public.profiles drop constraint if exists profiles_number_format_check;
+alter table public.profiles add constraint profiles_number_format_check check (jsonb_typeof(number_format) = 'object');
+grant update (number_format) on public.profiles to authenticated;
+
+-- Una cotización para un cliente. Los renglones: [{"name", "detail", "quantity", "unit_price"}].
+-- Se guarda en la moneda en que se hizo (no cambia si el taller cambia de moneda después).
+create table if not exists public.quotes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default public.current_shop() references auth.users (id) on delete cascade,
+  number int not null,
+  client_name text not null default '' check (char_length(client_name) <= 200),
+  client_email text not null default '' check (char_length(client_email) <= 200),
+  client_phone text not null default '' check (char_length(client_phone) <= 50),
+  client_city text not null default '' check (char_length(client_city) <= 200),
+  items jsonb not null default '[]'::jsonb check (jsonb_typeof(items) = 'array'),
+  currency text not null default 'MXN' check (currency ~ '^[A-Z]{3}$'),
+  discount_pct numeric(5,2) not null default 0 check (discount_pct between 0 and 100),
+  tax_pct numeric(5,2) not null default 0 check (tax_pct between 0 and 100),
+  shipping numeric(12,2) not null default 0 check (shipping >= 0),
+  payment_terms text not null default '' check (char_length(payment_terms) <= 1000),
+  delivery text not null default '' check (char_length(delivery) <= 1000),
+  notes text not null default '' check (char_length(notes) <= 2000),
+  valid_until date,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, number)
+);
+create index if not exists quotes_user_idx on public.quotes (user_id, created_at desc);
+
+-- El folio sigue al último del taller (COT-1, COT-2…) y no lo escribe el usuario.
+create or replace function public.quote_number() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' then
+    perform pg_advisory_xact_lock(hashtext('quotes:' || new.user_id::text));
+    new.number := coalesce((select max(q.number) from public.quotes q where q.user_id = new.user_id), 0) + 1;
+  else
+    new.number := old.number;
+    new.user_id := old.user_id;
+    new.updated_at := now();
+  end if;
+  return new;
+end $$;
+revoke all on function public.quote_number() from public, anon, authenticated;
+drop trigger if exists quote_number on public.quotes;
+create trigger quote_number before insert or update on public.quotes
+  for each row execute function public.quote_number();
+
+alter table public.quotes enable row level security;
+drop policy if exists own_rows on public.quotes;
+create policy own_rows on public.quotes for all to authenticated
+  using (user_id = (select public.current_shop())) with check (user_id = (select public.current_shop()));
+revoke all on public.quotes from anon;
+drop trigger if exists guard_shop_role on public.quotes;
+create trigger guard_shop_role before delete on public.quotes
+  for each row execute function public.guard_shop_role('data');

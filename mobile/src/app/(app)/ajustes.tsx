@@ -70,6 +70,33 @@ export default function SettingsScreen() {
       <Field label="Nombre del negocio" value={businessName} onChangeText={setBusinessName} maxLength={60} />
       <Chips label="Moneda" options={CURRENCIES.map((item) => ({ value: item.code, label: item.code }))} value={currency} onChange={chooseCurrency} />
       <Muted>Tus costos y precios se escriben y se muestran en ella. Al cambiarla te preguntamos si convertimos lo que ya escribiste.</Muted>
+      {profile && profile.number_format !== undefined && (
+        <>
+          <Chips
+            label="Miles y decimales"
+            options={[
+              { value: 'auto', label: 'Según mi moneda' },
+              { value: 'dot', label: '1,234.56' },
+              { value: 'comma', label: '1.234,56' },
+            ]}
+            value={profile.number_format?.decimals ?? 'auto'}
+            onChange={(decimals) =>
+              save(() => supabase.from('profiles').update({ number_format: { ...profile.number_format, decimals } }).eq('id', profile.id), () => {})
+            }
+          />
+          <Chips
+            label="Mostrar la moneda como"
+            options={[
+              { value: 'symbol', label: 'Símbolo ($15.00)' },
+              { value: 'code', label: `Con código ($15.00 ${currency})` },
+            ]}
+            value={profile.number_format?.code ? 'code' : 'symbol'}
+            onChange={(choice) =>
+              save(() => supabase.from('profiles').update({ number_format: { ...profile.number_format, code: choice === 'code' } }).eq('id', profile.id), () => {})
+            }
+          />
+        </>
+      )}
       <Field
         label="Precio de la luz por kWh"
         unit="$"

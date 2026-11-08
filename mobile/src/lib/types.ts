@@ -23,6 +23,52 @@ export type Profile = {
   overhead_pieces: number;
   /** The shop (its owner's id) the user is working in; null = their own. */
   active_shop: string | null;
+  /** The workshop's details on its quotes and what a new quote proposes (missing on older schemas). */
+  quote_settings?: QuoteSettings | null;
+  /** How numbers and amounts are shown (missing on older schemas). */
+  number_format?: NumberFormat | null;
+};
+
+/** The workshop's details on its quotes and what a new quote proposes. */
+export type QuoteSettings = {
+  phone?: string;
+  email?: string;
+  address?: string;
+  /** The logo, in the products bucket (public). */
+  logo_path?: string;
+  tax_pct?: number;
+  validity_days?: number;
+  payment_terms?: string;
+  delivery?: string;
+  notes?: string;
+};
+
+/** "auto" follows the currency (1,234.56 in pesos, 1.234,56 in euros); code adds "MXN" after the amount. */
+export type NumberFormat = { decimals?: 'auto' | 'dot' | 'comma'; code?: boolean };
+
+/** A line of a quote. */
+export type QuoteItem = { name: string; detail: string; quantity: number; unit_price: number };
+
+/** A quote for a client (table quotes); in the currency it was made in. */
+export type Quote = {
+  id: string;
+  number: number;
+  client_name: string;
+  client_email: string;
+  client_phone: string;
+  client_city: string;
+  items: QuoteItem[];
+  currency: string;
+  discount_pct: number;
+  tax_pct: number;
+  shipping: number;
+  payment_terms: string;
+  delivery: string;
+  notes: string;
+  valid_until: string | null;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  updated_at: string;
 };
 
 /** What a person may do in a shop: the owner everything; admin all but settings, team and plan; staff the daily work. */

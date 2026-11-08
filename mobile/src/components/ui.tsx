@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, themed } from '@/constants/theme';
 import { useData } from '@/store/data';
 
 export type IconName = keyof typeof Ionicons.glyphMap;
@@ -356,7 +356,8 @@ export function confirmDelete(message: string, onConfirm: () => void) {
   ]);
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() =>
+  StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.six },
   card: {
@@ -474,4 +475,5 @@ const styles = StyleSheet.create({
   statValue: { color: Colors.text, fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
   empty: { alignItems: 'center', justifyContent: 'center', gap: Spacing.two, padding: Spacing.five },
   swatch: { width: 28, height: 28, borderRadius: Radius.pill, borderColor: Colors.border, borderWidth: 1, flexDirection: 'row', overflow: 'hidden' },
-});
+  }),
+);

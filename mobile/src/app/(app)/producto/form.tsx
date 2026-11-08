@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, themed } from '@/constants/theme';
 import { costPerGram, filamentName, LEVEL_LABEL, levelOf, levelPrices, packagingName, overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
 import { draftOf, levelsLine, ownLevelsOnly, readLevels } from '@/lib/levels';
 import { field, money, num, weight } from '@/lib/format';
@@ -312,20 +312,20 @@ export default function ProductFormScreen() {
         </>
       )}
       <Field
-        label="Otros costos por pieza"
+        label="Posprocesado y otros costos"
         unit="$"
         numeric
         value={extraCost}
         onChangeText={setExtraCost}
         placeholder="0"
-        hint="Tornillos, imanes, etiquetas… El embalaje para envío va aparte."
+        hint="Lijar, pintar, armar, tornillos, imanes, etiquetas… El embalaje para envío va aparte."
       />
 
       <Card>
         <Line label="Filamento" value={money(cost.filament)} />
         <Line label="Luz" value={money(cost.electricity)} />
         <Line label="Desgaste de máquina" value={money(cost.machine)} />
-        <Line label="Otros" value={money(cost.extra)} />
+        <Line label="Posprocesado y otros" value={money(cost.extra)} />
         {(cost.overhead ?? 0) > 0 && <Line label="Gastos fijos" value={money(cost.overhead ?? 0)} />}
         <Line strong label="Costo por pieza" value={money(cost.total)} />
       </Card>
@@ -410,7 +410,8 @@ export default function ProductFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() =>
+  StyleSheet.create({
   photo: {
     alignSelf: 'center',
     width: 160,
@@ -424,4 +425,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     overflow: 'hidden',
   },
-});
+  }),
+);
