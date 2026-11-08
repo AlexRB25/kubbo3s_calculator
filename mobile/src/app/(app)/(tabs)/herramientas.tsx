@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { ActivityIndicator } from 'react-native';
@@ -6,25 +7,40 @@ import { ActivityIndicator } from 'react-native';
 import { ErrorText, ListItem, Muted, Screen, type IconName } from '@/components/ui';
 import { Colors } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
+import CATALOG from '@/lib/tools-catalog.json';
 
 /** The calculator's web site: it makes the one-time link that opens a tool already signed in. */
 const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL || 'https://calculator.kubbo3d.com').replace(/\/$/, '');
 
-/** The tools of the tools site (same slugs as its pages). */
-const TOOLS: { slug: string; name: string; tagline: string; icon: IconName }[] = [
-  { slug: 'partir', name: 'Partidor', tagline: 'Parte en piezas que quepan en tu impresora', icon: 'cut' },
-  { slug: 'moldes', name: 'Moldero', tagline: 'Genera moldes', icon: 'cube-outline' },
-  { slug: 'termoformado', name: 'Termoformador', tagline: 'Moldes y lámina para termoformar', icon: 'flame' },
-  { slug: 'neon', name: 'Neón', tagline: 'Guías para neón LED', icon: 'flash' },
-  { slug: 'gomitas', name: 'Gomitero', tagline: 'Moldes de relleno', icon: 'grid' },
+/** Icons of the tools, by the drawing the website gives them. */
+const ICONS: Record<string, IconName> = {
+  split: 'cut',
+  mold: 'cube-outline',
+  thermo: 'flame',
+  neon: 'flash',
+  tray: 'grid',
+  keychain: 'key',
+  magnet: 'magnet',
+  cutter: 'restaurant',
+  hollow: 'ellipse-outline',
+  piggy: 'wallet',
+  lamp: 'bulb',
+  glasses: 'glasses',
+  texture: 'color-filter',
+  joint: 'git-merge',
+  frame: 'image',
+};
+
+/** Tools that run inside the app (the catalog the tools engine was built with). */
+const NATIVE = CATALOG as { slug: string; name: string; tagline: string; icon: string }[];
+
+/** The ones that still open on the website: they need clicking or painting on the model. */
+const ON_WEB: { slug: string; name: string; tagline: string; icon: IconName }[] = [
   { slug: 'llavero', name: 'Llavero', tagline: 'Llaveros con argolla', icon: 'key' },
   { slug: 'imanes', name: 'Imantador', tagline: 'Huecos para imanes', icon: 'magnet' },
-  { slug: 'galletas', name: 'Galletero', tagline: 'Cortadores de galletas', icon: 'restaurant' },
-  { slug: 'hueco', name: 'Huequito', tagline: 'Piezas huecas', icon: 'ellipse-outline' },
-  { slug: 'alcancia', name: 'Alcancía', tagline: 'Alcancías', icon: 'wallet' },
-  { slug: 'lampara', name: 'Lámpara', tagline: 'Lámparas', icon: 'bulb' },
+  { slug: 'unir', name: 'Unidor', tagline: 'Une piezas con uniones', icon: 'git-merge' },
   { slug: 'lentes', name: 'Lentero', tagline: 'Soportes de lentes con tu personaje', icon: 'glasses' },
-  { slug: '', name: 'Mis archivos y todas las herramientas', tagline: 'La página principal de herramientas', icon: 'apps' },
+  { slug: '', name: 'Mis archivos', tagline: 'Lo que creaste en las herramientas web', icon: 'folder-open' },
 ];
 
 /** Pages of the 3D models marketplace (on the calculator's web site). */
@@ -71,10 +87,18 @@ export default function ToolsScreen() {
 
   return (
     <Screen>
-      <Muted>
-        Se abren aquí mismo con tu cuenta. Sube tu modelo, ajusta y descarga el STL o el 3MF; también queda en Mis archivos para volver a bajarlo.
-      </Muted>
+      <Muted>Elige una foto o un archivo 3D, ajusta y guarda el STL o el 3MF. Funcionan en tu teléfono, sin internet.</Muted>
       {error ? <ErrorText>{error}</ErrorText> : null}
+      {NATIVE.map((tool) => (
+        <ListItem
+          key={tool.slug}
+          left={<Ionicons name={ICONS[tool.icon] ?? 'construct'} size={22} color={Colors.accent} />}
+          title={tool.name}
+          subtitle={tool.tagline}
+          onPress={() => router.push({ pathname: '/herramienta/[slug]', params: { slug: tool.slug } })}
+        />
+      ))}
+      <Muted>Modelos 3D</Muted>
       {MARKET.map((item) => (
         <ListItem
           key={item.page}
@@ -84,8 +108,8 @@ export default function ToolsScreen() {
           onPress={opening ? undefined : () => open(item.page)}
         />
       ))}
-      <Muted>Herramientas</Muted>
-      {TOOLS.map((tool) => (
+      <Muted>En la web por ahora (necesitan tocar o pintar el modelo; llegan pronto a la app)</Muted>
+      {ON_WEB.map((tool) => (
         <ListItem
           key={tool.slug || 'inicio'}
           left={<Ionicons name={tool.icon} size={22} color={Colors.accent} />}

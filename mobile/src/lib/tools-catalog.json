@@ -1,0 +1,1617 @@
+[
+  {
+    "slug": "partir",
+    "name": "Partidor",
+    "tagline": "Parte en piezas",
+    "description": "Parte tu modelo en piezas que quepan en tu impresora y agrégales espigas, uniones macho-hembra o rosca para armarlas sin pegamento.",
+    "icon": "split",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "method": "planes",
+      "bounded": true,
+      "axis": "z",
+      "pieces": 2,
+      "position": 50,
+      "connector": "dowel",
+      "diameter": 0,
+      "clearance": 0.2,
+      "detail": "90",
+      "shell": 2.4
+    },
+    "fields": [
+      {
+        "key": "method",
+        "label": "Cómo separar",
+        "type": "select",
+        "options": [
+          {
+            "value": "planes",
+            "label": "Cortes parejos a lo alto, largo o ancho"
+          },
+          {
+            "value": "knife",
+            "label": "Con cuchillo: dibujando cada corte"
+          },
+          {
+            "value": "region",
+            "label": "Por regiones: detecta brazos, piernas, cabeza…"
+          },
+          {
+            "value": "paint",
+            "label": "Pintando cada pieza de un color"
+          },
+          {
+            "value": "colors",
+            "label": "Por los colores del archivo (sin AMS)"
+          }
+        ]
+      },
+      {
+        "key": "bounded",
+        "label": "Cortar solo entre los dos puntos que marco",
+        "type": "checkbox",
+        "hint": "Apágalo para que cada corte atraviese el modelo de lado a lado."
+      },
+      {
+        "key": "axis",
+        "label": "Cortar a lo",
+        "type": "select",
+        "options": [
+          {
+            "value": "z",
+            "label": "Altura (Z)"
+          },
+          {
+            "value": "x",
+            "label": "Largo (X)"
+          },
+          {
+            "value": "y",
+            "label": "Ancho (Y)"
+          }
+        ]
+      },
+      {
+        "key": "pieces",
+        "label": "Número de piezas",
+        "type": "number",
+        "min": 2,
+        "max": 8,
+        "step": 1
+      },
+      {
+        "key": "position",
+        "label": "Altura del corte",
+        "type": "number",
+        "min": 5,
+        "max": 95,
+        "step": 1,
+        "unit": "%"
+      },
+      {
+        "key": "connector",
+        "label": "Unión",
+        "type": "select",
+        "options": [
+          {
+            "value": "dowel",
+            "label": "Espigas sueltas"
+          },
+          {
+            "value": "peg",
+            "label": "Macho-hembra"
+          },
+          {
+            "value": "thread",
+            "label": "Rosca (no al pintar)"
+          },
+          {
+            "value": "ball",
+            "label": "Bola articulada (entra a presión y gira)"
+          },
+          {
+            "value": "none",
+            "label": "Sin unión (solo cortar)"
+          }
+        ]
+      },
+      {
+        "key": "diameter",
+        "label": "Diámetro del conector",
+        "type": "number",
+        "min": 0,
+        "max": 40,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "0 = automático según el tamaño del corte."
+      },
+      {
+        "key": "clearance",
+        "label": "Holgura",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "unit": "mm",
+        "hint": "Juego entre las partes que entran una en otra. 0.2 mm va bien en la mayoría de impresoras."
+      },
+      {
+        "key": "shell",
+        "label": "Grosor de las placas de color",
+        "type": "number",
+        "min": 0,
+        "max": 10,
+        "step": 0.2,
+        "unit": "mm",
+        "hint": "Para colores pintados en el laminador: cada uno sale como una placa de este grosor, con la orilla de la pintura, que entra en un hueco de la pieza principal. Si en tu archivo cada color es una parte aparte, se usan esas partes tal cual. 0 = el color llega hasta el centro del modelo."
+      },
+      {
+        "key": "detail",
+        "label": "Precisión del corte entre colores",
+        "type": "select",
+        "options": [
+          {
+            "value": "60",
+            "label": "Rápida"
+          },
+          {
+            "value": "90",
+            "label": "Normal"
+          },
+          {
+            "value": "130",
+            "label": "Fina (más lenta)"
+          }
+        ],
+        "hint": "Solo cambia las caras de corte, que quedan ocultas al armar la pieza."
+      }
+    ]
+  },
+  {
+    "slug": "moldes",
+    "name": "Moldero",
+    "tagline": "Genera moldes",
+    "description": "Convierte tu modelo en un molde de dos mitades con guías para que cierren exacto y un orificio para vaciar resina, jabón, chocolate o yeso.",
+    "icon": "mold",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "type": "rigid",
+      "axis": "z",
+      "parting": 50,
+      "wall": 8,
+      "keys": true,
+      "sprue": 6,
+      "clearance": 0.2,
+      "withModel": "both",
+      "gap": 10,
+      "cover": 10,
+      "boxWall": 2,
+      "pin": 8
+    },
+    "fields": [
+      {
+        "key": "type",
+        "label": "Tipo de molde",
+        "type": "select",
+        "options": [
+          {
+            "value": "rigid",
+            "label": "Molde rígido de dos mitades (se imprime el molde)"
+          },
+          {
+            "value": "silicone",
+            "label": "Caja para molde de silicona"
+          }
+        ]
+      },
+      {
+        "key": "axis",
+        "label": "Eje que apunta hacia arriba",
+        "type": "select",
+        "options": [
+          {
+            "value": "z",
+            "label": "Altura (Z)"
+          },
+          {
+            "value": "x",
+            "label": "Largo (X)"
+          },
+          {
+            "value": "y",
+            "label": "Ancho (Y)"
+          }
+        ]
+      },
+      {
+        "key": "withModel",
+        "label": "Qué imprimir",
+        "type": "select",
+        "options": [
+          {
+            "value": "both",
+            "label": "Caja (exterior) + modelo con pedestal (interior)"
+          },
+          {
+            "value": "box",
+            "label": "Solo la caja (exterior)"
+          }
+        ],
+        "hint": "El modelo con pedestal es el original que queda dentro de la silicona; si ya lo tienes, imprime solo la caja."
+      },
+      {
+        "key": "gap",
+        "label": "Silicona alrededor del modelo",
+        "type": "number",
+        "min": 3,
+        "max": 40,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "cover",
+        "label": "Silicona encima del modelo",
+        "type": "number",
+        "min": 3,
+        "max": 40,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "boxWall",
+        "label": "Pared de la caja",
+        "type": "number",
+        "min": 1.2,
+        "max": 6,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "pin",
+        "label": "Pedestal",
+        "type": "number",
+        "min": 0,
+        "max": 20,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "Sostiene el modelo sobre el piso y deja el orificio para vaciar. 0 = sin pedestal."
+      },
+      {
+        "key": "parting",
+        "label": "Altura de la partición",
+        "type": "number",
+        "min": 5,
+        "max": 95,
+        "step": 1,
+        "unit": "%",
+        "hint": "Ponla donde la pieza es más ancha para que salga de las dos mitades."
+      },
+      {
+        "key": "wall",
+        "label": "Pared del molde",
+        "type": "number",
+        "min": 3,
+        "max": 30,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "keys",
+        "label": "Guías de alineación en las esquinas",
+        "type": "checkbox"
+      },
+      {
+        "key": "sprue",
+        "label": "Orificio de vaciado",
+        "type": "number",
+        "min": 0,
+        "max": 20,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "0 = sin orificio."
+      },
+      {
+        "key": "clearance",
+        "label": "Holgura",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "unit": "mm"
+      }
+    ]
+  },
+  {
+    "slug": "termoformado",
+    "name": "Termoformador",
+    "tagline": "Moldes y lámina para termoformar",
+    "description": "Genera el molde macho y hembra de cada mitad de tu figura y la lámina plana que imprimes como malla (giroide o panal) y luego formas entre los moldes. Si tu archivo trae colores, la lámina sale a colores.",
+    "icon": "thermo",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "pattern": "gyroid",
+      "density": 30,
+      "sheet": 1,
+      "flange": 4,
+      "axis": "y",
+      "cut": 50,
+      "mirrored": false,
+      "neck": true,
+      "neckDiameter": 14,
+      "loop": true,
+      "clasp": true,
+      "neckSide": "up",
+      "rim": 2,
+      "rimColor": "",
+      "clearance": 0.3,
+      "margin": 8,
+      "base": 4
+    },
+    "fields": [
+      {
+        "key": "pattern",
+        "label": "Relleno con el que imprimirás la lámina",
+        "type": "select",
+        "options": [
+          {
+            "value": "gyroid",
+            "label": "Giroide (Gyroid)"
+          },
+          {
+            "value": "honeycomb",
+            "label": "Panal (Honeycomb)"
+          }
+        ],
+        "hint": "La lámina sale lisa: la malla la hace tu laminador con este relleno, sin capas arriba ni abajo."
+      },
+      {
+        "key": "density",
+        "label": "Densidad del relleno",
+        "type": "number",
+        "min": 15,
+        "max": 60,
+        "step": 5,
+        "unit": "%"
+      },
+      {
+        "key": "sheet",
+        "label": "Grosor de la lámina",
+        "type": "number",
+        "min": 0.6,
+        "max": 3,
+        "step": 0.2,
+        "unit": "mm",
+        "hint": "1 mm son 5 capas de 0.2 mm: suficiente para que se vea el relleno."
+      },
+      {
+        "key": "flange",
+        "label": "Pestaña de la lámina",
+        "type": "number",
+        "min": 1,
+        "max": 15,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "Borde alrededor de la figura donde se unen las dos mitades."
+      },
+      {
+        "key": "axis",
+        "label": "Lado que mira al frente",
+        "type": "select",
+        "options": [
+          {
+            "value": "z",
+            "label": "Altura (Z)"
+          },
+          {
+            "value": "x",
+            "label": "Largo (X)"
+          },
+          {
+            "value": "y",
+            "label": "Ancho (Y)"
+          }
+        ],
+        "hint": "La figura se parte a la mitad de este lado: frente y atrás."
+      },
+      {
+        "key": "cut",
+        "label": "Dónde se parte",
+        "type": "number",
+        "min": 10,
+        "max": 90,
+        "step": 1,
+        "unit": "%",
+        "hint": "50 % = justo a la mitad."
+      },
+      {
+        "key": "mirrored",
+        "label": "Las dos mitades son iguales (en espejo): un solo juego de moldes",
+        "type": "checkbox"
+      },
+      {
+        "key": "neck",
+        "label": "Boquilla con rosca y tapa arriba",
+        "type": "checkbox",
+        "hint": "Las mitades se forman con media manguera arriba y cierran alrededor de una boquilla impresa; la tapa se enrosca."
+      },
+      {
+        "key": "neckDiameter",
+        "label": "Diámetro de la boquilla",
+        "type": "number",
+        "min": 8,
+        "max": 40,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "loop",
+        "label": "Tapa con argolla para llavero",
+        "type": "checkbox"
+      },
+      {
+        "key": "clasp",
+        "label": "Broche para abrir y cerrar",
+        "type": "checkbox",
+        "hint": "Una pestaña en cada mitad y un broche en C que las aprieta."
+      },
+      {
+        "key": "neckSide",
+        "label": "Dónde va la boquilla",
+        "type": "select",
+        "options": [
+          {
+            "value": "up",
+            "label": "Arriba (broche abajo)"
+          },
+          {
+            "value": "down",
+            "label": "Abajo (broche arriba)"
+          },
+          {
+            "value": "left",
+            "label": "Izquierda (broche a la derecha)"
+          },
+          {
+            "value": "right",
+            "label": "Derecha (broche a la izquierda)"
+          }
+        ]
+      },
+      {
+        "key": "rim",
+        "label": "Borde impreso de cada mitad",
+        "type": "number",
+        "min": 0,
+        "max": 4,
+        "step": 0.2,
+        "unit": "mm",
+        "hint": "Marco sólido que embona en el molde macho; la lámina se forma encima y en él van la boquilla y el broche. 0 = sin borde."
+      },
+      {
+        "key": "rimColor",
+        "label": "Color del borde, la boquilla, la tapa y el broche",
+        "type": "select",
+        "options": [
+          {
+            "value": "",
+            "label": "El color de la figura"
+          },
+          {
+            "value": "#1a1a1a",
+            "label": "Negro"
+          },
+          {
+            "value": "#f5f5f5",
+            "label": "Blanco"
+          },
+          {
+            "value": "#8a8d91",
+            "label": "Gris"
+          },
+          {
+            "value": "#c9a227",
+            "label": "Dorado"
+          },
+          {
+            "value": "#c0c0c0",
+            "label": "Plata"
+          },
+          {
+            "value": "#d32f2f",
+            "label": "Rojo"
+          },
+          {
+            "value": "#f57c00",
+            "label": "Naranja"
+          },
+          {
+            "value": "#fbc02d",
+            "label": "Amarillo"
+          },
+          {
+            "value": "#388e3c",
+            "label": "Verde"
+          },
+          {
+            "value": "#1976d2",
+            "label": "Azul"
+          },
+          {
+            "value": "#7b1fa2",
+            "label": "Morado"
+          },
+          {
+            "value": "#ec407a",
+            "label": "Rosa"
+          }
+        ]
+      },
+      {
+        "key": "clearance",
+        "label": "Holgura del molde hembra",
+        "type": "number",
+        "min": 0,
+        "max": 2,
+        "step": 0.1,
+        "unit": "mm",
+        "hint": "Espacio extra, además del grosor de la lámina."
+      },
+      {
+        "key": "margin",
+        "label": "Borde de los moldes",
+        "type": "number",
+        "min": 3,
+        "max": 30,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "base",
+        "label": "Grosor de la base de los moldes",
+        "type": "number",
+        "min": 2,
+        "max": 15,
+        "step": 0.5,
+        "unit": "mm"
+      }
+    ]
+  },
+  {
+    "slug": "neon",
+    "name": "Neón",
+    "tagline": "Guías para neón LED",
+    "description": "Sube una imagen y arma las canaletas para tu tira de neón LED: por el contorno de la figura y por las líneas que dibujes, sin fondo, con orificios atrás para el cable.",
+    "icon": "neon",
+    "images": true,
+    "imagesOnly": true,
+    "multiple": false,
+    "defaults": {
+      "size": 250,
+      "ledWidth": 6,
+      "ledHeight": 12,
+      "outline": true,
+      "wall": 1.6,
+      "floor": 2,
+      "hole": 6,
+      "bar": 8
+    },
+    "fields": [
+      {
+        "key": "size",
+        "label": "Tamaño (lado más largo)",
+        "type": "number",
+        "min": 60,
+        "max": 1000,
+        "step": 5,
+        "unit": "mm"
+      },
+      {
+        "key": "ledWidth",
+        "label": "Ancho de tu neón",
+        "type": "number",
+        "min": 3,
+        "max": 20,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "Mídelo: los más comunes son de 6 × 12 mm y 8 × 16 mm."
+      },
+      {
+        "key": "ledHeight",
+        "label": "Alto de tu neón",
+        "type": "number",
+        "min": 4,
+        "max": 30,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "La canaleta lo cubre dos tercios para que sostenga y se vea la luz."
+      },
+      {
+        "key": "outline",
+        "label": "Neón por el contorno de la figura",
+        "type": "checkbox"
+      },
+      {
+        "key": "wall",
+        "label": "Grosor de las paredes",
+        "type": "number",
+        "min": 0.8,
+        "max": 4,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "floor",
+        "label": "Grosor del piso",
+        "type": "number",
+        "min": 1,
+        "max": 5,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "hole",
+        "label": "Orificio para el cable",
+        "type": "number",
+        "min": 3,
+        "max": 12,
+        "step": 0.5,
+        "unit": "mm"
+      },
+      {
+        "key": "bar",
+        "label": "Ancho de las barras que unen figuras",
+        "type": "number",
+        "min": 4,
+        "max": 20,
+        "step": 1,
+        "unit": "mm"
+      }
+    ],
+    "imageSize": {
+      "key": "size",
+      "side": "long"
+    }
+  },
+  {
+    "slug": "gomitas",
+    "name": "Gomitero",
+    "tagline": "Moldes de relleno",
+    "description": "Sube uno o varios modelos 3D o imágenes, di cuántas piezas quieres y el tamaño del rectángulo: las acomoda en un molde para gomitas, chocolates, jabones o resina, planas por detrás.",
+    "icon": "tray",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": true,
+    "defaults": {
+      "kind": "cavity",
+      "count": 12,
+      "width": 160,
+      "height": 80,
+      "spacing": 5,
+      "margin": 8,
+      "fit": true,
+      "axis": "z",
+      "cut": 50,
+      "depth": 8,
+      "floor": 3
+    },
+    "fields": [
+      {
+        "key": "kind",
+        "label": "Qué hacer",
+        "type": "select",
+        "options": [
+          {
+            "value": "cavity",
+            "label": "Charola con huecos (para llenar directo)"
+          },
+          {
+            "value": "master",
+            "label": "Positivo con marco (para vaciar silicona encima)"
+          }
+        ]
+      },
+      {
+        "key": "count",
+        "label": "Cuántas piezas",
+        "type": "number",
+        "min": 1,
+        "max": 200,
+        "step": 1,
+        "hint": "Si subes varios archivos se reparten por turnos."
+      },
+      {
+        "key": "width",
+        "label": "Ancho del rectángulo",
+        "type": "number",
+        "min": 20,
+        "max": 400,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "height",
+        "label": "Alto del rectángulo",
+        "type": "number",
+        "min": 20,
+        "max": 400,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "spacing",
+        "label": "Separación entre piezas",
+        "type": "number",
+        "min": 1,
+        "max": 30,
+        "step": 0.5,
+        "unit": "mm"
+      },
+      {
+        "key": "margin",
+        "label": "Borde",
+        "type": "number",
+        "min": 2,
+        "max": 30,
+        "step": 0.5,
+        "unit": "mm"
+      },
+      {
+        "key": "fit",
+        "label": "Ajustar el tamaño de cada pieza a su espacio",
+        "type": "checkbox"
+      },
+      {
+        "key": "axis",
+        "label": "Modelos 3D: lado que mira hacia arriba",
+        "type": "select",
+        "options": [
+          {
+            "value": "z",
+            "label": "Altura (Z)"
+          },
+          {
+            "value": "x",
+            "label": "Largo (X)"
+          },
+          {
+            "value": "y",
+            "label": "Ancho (Y)"
+          }
+        ]
+      },
+      {
+        "key": "cut",
+        "label": "Modelos 3D: dónde queda plana la parte de atrás",
+        "type": "number",
+        "min": 0,
+        "max": 90,
+        "step": 1,
+        "unit": "%",
+        "hint": "50 % = la mitad del modelo. 0 % = el modelo entero, apoyado en su base."
+      },
+      {
+        "key": "depth",
+        "label": "Imágenes: profundidad de la figura",
+        "type": "number",
+        "min": 1,
+        "max": 40,
+        "step": 0.5,
+        "unit": "mm"
+      },
+      {
+        "key": "floor",
+        "label": "Grosor de la base",
+        "type": "number",
+        "min": 1,
+        "max": 10,
+        "step": 0.5,
+        "unit": "mm"
+      }
+    ]
+  },
+  {
+    "slug": "texturas",
+    "name": "Texturizador",
+    "tagline": "Texturas en la superficie",
+    "description": "Cubre tu figura con una textura en relieve: panal, moleteado, ladrillos, madera, escamas, fibra de carbono, piedra y más.",
+    "icon": "texture",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "texture": "hex",
+      "scale": 6,
+      "depth": 0.6,
+      "direction": "in",
+      "where": "nobase",
+      "detail": "0.5"
+    },
+    "fields": [
+      {
+        "key": "texture",
+        "label": "Textura",
+        "type": "select",
+        "options": [
+          {
+            "value": "hex",
+            "label": "Panal"
+          },
+          {
+            "value": "knurl",
+            "label": "Moleteado"
+          },
+          {
+            "value": "bricks",
+            "label": "Ladrillos"
+          },
+          {
+            "value": "waves",
+            "label": "Ondas"
+          },
+          {
+            "value": "dots",
+            "label": "Puntos"
+          },
+          {
+            "value": "scales",
+            "label": "Escamas"
+          },
+          {
+            "value": "wood",
+            "label": "Madera"
+          },
+          {
+            "value": "carbon",
+            "label": "Fibra de carbono"
+          },
+          {
+            "value": "voronoi",
+            "label": "Piedra"
+          },
+          {
+            "value": "rough",
+            "label": "Rugoso"
+          }
+        ]
+      },
+      {
+        "key": "scale",
+        "label": "Tamaño del patrón",
+        "type": "number",
+        "min": 1,
+        "max": 40,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "Lo que mide cada repetición."
+      },
+      {
+        "key": "depth",
+        "label": "Profundidad",
+        "type": "number",
+        "min": 0.2,
+        "max": 3,
+        "step": 0.1,
+        "unit": "mm"
+      },
+      {
+        "key": "direction",
+        "label": "Relieve",
+        "type": "select",
+        "options": [
+          {
+            "value": "in",
+            "label": "Grabado hacia adentro (la pieza no crece)"
+          },
+          {
+            "value": "out",
+            "label": "Saliente hacia afuera"
+          }
+        ]
+      },
+      {
+        "key": "where",
+        "label": "Dónde",
+        "type": "select",
+        "options": [
+          {
+            "value": "nobase",
+            "label": "Todo menos la base"
+          },
+          {
+            "value": "sides",
+            "label": "Solo los lados"
+          },
+          {
+            "value": "all",
+            "label": "Toda la figura"
+          }
+        ],
+        "hint": "Sin textura en la base la pieza sigue bien pegada a la cama."
+      },
+      {
+        "key": "detail",
+        "label": "Detalle",
+        "type": "select",
+        "options": [
+          {
+            "value": "0.8",
+            "label": "Rápido"
+          },
+          {
+            "value": "0.5",
+            "label": "Normal"
+          },
+          {
+            "value": "0.3",
+            "label": "Fino (más pesado)"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "galletas",
+    "name": "Galletero",
+    "tagline": "Cortadores de galletas",
+    "description": "Saca la silueta de tu modelo y la convierte en un cortador de galletas o de fondant del tamaño que quieras.",
+    "icon": "cutter",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "view": "z",
+      "size": 80,
+      "height": 12,
+      "wall": 1.2,
+      "rim": 4,
+      "rimHeight": 2
+    },
+    "fields": [
+      {
+        "key": "view",
+        "label": "Silueta vista",
+        "type": "select",
+        "options": [
+          {
+            "value": "z",
+            "label": "Desde arriba"
+          },
+          {
+            "value": "y",
+            "label": "De frente"
+          },
+          {
+            "value": "x",
+            "label": "De lado"
+          }
+        ]
+      },
+      {
+        "key": "size",
+        "label": "Tamaño (lado más largo)",
+        "type": "number",
+        "min": 20,
+        "max": 250,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "height",
+        "label": "Altura del filo",
+        "type": "number",
+        "min": 5,
+        "max": 40,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "wall",
+        "label": "Grosor del filo",
+        "type": "number",
+        "min": 0.6,
+        "max": 3,
+        "step": 0.1,
+        "unit": "mm"
+      },
+      {
+        "key": "rim",
+        "label": "Ancho del borde para presionar",
+        "type": "number",
+        "min": 0,
+        "max": 12,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "0 = sin borde."
+      },
+      {
+        "key": "rimHeight",
+        "label": "Grosor del borde",
+        "type": "number",
+        "min": 1,
+        "max": 5,
+        "step": 0.5,
+        "unit": "mm"
+      }
+    ]
+  },
+  {
+    "slug": "hueco",
+    "name": "Huequito",
+    "tagline": "Piezas huecas",
+    "description": "Vacía el interior de tu modelo y deja solo una pared del grosor que elijas: menos material, menos tiempo y más ligera.",
+    "icon": "hollow",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "thickness": 2,
+      "resolution": "130",
+      "drain": 0
+    },
+    "fields": [
+      {
+        "key": "thickness",
+        "label": "Grosor de pared",
+        "type": "number",
+        "min": 0.8,
+        "max": 10,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "resolution",
+        "label": "Precisión del interior",
+        "type": "select",
+        "options": [
+          {
+            "value": "80",
+            "label": "Rápida"
+          },
+          {
+            "value": "130",
+            "label": "Normal"
+          },
+          {
+            "value": "190",
+            "label": "Fina (más lenta)"
+          }
+        ],
+        "hint": "Solo afecta la superficie de adentro; la de afuera queda igual que tu modelo."
+      },
+      {
+        "key": "drain",
+        "label": "Orificio abajo",
+        "type": "number",
+        "min": 0,
+        "max": 30,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "0 = cerrada. En resina hace falta uno para drenar."
+      }
+    ]
+  },
+  {
+    "slug": "alcancia",
+    "name": "Alcancía",
+    "tagline": "Alcancías",
+    "description": "Convierte cualquier figura en alcancía: la vacía, le abre la ranura para monedas arriba y un orificio abajo para sacarlas.",
+    "icon": "piggy",
+    "images": false,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "thickness": 2.4,
+      "resolution": "130",
+      "slotLength": 32,
+      "slotWidth": 4,
+      "plug": 30
+    },
+    "fields": [
+      {
+        "key": "thickness",
+        "label": "Grosor de pared",
+        "type": "number",
+        "min": 0.8,
+        "max": 10,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "resolution",
+        "label": "Precisión del interior",
+        "type": "select",
+        "options": [
+          {
+            "value": "80",
+            "label": "Rápida"
+          },
+          {
+            "value": "130",
+            "label": "Normal"
+          },
+          {
+            "value": "190",
+            "label": "Fina (más lenta)"
+          }
+        ],
+        "hint": "Solo afecta la superficie de adentro; la de afuera queda igual que tu modelo."
+      },
+      {
+        "key": "slotLength",
+        "label": "Largo de la ranura",
+        "type": "number",
+        "min": 15,
+        "max": 60,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "slotWidth",
+        "label": "Ancho de la ranura",
+        "type": "number",
+        "min": 2,
+        "max": 10,
+        "step": 0.5,
+        "unit": "mm"
+      },
+      {
+        "key": "plug",
+        "label": "Orificio para sacar monedas",
+        "type": "number",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "mm",
+        "hint": "0 = sin orificio."
+      }
+    ]
+  },
+  {
+    "slug": "lampara",
+    "name": "Lámpara",
+    "tagline": "Lámparas",
+    "description": "Vacía tu modelo con pared delgada para que la luz pase, o sube una imagen y arma una caja de luz con su silueta, la imagen al frente y carril para tira LED.",
+    "icon": "lamp",
+    "images": true,
+    "imagesOnly": false,
+    "multiple": false,
+    "defaults": {
+      "kind": "shade",
+      "thickness": 1.6,
+      "resolution": "130",
+      "socket": 42,
+      "rows": 0,
+      "perRow": 12,
+      "holeDiameter": 6,
+      "boxSize": 150,
+      "depth": 40,
+      "wall": 2,
+      "strip": 10,
+      "front": "color",
+      "colours": 6,
+      "thin": 1,
+      "thick": 3,
+      "hangers": true,
+      "boxClearance": 0.2
+    },
+    "fields": [
+      {
+        "key": "kind",
+        "label": "Tipo de lámpara",
+        "type": "select",
+        "options": [
+          {
+            "value": "shade",
+            "label": "Pantalla: vaciar mi modelo 3D"
+          },
+          {
+            "value": "lightbox",
+            "label": "Caja de luz desde una imagen"
+          }
+        ]
+      },
+      {
+        "key": "thickness",
+        "label": "Grosor de pared",
+        "type": "number",
+        "min": 0.8,
+        "max": 10,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "resolution",
+        "label": "Precisión del interior",
+        "type": "select",
+        "options": [
+          {
+            "value": "80",
+            "label": "Rápida"
+          },
+          {
+            "value": "130",
+            "label": "Normal"
+          },
+          {
+            "value": "190",
+            "label": "Fina (más lenta)"
+          }
+        ],
+        "hint": "Solo afecta la superficie de adentro; la de afuera queda igual que tu modelo."
+      },
+      {
+        "key": "socket",
+        "label": "Hueco del socket o cable",
+        "type": "number",
+        "min": 0,
+        "max": 60,
+        "step": 1,
+        "unit": "mm",
+        "hint": "42 mm para un socket E27; 0 = sin hueco."
+      },
+      {
+        "key": "rows",
+        "label": "Filas de orificios",
+        "type": "number",
+        "min": 0,
+        "max": 12,
+        "step": 1,
+        "hint": "0 = sin orificios."
+      },
+      {
+        "key": "perRow",
+        "label": "Orificios por fila",
+        "type": "number",
+        "min": 3,
+        "max": 48,
+        "step": 1
+      },
+      {
+        "key": "holeDiameter",
+        "label": "Diámetro de los orificios",
+        "type": "number",
+        "min": 2,
+        "max": 30,
+        "step": 0.5,
+        "unit": "mm"
+      },
+      {
+        "key": "boxSize",
+        "label": "Tamaño (lado más largo)",
+        "type": "number",
+        "min": 60,
+        "max": 400,
+        "step": 5,
+        "unit": "mm"
+      },
+      {
+        "key": "depth",
+        "label": "Fondo de la caja",
+        "type": "number",
+        "min": 15,
+        "max": 120,
+        "step": 1,
+        "unit": "mm",
+        "hint": "Más fondo = luz más pareja en el frente."
+      },
+      {
+        "key": "wall",
+        "label": "Grosor de la pared",
+        "type": "number",
+        "min": 1.2,
+        "max": 5,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "strip",
+        "label": "Ancho de tu tira LED",
+        "type": "number",
+        "min": 0,
+        "max": 20,
+        "step": 0.5,
+        "unit": "mm",
+        "hint": "Mídela: casi todas son de 8 o 10 mm. Se hace un carril en la pared a esa medida; 0 = sin carril."
+      },
+      {
+        "key": "front",
+        "label": "Frente",
+        "type": "select",
+        "options": [
+          {
+            "value": "color",
+            "label": "A colores: una parte por cada color de la imagen"
+          },
+          {
+            "value": "litho",
+            "label": "Litofanía: la imagen aparece al prender la luz"
+          },
+          {
+            "value": "plain",
+            "label": "Liso: difusor para pegar o pintar la imagen"
+          }
+        ]
+      },
+      {
+        "key": "colours",
+        "label": "Colores del frente (máximo)",
+        "type": "number",
+        "min": 2,
+        "max": 16,
+        "step": 1,
+        "hint": "Se juntan los tonos parecidos hasta dejar este número de filamentos como máximo. Con AMS de 4 usa 4; con más ranuras o cambiando a mano, hasta 16."
+      },
+      {
+        "key": "thin",
+        "label": "Grosor del frente",
+        "type": "number",
+        "min": 0.4,
+        "max": 3,
+        "step": 0.1,
+        "unit": "mm",
+        "hint": "En litofanía es el grosor de las zonas claras. A colores, 1 mm deja pasar bien la luz."
+      },
+      {
+        "key": "thick",
+        "label": "Grosor del frente (zonas oscuras)",
+        "type": "number",
+        "min": 1,
+        "max": 6,
+        "step": 0.1,
+        "unit": "mm"
+      },
+      {
+        "key": "hangers",
+        "label": "Ojales para colgarla en la pared",
+        "type": "checkbox"
+      },
+      {
+        "key": "boxClearance",
+        "label": "Holgura de frente y tapa",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "unit": "mm"
+      }
+    ]
+  },
+  {
+    "slug": "cuadros",
+    "name": "Cuadros",
+    "tagline": "Cuadros de pared",
+    "description": "Sube una imagen y arma un cuadro para la pared a tu medida: silueta recortada con marco o multicolor con relieve y textura, repartido en varios cuadros si quieres (tríptico) y partido en piezas que caben en tu cama y se unen con colas de milano.",
+    "icon": "frame",
+    "images": true,
+    "imagesOnly": true,
+    "multiple": false,
+    "defaults": {
+      "style": "silhouette",
+      "width": 600,
+      "height": 0,
+      "columns": 1,
+      "rows": 1,
+      "gap": 10,
+      "frame": 8,
+      "thickness": 3,
+      "threshold": 128,
+      "invert": false,
+      "bolder": 0,
+      "bridges": true,
+      "colours": 4,
+      "base": 1.2,
+      "step": 0.6,
+      "higher": "light",
+      "texture": 0.4,
+      "bedX": 256,
+      "bedY": 256,
+      "clearance": 0.2
+    },
+    "fields": [
+      {
+        "key": "style",
+        "label": "Estilo",
+        "type": "select",
+        "options": [
+          {
+            "value": "silhouette",
+            "label": "Silueta recortada: lo oscuro en un color, con marco"
+          },
+          {
+            "value": "relief",
+            "label": "Multicolor con relieve: cada color a su altura"
+          }
+        ]
+      },
+      {
+        "key": "width",
+        "label": "Ancho total en la pared",
+        "type": "number",
+        "min": 50,
+        "max": 3000,
+        "step": 10,
+        "unit": "mm",
+        "hint": "De todo el cuadro, contando todos sus cuadros y la separación entre ellos."
+      },
+      {
+        "key": "height",
+        "label": "Alto total",
+        "type": "number",
+        "min": 0,
+        "max": 3000,
+        "step": 10,
+        "unit": "mm",
+        "hint": "0 = según la proporción de la imagen. Si pones ancho y alto, la imagen se recorta al centro para llenarlo."
+      },
+      {
+        "key": "columns",
+        "label": "Cuadros a lo ancho",
+        "type": "number",
+        "min": 1,
+        "max": 8,
+        "step": 1,
+        "hint": "Una sola imagen repartida en varios cuadros: 3 a lo ancho es un tríptico, como el del árbol."
+      },
+      {
+        "key": "rows",
+        "label": "Cuadros a lo alto",
+        "type": "number",
+        "min": 1,
+        "max": 8,
+        "step": 1
+      },
+      {
+        "key": "gap",
+        "label": "Separación entre cuadros",
+        "type": "number",
+        "min": 0,
+        "max": 150,
+        "step": 1,
+        "unit": "mm",
+        "hint": "Pared que queda entre un cuadro y otro (esa franja de la imagen no se imprime)."
+      },
+      {
+        "key": "frame",
+        "label": "Marco",
+        "type": "number",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "mm",
+        "hint": "Ancho de la barra alrededor de cada cuadro; 0 = sin marco."
+      },
+      {
+        "key": "thickness",
+        "label": "Grosor",
+        "type": "number",
+        "min": 1.2,
+        "max": 10,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "threshold",
+        "label": "Qué tan oscuro es figura",
+        "type": "number",
+        "min": 10,
+        "max": 245,
+        "step": 5,
+        "hint": "Lo más oscuro que este valor (0 negro … 255 blanco) se imprime. Súbelo si faltan partes, bájalo si se llena de manchas."
+      },
+      {
+        "key": "invert",
+        "label": "Usar lo claro como figura",
+        "type": "checkbox",
+        "hint": "Para dibujos blancos sobre fondo oscuro."
+      },
+      {
+        "key": "bolder",
+        "label": "Engrosar líneas",
+        "type": "number",
+        "min": 0,
+        "max": 4,
+        "step": 0.2,
+        "unit": "mm",
+        "hint": "Las líneas de menos de 1 mm se imprimen mal o se rompen."
+      },
+      {
+        "key": "bridges",
+        "label": "Unir partes sueltas",
+        "type": "checkbox",
+        "hint": "Lo que no toca el marco (un ojo, un mechón) se une con una barrita delgada. Sin esto se imprime en su lugar y lo pegas en la pared."
+      },
+      {
+        "key": "colours",
+        "label": "Colores (máximo)",
+        "type": "number",
+        "min": 2,
+        "max": 16,
+        "step": 1,
+        "hint": "Se juntan los tonos parecidos hasta dejar este número de filamentos. Con AMS de 4 usa 4."
+      },
+      {
+        "key": "base",
+        "label": "Grosor de la base",
+        "type": "number",
+        "min": 0.8,
+        "max": 6,
+        "step": 0.2,
+        "unit": "mm"
+      },
+      {
+        "key": "step",
+        "label": "Altura de cada color",
+        "type": "number",
+        "min": 0.2,
+        "max": 4,
+        "step": 0.2,
+        "unit": "mm",
+        "hint": "Cuánto sube cada color sobre el anterior."
+      },
+      {
+        "key": "higher",
+        "label": "Más alto",
+        "type": "select",
+        "options": [
+          {
+            "value": "light",
+            "label": "Los colores claros"
+          },
+          {
+            "value": "dark",
+            "label": "Los colores oscuros"
+          }
+        ]
+      },
+      {
+        "key": "texture",
+        "label": "Textura",
+        "type": "number",
+        "min": 0,
+        "max": 2,
+        "step": 0.1,
+        "unit": "mm",
+        "hint": "Las sombras y trazos de la imagen suben la superficie de cada color hasta esta altura. 0 = colores lisos."
+      },
+      {
+        "key": "bedX",
+        "label": "Cama de tu impresora: largo",
+        "type": "number",
+        "min": 100,
+        "max": 1000,
+        "step": 1,
+        "unit": "mm",
+        "hint": "Si un cuadro no cabe, se parte en piezas que se unen con colas de milano."
+      },
+      {
+        "key": "bedY",
+        "label": "Cama de tu impresora: ancho",
+        "type": "number",
+        "min": 100,
+        "max": 1000,
+        "step": 1,
+        "unit": "mm"
+      },
+      {
+        "key": "clearance",
+        "label": "Holgura de las uniones",
+        "type": "number",
+        "min": 0,
+        "max": 0.6,
+        "step": 0.05,
+        "unit": "mm",
+        "hint": "Si las colas de milano entran muy duro, súbela."
+      }
+    ],
+    "imageSize": {
+      "key": "width",
+      "side": "width"
+    }
+  }
+]
