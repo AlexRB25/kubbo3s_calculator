@@ -3220,3 +3220,43 @@ alter table public.products add column if not exists length_mm numeric(8,1) not 
 alter table public.products add column if not exists width_mm numeric(8,1) not null default 0 check (width_mm >= 0);
 alter table public.products add column if not exists height_mm numeric(8,1) not null default 0 check (height_mm >= 0);
 alter table public.products add column if not exists pack_margin_mm numeric(6,1) not null default 30 check (pack_margin_mm between 0 and 500);
+
+-- ───────────────────────── Cursos (sección Aprende) ─────────────────────────
+-- Cursos de Kubbo3D (parámetros, laminadores, filamentos, diseño…). Los escribe el panel admin; los usuarios
+-- ven los publicados. Cada lección es un video (YouTube u otro enlace), un texto o un enlace externo.
+create table if not exists public.courses (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique check (slug ~ '^[a-z0-9-]{2,80}$'),
+  title text not null check (char_length(title) between 2 and 160),
+  summary text not null default '' check (char_length(summary) <= 1000),
+  level text not null default 'basico' check (level in ('basico', 'intermedio', 'avanzado')),
+  cover_url text,
+  published boolean not null default false,
+  sort int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.course_lessons (
+  id uuid primary key default gen_random_uuid(),
+  course_id uuid not null references public.courses (id) on delete cascade,
+  title text not null check (char_length(title) between 2 and 160),
+  kind text not null default 'video' check (kind in ('video', 'article', 'link')),
+  video_url text,
+  link_url text,
+  body text not null default '' check (char_length(body) <= 20000),
+  minutes int not null default 0 check (minutes >= 0),
+  sort int not null default 0,
+  published boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index if not exists course_lessons_course_idx on public.course_lessons (course_id, sort);
+
+-- Todos leen lo publicado; solo el panel admin (llave secreta) escribe.
+alter table public.courses enable row level security;
+alter table public.course_lessons enable row level security;
+revoke insert, update, delete on public.courses, public.course_lessons from anon, authenticated;
+drop policy if exists courses_read on public.courses;
+create policy courses_read on public.courses for select to anon, authenticated using (published);
+drop policy if exists course_lessons_read on public.course_lessons;
+create policy course_lessons_read on public.course_lessons for select to anon, authenticated
+  using (published and exists (select 1 from public.courses c where c.id = course_id and c.published));

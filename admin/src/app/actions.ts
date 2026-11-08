@@ -195,6 +195,61 @@ export async function deleteCatalogPrinter(form: FormData) {
   redirect("/impresoras");
 }
 
+// ── Cursos (sección Aprende) ──
+
+export async function saveCourse(form: FormData) {
+  await requireAdmin();
+  const id = text(form, "id");
+  const title = text(form, "title");
+  const row = {
+    title,
+    slug: slugify(text(form, "slug") || title).slice(0, 80) || `curso-${Date.now()}`,
+    summary: text(form, "summary"),
+    level: ["basico", "intermedio", "avanzado"].includes(text(form, "level")) ? text(form, "level") : "basico",
+    cover_url: optional(form, "cover_url"),
+    published: flag(form, "published"),
+    sort: number(form, "sort"),
+  };
+  const saved = must(id ? await admin().from("courses").update(row).eq("id", id).select("id").single() : await admin().from("courses").insert(row).select("id").single()) as { id: string };
+  revalidatePath("/cursos");
+  redirect(`/cursos/${saved.id}`);
+}
+
+export async function deleteCourse(form: FormData) {
+  await requireAdmin();
+  must(await admin().from("courses").delete().eq("id", text(form, "id")));
+  revalidatePath("/cursos");
+  redirect("/cursos");
+}
+
+export async function saveLesson(form: FormData) {
+  await requireAdmin();
+  const id = text(form, "id");
+  const course = text(form, "course_id");
+  const row = {
+    course_id: course,
+    title: text(form, "title"),
+    kind: ["video", "article", "link"].includes(text(form, "kind")) ? text(form, "kind") : "video",
+    video_url: optional(form, "video_url"),
+    link_url: optional(form, "link_url"),
+    body: text(form, "body"),
+    minutes: Math.max(0, Math.round(number(form, "minutes"))),
+    sort: number(form, "sort"),
+    published: flag(form, "published"),
+  };
+  must(id ? await admin().from("course_lessons").update(row).eq("id", id) : await admin().from("course_lessons").insert(row));
+  revalidatePath(`/cursos/${course}`);
+  redirect(`/cursos/${course}`);
+}
+
+export async function deleteLesson(form: FormData) {
+  await requireAdmin();
+  const course = text(form, "course_id");
+  must(await admin().from("course_lessons").delete().eq("id", text(form, "id")));
+  revalidatePath(`/cursos/${course}`);
+  redirect(`/cursos/${course}`);
+}
+
 // ── Catálogo de empaques ──
 
 export async function saveCatalogPackaging(form: FormData) {

@@ -455,3 +455,28 @@ export type InventoryMove = {
   note: string | null;
   supplier_id: string | null;
 };
+
+/** A course of the Aprende section (table courses); only published ones reach users. */
+export type Course = {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  level: 'basico' | 'intermedio' | 'avanzado';
+  cover_url: string | null;
+  sort: number;
+  course_lessons?: CourseLesson[];
+};
+
+/** A lesson: a video (YouTube or any link), a text or an outside link. */
+export type CourseLesson = {
+  id: string;
+  course_id: string;
+  title: string;
+  kind: 'video' | 'article' | 'link';
+  video_url: string | null;
+  link_url: string | null;
+  body: string;
+  minutes: number;
+  sort: number;
+};

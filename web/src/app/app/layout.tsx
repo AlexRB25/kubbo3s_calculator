@@ -32,7 +32,7 @@ const LINKS: { href: string; label: string; icon: NavIconName; roles?: ShopRole[
   { href: "/app/proveedores", icon: "proveedores", label: "Proveedores", roles: ["owner", "admin"] },
   { href: "/app/canales", icon: "canales", label: "Canales de venta", roles: ["owner", "admin"] },
   { href: "/app/equipo", icon: "equipo", label: "Equipo" },
-  { href: "/app/biblioteca", icon: "biblioteca", label: "Biblioteca" },
+  { href: "/app/biblioteca", icon: "biblioteca", label: "Aprende" },
   { href: "/app/ajustes", icon: "ajustes", label: "Ajustes" },
 ];
 

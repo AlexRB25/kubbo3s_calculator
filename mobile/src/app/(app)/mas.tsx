@@ -22,7 +22,7 @@ export default function MoreScreen() {
     { href: '/calculadora', icon: 'calculator', title: 'Cálculo rápido', subtitle: 'El precio de una pieza sin crear producto' },
     { href: '/cotizaciones', icon: 'document-text', title: 'Cotizaciones', subtitle: `${quotes.length} · PDF y WhatsApp para tus clientes` },
     { href: '/clientes', icon: 'people', title: 'Clientes', subtitle: `${clients.length} · contacto y datos de facturación` },
-    { href: '/biblioteca', icon: 'library', title: 'Biblioteca', subtitle: 'Pruebas de calibración y valores por material' },
+    { href: '/biblioteca', icon: 'school', title: 'Aprende', subtitle: 'Cursos, guías de parámetros y diseño, calibración' },
     { href: '/impresoras', icon: 'print', title: 'Impresoras', subtitle: `${printers.length} · mantenimientos y ajustes` },
     { href: '/proveedores', icon: 'business', title: 'Proveedores', subtitle: `${suppliers.length} registrados`, roles: ['owner', 'admin'] },
     { href: '/embalaje', icon: 'cube', title: 'Embalaje', subtitle: `${packaging.length} cajas, sobres y bolsas` },

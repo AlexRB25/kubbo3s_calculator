@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Courses, Docs } from "@/components/app/Learn";
 import { PageHeader } from "@/components/app/ui";
 import { GUIDES, MATERIALS, type Guide } from "@/lib/guides";
 
@@ -42,13 +43,44 @@ function GuideCard({ guide }: { guide: Guide }) {
   );
 }
 
-export default function LibraryPage() {
+const TABS = [
+  { value: "cursos", label: "Cursos" },
+  { value: "guias", label: "Guías" },
+  { value: "calibracion", label: "Calibración" },
+  { value: "materiales", label: "Materiales" },
+] as const;
+
+export default function LearnPage() {
+  const [tab, setTab] = useState<(typeof TABS)[number]["value"]>("cursos");
+  return (
+    <>
+      <PageHeader title="Aprende" />
+      <p className="text-sm text-muted">Cursos, guías de parámetros y diseño, pruebas de calibración y valores por material para imprimir mejor.</p>
+      <div className="flex flex-wrap gap-1 border-b border-line">
+        {TABS.map((item) => (
+          <button
+            key={item.value}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition ${tab === item.value ? "border-brand text-brand" : "border-transparent text-muted hover:text-white"}`}
+            onClick={() => setTab(item.value)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {tab === "cursos" && <Courses />}
+      {tab === "guias" && <Docs />}
+      {tab === "calibracion" && <Calibration />}
+      {tab === "materiales" && <Materials />}
+    </>
+  );
+}
+
+function Calibration() {
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("Todas");
   const shown = category === "Todas" ? GUIDES : GUIDES.filter((guide) => guide.category === category);
 
   return (
     <>
-      <PageHeader title="Biblioteca" />
       <p className="text-sm text-muted">
         Pruebas de calibración para sacarle la mejor calidad a tu impresora y a cada filamento. Haz primero las básicas y repite las de material con cada
         carrete de marca nueva.
@@ -67,7 +99,13 @@ export default function LibraryPage() {
           <GuideCard key={guide.id} guide={guide} />
         ))}
       </section>
+    </>
+  );
+}
 
+function Materials() {
+  return (
+    <>
       <section className="card flex flex-col gap-3">
         <div>
           <h2>Valores de inicio por material</h2>

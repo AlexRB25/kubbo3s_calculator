@@ -63,7 +63,9 @@ export default function AppLayout() {
           <Stack.Screen name="canales/form" options={{ title: 'Canal de venta' }} />
           <Stack.Screen name="ajustes" options={{ title: 'Ajustes' }} />
           <Stack.Screen name="bienvenida" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
-          <Stack.Screen name="biblioteca" options={{ title: 'Biblioteca' }} />
+          <Stack.Screen name="biblioteca" options={{ title: 'Aprende' }} />
+          <Stack.Screen name="aprende/curso" options={{ title: 'Curso' }} />
+          <Stack.Screen name="aprende/guia" options={{ title: 'Guía' }} />
           <Stack.Screen name="clientes/index" options={{ title: 'Clientes' }} />
           <Stack.Screen name="clientes/form" options={{ title: 'Cliente' }} />
           <Stack.Screen name="clientes/campos" options={{ title: 'Campos de facturación' }} />
