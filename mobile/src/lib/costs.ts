@@ -326,6 +326,19 @@ export function packagingName(packaging: Packaging) {
   return sizes.length ? `${packaging.name} · ${sizes.map((value) => Math.round(value) / 10).join('×')} cm` : packaging.name;
 }
 
+/** The channel's resellers / affiliates with a % above 0. */
+export function affiliatesOf(channel: Channel | undefined) {
+  return (channel?.affiliates ?? []).filter((affiliate) => Number(affiliate.pct) > 0);
+}
+
+/**
+ * The channel as seen when a reseller / affiliate sells: their % adds to the commission, so every price and profit
+ * (suggested prices, levels, fees) includes it and the workshop keeps the same.
+ */
+export function withAffiliate(channel: Channel, pct: number): Channel {
+  return pct > 0 ? { ...channel, commission_pct: Number(channel.commission_pct) + Number(pct) } : channel;
+}
+
 /** What a gram of a filament costs: from its purchases, or the reference per kg while it has none. */
 export function costPerGram(filament: Pick<Filament, 'avg_cost_per_g' | 'cost_per_kg'>) {
   return filament.avg_cost_per_g > 0 ? Number(filament.avg_cost_per_g) : filament.cost_per_kg / 1000;

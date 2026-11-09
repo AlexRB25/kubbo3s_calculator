@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { ProductThumb } from '@/components/product-thumb';
 import { Button, Card, Empty, Heading, Line, Muted, Row, Screen } from '@/components/ui';
 import { Colors, Spacing } from '@/constants/theme';
-import { channelFees, costPerGram, filamentName, packagingName, overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
+import { affiliatesOf, channelFees, costPerGram, filamentName, packagingName, overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit, withAffiliate } from '@/lib/costs';
 import { levelsLine } from '@/lib/levels';
 import { duration, money, weight } from '@/lib/format';
 import { useData } from '@/store/data';
@@ -74,6 +74,14 @@ export default function ProductScreen() {
         const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
         const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
         const shipping = shippingAt(price || suggestedPriceWithShipping(cost.total, channel, margin, shippingAt));
+        // With each reseller's % added (shipped), so the workshop earns the same; at the own price, what is left.
+        const resellers = affiliatesOf(channel).map((affiliate) => {
+          const resold = withAffiliate(channel, affiliate.pct);
+          const at = suggestedPriceWithShipping(cost.total, resold, margin, shippingAt);
+          const left = price ? ` · a tu precio ganas ${money(unitProfit(price, cost.total, resold, shippingAt(price)))}` : '';
+          return `${affiliate.name} (+${affiliate.pct}%): ${money(at)}${left}`;
+        });
+        const resellersLine = resellers.length ? <Muted>{['Con revendedor, con envío:', ...resellers].join('\n')}</Muted> : null;
         const suggested = `Sugerido: ${money(suggestedPrice(cost.total, channel, margin))} sin envío · ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))} con envío`;
         if (!price) {
           // What selling at the suggested price with shipping would leave.
@@ -84,6 +92,7 @@ export default function ProductScreen() {
               <Line strong label={channel.name} value="Sin precio" />
               <Muted>{suggested}</Muted>
               <Muted>Con envío: {levelsLine(cost.total, channel, levels, shippingAt)}</Muted>
+              {resellersLine}
               {at > 0 && (
                 <Row style={{ justifyContent: 'space-between' }}>
                   <Text style={{ color: Colors.text, fontSize: 15, fontWeight: '600' }}>Ganancia estimada al sugerido</Text>
@@ -116,6 +125,7 @@ export default function ProductScreen() {
             {profitLine('Ganancia con envío', withShipping)}
             <Muted>{suggested}</Muted>
             <Muted>Con envío: {levelsLine(cost.total, channel, levels, shippingAt)}</Muted>
+            {resellersLine}
           </Card>
         );
       })}

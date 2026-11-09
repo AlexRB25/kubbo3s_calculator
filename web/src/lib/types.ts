@@ -216,6 +216,9 @@ export type Carrier = {
   notes: string;
 };
 
+/** A reseller or affiliate who sells in a channel and keeps `pct` % of the price. */
+export type ChannelAffiliate = { name: string; pct: number };
+
 export type Channel = {
   id: string;
   name: string;
@@ -229,6 +232,8 @@ export type Channel = {
   fixed_fee: number;
   shipping_cost: number;
   sort: number;
+  /** Resellers / affiliates of this channel and their %. */
+  affiliates?: ChannelAffiliate[];
 };
 
 export type PackagingKind = 'box' | 'envelope' | 'bag' | 'other';
@@ -376,6 +381,9 @@ export type Sale = {
   packaging_cost: number;
   /** The channel price when it was sold; with unit_price it tells the discount. */
   list_price: number | null;
+  /** Reseller / affiliate who made the sale ('' = none) and the % they kept (already in fees). */
+  affiliate_name?: string;
+  affiliate_pct?: number;
   profit: number;
   notes: string;
   sold_at: string;

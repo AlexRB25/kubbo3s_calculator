@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useData, useSave } from "@/lib/data";
 import { field, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
-import type { Channel, ChannelTax } from "@/lib/types";
+import type { Channel, ChannelAffiliate, ChannelTax } from "@/lib/types";
 
 /** Mexican VAT: a tax "on the price without VAT" applies to price ÷ 1.16. */
 const VAT = 1.16;
@@ -20,6 +20,7 @@ const PRESETS: ChannelTax[] = [
 ];
 
 type TaxRow = { name: string; pct: string; net: boolean };
+type AffiliateRow = { name: string; pct: string };
 
 /**
  * A sales channel: commission, fixed fee, shipping, and its own list of taxes (as many as the user
@@ -42,6 +43,13 @@ export function ChannelForm({ channel, count, onDone }: { channel?: Channel; cou
         : [],
   );
 
+  const [affiliates, setAffiliates] = useState<AffiliateRow[]>(() => (channel?.affiliates ?? []).map((affiliate) => ({ name: affiliate.name, pct: String(affiliate.pct) })));
+  const savedAffiliates: ChannelAffiliate[] = affiliates
+    .filter((affiliate) => num(affiliate.pct) > 0)
+    .map((affiliate, index) => ({ name: affiliate.name.trim() || `Revendedor ${index + 1}`, pct: num(affiliate.pct) }));
+  const setAffiliate = (index: number, change: Partial<AffiliateRow>) =>
+    setAffiliates(affiliates.map((affiliate, position) => (position === index ? { ...affiliate, ...change } : affiliate)));
+
   const saved: ChannelTax[] = taxes.filter((tax) => num(tax.pct) > 0).map((tax) => ({ name: tax.name.trim() || "Impuesto", pct: num(tax.pct), net: tax.net }));
   const total = Math.round(saved.reduce((sum, tax) => sum + taxShare(tax), 0) * 10000) / 10000;
   const setTax = (index: number, change: Partial<TaxRow>) => setTaxes(taxes.map((tax, position) => (position === index ? { ...tax, ...change } : tax)));
@@ -50,6 +58,8 @@ export function ChannelForm({ channel, count, onDone }: { channel?: Channel; cou
     event.preventDefault();
     if (!name.trim()) return setError("Ponle nombre al canal.");
     if (num(commission) + total >= 100) return setError("Comisión más impuestos deben sumar menos de 100%.");
+    const highest = Math.max(0, ...savedAffiliates.map((affiliate) => affiliate.pct));
+    if (num(commission) + total + highest >= 95) return setError("Comisión, impuestos y el % del revendedor deben sumar menos de 95%.");
     const row = {
       name: name.trim(),
       commission_pct: num(commission),
@@ -57,6 +67,7 @@ export function ChannelForm({ channel, count, onDone }: { channel?: Channel; cou
       taxes: saved,
       fixed_fee: num(fixedFee),
       shipping_cost: num(shipping),
+      affiliates: savedAffiliates,
       carrier_ids: carrierIds.filter((id) => carriers.some((carrier) => carrier.id === id)),
     };
     save(
@@ -128,6 +139,41 @@ export function ChannelForm({ channel, count, onDone }: { channel?: Channel; cou
             <span className="text-muted"> · en una venta de $199 son {money((199 * total) / 100)}</span>
           </p>
         )}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2 sm:col-span-2">
+        <legend className="mb-1 text-sm font-semibold">Revendedores y afiliados</legend>
+        <p className="text-xs text-muted">
+          Quienes venden tus productos en este canal y se llevan un % del precio (por ejemplo afiliados de TikTok o revendedores). Cada producto te muestra el
+          precio con su % sumado, para que tú ganes lo mismo; al registrar una venta eliges quién la hizo.
+        </p>
+        {affiliates.map((affiliate, index) => (
+          <div key={index} className="flex flex-wrap items-end gap-2">
+            <label className="label min-w-36 flex-1">
+              Nombre
+              <input className="input" value={affiliate.name} onChange={(event) => setAffiliate(index, { name: event.target.value })} placeholder="Afiliado Juan" maxLength={40} />
+            </label>
+            <label className="label w-24">
+              %
+              <input className="input" type="number" min={0} max={90} step="any" value={affiliate.pct} onChange={(event) => setAffiliate(index, { pct: event.target.value })} placeholder="10" />
+            </label>
+            <button type="button" className="btn mb-0.5" aria-label="Quitar revendedor" onClick={() => setAffiliates(affiliates.filter((_, position) => position !== index))}>
+              ✕
+            </button>
+          </div>
+        ))}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn" onClick={() => setAffiliates([...affiliates, { name: "", pct: "" }])}>
+            + Agregar revendedor
+          </button>
+          {[5, 8, 10]
+            .filter((pct) => !affiliates.some((affiliate) => num(affiliate.pct) === pct))
+            .map((pct) => (
+              <button key={pct} type="button" className="btn" onClick={() => setAffiliates([...affiliates, { name: `Revendedor ${pct}%`, pct: String(pct) }])}>
+                + {pct}%
+              </button>
+            ))}
+        </div>
       </fieldset>
 
       <fieldset className="flex flex-col gap-2 sm:col-span-2">

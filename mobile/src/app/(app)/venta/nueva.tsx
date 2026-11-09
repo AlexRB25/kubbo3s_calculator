@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { Button, Card, Chips, ErrorText, Field, Line, Muted, Row, Screen, Select } from '@/components/ui';
-import { channelFees, overheadPerPiece, productCost, shippingQuotes } from '@/lib/costs';
+import { affiliatesOf, channelFees, overheadPerPiece, productCost, shippingQuotes, withAffiliate } from '@/lib/costs';
 import { money, num } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
@@ -15,6 +15,8 @@ export default function NewSaleScreen() {
   const [productId, setProductId] = useState<string | null>(producto ?? null);
   const [customName, setCustomName] = useState('');
   const [channelId, setChannelId] = useState(channels[0]?.id ?? '');
+  // Reseller / affiliate who made the sale (index in the channel's list; 'me' = none).
+  const [affiliateIndex, setAffiliateIndex] = useState('me');
   const [quantity, setQuantity] = useState('1');
   // Empty fields use the automatic value shown as placeholder.
   const [price, setPrice] = useState('');
@@ -26,7 +28,11 @@ export default function NewSaleScreen() {
   const [notes, setNotes] = useState('');
 
   const product = products.find((item) => item.id === productId);
-  const channel = channels.find((item) => item.id === channelId);
+  const baseChannel = channels.find((item) => item.id === channelId);
+  const affiliates = affiliatesOf(baseChannel);
+  const affiliate = affiliateIndex === 'me' ? undefined : affiliates[Number(affiliateIndex)];
+  // With a reseller, their % counts as one more commission in fees and profit.
+  const channel = baseChannel && affiliate ? withAffiliate(baseChannel, affiliate.pct) : baseChannel;
   const pieces = Math.max(Math.round(num(quantity)), 0);
   const listPrice = product?.prices[channelId] ?? 0;
   // What it really sold for; the channel price is only a reference to tell the discount.
@@ -58,6 +64,8 @@ export default function NewSaleScreen() {
         product_name: name,
         channel_id: channel?.id ?? null,
         channel_name: channel?.name ?? '',
+        affiliate_name: affiliate?.name ?? '',
+        affiliate_pct: affiliate?.pct ?? 0,
         quantity: pieces,
         unit_price: unitPrice,
         list_price: listPrice > 0 ? listPrice : null,
@@ -95,8 +103,16 @@ export default function NewSaleScreen() {
         label="Canal"
         options={channels.map((item) => ({ value: item.id, label: item.name }))}
         value={channelId}
-        onChange={setChannelId}
+        onChange={(value) => (setChannelId(value), setAffiliateIndex('me'))}
       />
+      {affiliates.length > 0 && (
+        <Chips
+          label="¿Quién lo vendió?"
+          options={[{ value: 'me', label: 'Yo' }, ...affiliates.map((item, index) => ({ value: String(index), label: `${item.name} · ${item.pct}%` }))]}
+          value={affiliateIndex}
+          onChange={setAffiliateIndex}
+        />
+      )}
       <Row>
         <Field style={{ flex: 1 }} label="Piezas" numeric value={quantity} onChangeText={setQuantity} />
         <Field
