@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 
+import { withResellers } from '@/lib/costs';
 import { isCurrency } from '@/lib/currency';
 import { setNumberFormat, setWorkshopCurrency } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
@@ -131,7 +132,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       suppliers: suppliers.data ?? [],
       printers: printers.data ?? [],
       filaments: filaments.data ?? [],
-      channels: channels.data ?? [],
+      channels: withResellers(channels.data ?? [], profile.data),
       products: products.data ?? [],
       jobs: jobs.data ?? [],
       sales: sales.data ?? [],

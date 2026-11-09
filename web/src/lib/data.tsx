@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, use, useCallback, useEffect, useState, type PropsWithChildren } from "react";
+import { withResellers } from "./costs";
 import { isCurrency } from "./currency";
 import { rememberCurrency } from "./display-currency";
 import { setNumberFormat, setWorkshopCurrency } from "./format";
@@ -117,7 +118,7 @@ async function fetchTables(userId: string): Promise<Loaded> {
       suppliers: suppliers.data ?? [],
       printers: printers.data ?? [],
       filaments: filaments.data ?? [],
-      channels: channels.data ?? [],
+      channels: withResellers(channels.data ?? [], profile.data),
       products: products.data ?? [],
       jobs: jobs.data ?? [],
       sales: sales.data ?? [],

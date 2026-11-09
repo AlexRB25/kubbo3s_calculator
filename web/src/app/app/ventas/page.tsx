@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Empty, Line, Modal, PageHeader, TableCard } from "@/components/app/ui";
-import { affiliatesOf, channelFees, LEVEL_LABEL, levelOf, levelPrices, overheadPerPiece, priceLevels, productCost, shippingFor, shippingQuotes, withAffiliate } from "@/lib/costs";
+import { channelFees, LEVEL_LABEL, levelOf, levelPrices, overheadPerPiece, priceLevels, productCost, shippingFor, shippingQuotes, withoutReseller } from "@/lib/costs";
 import { useData, useSave } from "@/lib/data";
 import { day, money, num } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
@@ -14,8 +14,8 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const [productId, setProductId] = useState("");
   const [customName, setCustomName] = useState("");
   const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
-  // Reseller / affiliate who made the sale (index in the channel's list; "" = me).
-  const [affiliateIndex, setAffiliateIndex] = useState("");
+  // Sold by a reseller: their % (from Ajustes) goes into the fees; sold directly it does not.
+  const [byReseller, setByReseller] = useState(false);
   const [quantity, setQuantity] = useState("1");
   // What it really sold for; the channel price is only a reference to tell the discount.
   const [price, setPrice] = useState("");
@@ -30,16 +30,14 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const [notes, setNotes] = useState("");
 
   const product = products.find((item) => item.id === productId);
-  const baseChannel = channels.find((item) => item.id === channelId);
-  const affiliate = affiliatesOf(baseChannel)[Number(affiliateIndex)] as { name: string; pct: number } | undefined;
-  // With a reseller, their % counts as one more commission in fees, levels and profit.
-  const channel = baseChannel && affiliate ? withAffiliate(baseChannel, affiliate.pct) : baseChannel;
+  const channel = channels.find((item) => item.id === channelId);
   const pieces = Math.max(Math.round(num(quantity)), 0);
   const listPrice = product?.prices[channelId] ?? 0;
   const unitPrice = num(price);
   // Positive: sold below the list price; negative: above it.
   const discount = listPrice > 0 && price !== "" ? listPrice - unitPrice : 0;
-  const autoFees = channelFees(channel, unitPrice, pieces);
+  const resellerShare = Number(channel?.reseller_share ?? 0);
+  const autoFees = channelFees(channel && !byReseller ? withoutReseller(channel) : channel, unitPrice, pieces);
   const totalFees = fees === "" ? autoFees : num(fees);
   const shipped = delivery === "shipped";
   // Quoted with the channel's carriers for the product's weight and box, at the price it sold for.
@@ -77,8 +75,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
             product_name: name,
             channel_id: channel?.id ?? null,
             channel_name: channel?.name ?? "",
-            affiliate_name: affiliate?.name ?? "",
-            affiliate_pct: affiliate?.pct ?? 0,
+            reseller_pct: byReseller ? resellerShare : 0,
             quantity: pieces,
             unit_price: unitPrice,
             list_price: listPrice > 0 ? listPrice : null,
@@ -124,7 +121,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
       )}
       <label className="label">
         Canal
-        <select className="input" value={channelId} onChange={(event) => (setChannelId(event.target.value), setAffiliateIndex(""))}>
+        <select className="input" value={channelId} onChange={(event) => setChannelId(event.target.value)}>
           {channels.map((item) => (
             <option key={item.id} value={item.id}>
               {item.name}
@@ -132,18 +129,10 @@ function SaleForm({ onDone }: { onDone: () => void }) {
           ))}
         </select>
       </label>
-      {affiliatesOf(baseChannel).length > 0 && (
-        <label className="label">
-          ¿Quién lo vendió?
-          <select className="input" value={affiliateIndex} onChange={(event) => setAffiliateIndex(event.target.value)}>
-            <option value="">Yo (sin revendedor)</option>
-            {affiliatesOf(baseChannel).map((item, index) => (
-              <option key={index} value={index}>
-                {item.name} · se lleva {item.pct}%
-              </option>
-            ))}
-          </select>
-          {affiliate && <span className="font-normal">Su {affiliate.pct}% se suma a las comisiones de esta venta.</span>}
+      {resellerShare > 0 && (
+        <label className="flex items-center gap-2 self-end pb-3 text-sm">
+          <input type="checkbox" checked={byReseller} onChange={(event) => setByReseller(event.target.checked)} />
+          La vendió un revendedor (se lleva {resellerShare}%)
         </label>
       )}
       <label className="label">
@@ -286,7 +275,7 @@ export default function SalesPage() {
                   </td>
                   <td className="text-muted">
                     {sale.channel_name || "—"}
-                    {sale.affiliate_name ? <span className="block text-xs">por {sale.affiliate_name} ({Number(sale.affiliate_pct)}%)</span> : null}
+                    {Number(sale.reseller_pct) > 0 ? <span className="block text-xs">por revendedor ({Number(sale.reseller_pct)}%)</span> : null}
                   </td>
                   <td className="num">
                     {money(sale.quantity * sale.unit_price)}

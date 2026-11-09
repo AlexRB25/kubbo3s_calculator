@@ -3425,10 +3425,12 @@ end $$;
 revoke all on function public.buy_scans(uuid) from public, anon;
 grant execute on function public.buy_scans(uuid) to authenticated;
 
--- ───────────────────────── Revendedores y afiliados ─────────────────────────
--- Por canal (TikTok, Mercado Libre…), los revendedores o afiliados y el % del precio que se llevan:
--- [{"name": "Juan", "pct": 10}]. El precio sugerido les suma su % para que el taller gane lo mismo.
-alter table public.channels add column if not exists affiliates jsonb not null default '[]';
--- Venta hecha por un revendedor: quién y su %, que ya va sumado en fees.
-alter table public.sales add column if not exists affiliate_name text not null default '';
-alter table public.sales add column if not exists affiliate_pct numeric(6,2) not null default 0 check (affiliate_pct >= 0 and affiliate_pct < 100);
+-- ───────────────────────── Revendedores ─────────────────────────
+-- % para revendedores que se suma al precio final (Ajustes): igual en todas las tiendas (profiles.reseller_pct)
+-- o uno por tienda (channels.reseller_pct) cuando reseller_by_channel. Se cuenta como una comisión más, así el
+-- precio sugerido deja la misma ganancia aunque el revendedor se lleve su %.
+alter table public.profiles add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 90);
+alter table public.profiles add column if not exists reseller_by_channel boolean not null default false;
+alter table public.channels add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 90);
+-- Venta hecha por un revendedor: el % que se llevó (ya va sumado en fees).
+alter table public.sales add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 100);

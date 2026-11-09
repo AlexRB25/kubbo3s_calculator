@@ -9,6 +9,9 @@ export type Profile = {
   name: string;
   business_name: string;
   kwh_price: number;
+  /** % for resellers added to the final price: the same for every store, or per store when reseller_by_channel. */
+  reseller_pct?: number;
+  reseller_by_channel?: boolean;
   /** Old single margin (% of the price); kept in step for older app versions. Prices use price_levels. */
   margin_pct: number;
   /** How much to earn by level, as % of the production cost. */
@@ -214,9 +217,6 @@ export type Carrier = {
   notes: string;
 };
 
-/** A reseller or affiliate who sells in a channel and keeps `pct` % of the price. */
-export type ChannelAffiliate = { name: string; pct: number };
-
 export type Channel = {
   id: string;
   name: string;
@@ -230,8 +230,10 @@ export type Channel = {
   fixed_fee: number;
   shipping_cost: number;
   sort: number;
-  /** Resellers / affiliates of this channel and their %. */
-  affiliates?: ChannelAffiliate[];
+  /** Resellers' % of this store, used when the workshop sets one per store (profiles.reseller_by_channel). */
+  reseller_pct?: number;
+  /** The resellers' % that applies to this channel (filled when loading, from Ajustes); prices count it like a commission. */
+  reseller_share?: number;
 };
 
 export type PackagingKind = 'box' | 'envelope' | 'bag' | 'other';
@@ -379,9 +381,8 @@ export type Sale = {
   packaging_cost: number;
   /** The channel price when it was sold; with unit_price it tells the discount. */
   list_price: number | null;
-  /** Reseller / affiliate who made the sale ('' = none) and the % they kept (already in fees). */
-  affiliate_name?: string;
-  affiliate_pct?: number;
+  /** % a reseller kept on this sale (already in fees); 0 = sold directly. */
+  reseller_pct?: number;
   profit: number;
   notes: string;
   sold_at: string;

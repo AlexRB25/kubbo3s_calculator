@@ -176,10 +176,30 @@ export function suppliesCost(uses: MaterialUse[] | undefined, materials: Materia
   }, 0);
 }
 
+/** What a channel takes from the price, in %: commission, taxes and the resellers' % (from Ajustes). */
+export function channelPct(channel: Channel) {
+  return Number(channel.commission_pct) + Number(channel.tax_pct ?? 0) + Number(channel.reseller_share ?? 0);
+}
+
+/** The resellers' % for a channel: the workshop's one, or the store's own when set per store. */
+export function resellerPct(profile: { reseller_pct?: number; reseller_by_channel?: boolean } | null | undefined, channel: Pick<Channel, 'reseller_pct'>) {
+  return Number((profile?.reseller_by_channel ? channel.reseller_pct : profile?.reseller_pct) ?? 0);
+}
+
+/** The channels with the resellers' % that applies to each (done when the data loads). */
+export function withResellers<T extends Channel>(channels: T[], profile: { reseller_pct?: number; reseller_by_channel?: boolean } | null | undefined): T[] {
+  return channels.map((channel) => ({ ...channel, reseller_share: resellerPct(profile, channel) }));
+}
+
+/** The channel without the resellers' %: a sale made directly. */
+export function withoutReseller(channel: Channel): Channel {
+  return { ...channel, reseller_share: 0 };
+}
+
 /** Commission and taxes that go out of a sale in the channel (shipping is counted apart). */
 export function channelFees(channel: Channel | undefined, unitPrice: number, quantity = 1) {
   if (!channel) return 0;
-  return quantity * ((unitPrice * (channel.commission_pct + (channel.tax_pct ?? 0))) / 100 + channel.fixed_fee);
+  return quantity * ((unitPrice * channelPct(channel)) / 100 + channel.fixed_fee);
 }
 
 /**
@@ -248,7 +268,7 @@ export function shippingFor(channel: Channel, carriers: Carrier[], productGrams:
 export function suggestedPriceWithShipping(cost: number, channel: Channel, markupPct: number, shippingAt: (price: number) => number) {
   const plain = suggestedPrice(cost, channel, markupPct);
   const profit = (cost * markupPct) / 100;
-  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100;
+  const kept = 1 - channelPct(channel) / 100;
   if (kept <= 0.01 || plain <= 0) return 0;
   const priceFor = (shipping: number) => (cost + channel.fixed_fee + shipping + profit) / kept;
   let price = priceFor(shippingAt(plain));
@@ -272,7 +292,7 @@ export function unitProfit(price: number, cost: number, channel: Channel, shippi
  * 100 % leaves 50 of profit. 0 when the channel takes everything.
  */
 export function suggestedPrice(cost: number, channel: Channel, markupPct: number, shipping = 0) {
-  const kept = 1 - (channel.commission_pct + (channel.tax_pct ?? 0)) / 100;
+  const kept = 1 - channelPct(channel) / 100;
   if (kept <= 0.01) return 0;
   return (cost * (1 + markupPct / 100) + channel.fixed_fee + shipping) / kept;
 }
@@ -324,19 +344,6 @@ export function levelOf(price: number, prices: LevelPrices, levels: PriceLevels)
 export function packagingName(packaging: Packaging) {
   const sizes = [packaging.length_mm, packaging.width_mm, packaging.height_mm].filter((value) => value > 0);
   return sizes.length ? `${packaging.name} · ${sizes.map((value) => Math.round(value) / 10).join('×')} cm` : packaging.name;
-}
-
-/** The channel's resellers / affiliates with a % above 0. */
-export function affiliatesOf(channel: Channel | undefined) {
-  return (channel?.affiliates ?? []).filter((affiliate) => Number(affiliate.pct) > 0);
-}
-
-/**
- * The channel as seen when a reseller / affiliate sells: their % adds to the commission, so every price and profit
- * (suggested prices, levels, fees) includes it and the workshop keeps the same.
- */
-export function withAffiliate(channel: Channel, pct: number): Channel {
-  return pct > 0 ? { ...channel, commission_pct: Number(channel.commission_pct) + Number(pct) } : channel;
 }
 
 /** What a gram of a filament costs: from its purchases, or the reference per kg while it has none. */

@@ -11,6 +11,7 @@ import { Swatch } from "@/components/app/Swatch";
 import { Empty, Line, Modal, PageHeader, Switch, TableCard } from "@/components/app/ui";
 import {
   channelFees,
+  channelPct,
   costPerGram,
   materialUnitCost,
   overheadPerPiece,
@@ -33,8 +34,6 @@ import {
   LEVEL_LABEL,
   type Combo,
   type PriceLevels,
-  affiliatesOf,
-  withAffiliate,
 } from "@/lib/costs";
 import { LevelPricesInfo, LevelsFields, draftOf, readLevels } from "@/components/app/PriceLevels";
 import { useData, useSave } from "@/lib/data";
@@ -42,7 +41,7 @@ import { filamentColors } from "@/lib/labels";
 import { duration, field, money, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
-import type { Channel, Part, Plate, Product } from "@/lib/types";
+import type { Part, Plate, Product } from "@/lib/types";
 
 /** A piece as typed. */
 type PartRow = { id: string; name: string; needed: string };
@@ -889,21 +888,6 @@ function CatalogSwitch({ product }: { product: Product }) {
   );
 }
 
-/** Under a channel's price: the price with each reseller's % added (shipped), so the workshop earns the same. */
-function AffiliatePrices({ channel, cost, margin, shippingAt }: { channel: Channel; cost: number; margin: number; shippingAt: (price: number) => number }) {
-  const affiliates = affiliatesOf(channel);
-  if (!affiliates.length) return null;
-  return (
-    <div className="text-xs text-muted">
-      {affiliates.map((affiliate) => (
-        <div key={affiliate.name}>
-          {affiliate.name} +{affiliate.pct}%: {money(suggestedPriceWithShipping(cost, withAffiliate(channel, affiliate.pct), margin, shippingAt))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function ProductsPage() {
   const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
@@ -1030,27 +1014,7 @@ export default function ProductsPage() {
                               </>
                             );
                           })()}
-                          {affiliatesOf(channel).length > 0 && (
-                            <>
-                              <p className="mt-1 font-semibold">Con revendedor (con envío, para ganar lo mismo)</p>
-                              {affiliatesOf(channel).map((affiliate) => {
-                                const resold = withAffiliate(channel, affiliate.pct);
-                                return (
-                                  <div key={affiliate.name}>
-                                    <TipLine label={`${affiliate.name} (+${affiliate.pct}%)`} value={money(suggestedPriceWithShipping(cost, resold, margin, shippingAt))} />
-                                    {price ? (
-                                      <TipLine
-                                        label={`· a tu precio ganas`}
-                                        value={money(unitProfit(price, cost, resold, shippingAt(price)))}
-                                        tone={tone(unitProfit(price, cost, resold, shippingAt(price)))}
-                                      />
-                                    ) : null}
-                                  </div>
-                                );
-                              })}
-                            </>
-                          )}
-                          <TipLine label={`Comisión e impuestos (${(channel.commission_pct + Number(channel.tax_pct ?? 0)).toFixed(1)}%)`} value={`− ${money(channelFees(channel, at))}`} />
+                          <TipLine label={`Comisión e impuestos${channel.reseller_share ? ` + revendedor ${channel.reseller_share}%` : ""} (${channelPct(channel).toFixed(1)}%)`} value={`− ${money(channelFees(channel, at))}`} />
                           {quotes.length > 0 ? (
                             <>
                               <TipLine label={`Envío más barato · ${quotes[0].carrier.name}`} value={money(quotes[0].cost)} />
@@ -1097,7 +1061,6 @@ export default function ProductsPage() {
                               sugerido {money(suggestedShipped)}
                               {tip}
                               {suggestedShipped > 0 && <div className={`text-xs ${tone(estimated)}`}>gana ~{money(estimated)} estimado</div>}
-                              <AffiliatePrices channel={channel} cost={cost} margin={margin} shippingAt={shippingAt} />
                             </div>
                           </td>
                         );
@@ -1109,7 +1072,6 @@ export default function ProductsPage() {
                             {money(price)}
                             {tip}
                             <div className={`text-xs ${tone(shipped)}`}>gana {money(shipped)} con envío</div>
-                            <AffiliatePrices channel={channel} cost={cost} margin={margin} shippingAt={shippingAt} />
                           </div>
                         </td>
                       );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 
+import { ResellerSettings } from '@/components/reseller-settings';
 import { Button, Chips, ErrorText, Field, Muted, Screen } from '@/components/ui';
 import { CURRENCIES, loadRates, type Currency } from '@/lib/currency';
 import { levelPrices, priceLevels } from '@/lib/costs';
@@ -130,6 +131,8 @@ export default function SettingsScreen() {
 
       <ErrorText>{error}</ErrorText>
       <Button label="Guardar" onPress={submit} loading={busy} />
+
+      <ResellerSettings key={`${profile?.reseller_pct}-${profile?.reseller_by_channel}`} />
     </Screen>
   );
 }

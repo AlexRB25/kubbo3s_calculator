@@ -5,6 +5,7 @@ import { CurrencySettings } from "@/components/app/CurrencySettings";
 import { PriceLevelsSettings } from "@/components/app/PriceLevels";
 import { NumberFormatSettings } from "@/components/app/NumberFormatSettings";
 import { QuoteSettings } from "@/components/app/QuoteSettings";
+import { ResellerSettings } from "@/components/app/ResellerSettings";
 import { OverheadCosts } from "@/components/app/OverheadCosts";
 import { WasteRules } from "@/components/app/WasteRules";
 import { FieldsForm, PageHeader, type FieldDef } from "@/components/app/ui";
@@ -50,6 +51,7 @@ export default function SettingsPage() {
         />
       </div>
       <PriceLevelsSettings />
+      <ResellerSettings key={`${profile?.reseller_pct}-${profile?.reseller_by_channel}`} />
       <OverheadCosts key={profile?.currency} />
       <WasteRules />
       <QuoteSettings />
