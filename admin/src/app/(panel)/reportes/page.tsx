@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { replyBugReport, saveBugReport } from "@/app/actions";
+import { emailConfigured } from "@/lib/email";
 import { dateTime } from "@/lib/format";
 import { admin, must } from "@/lib/supabase/admin";
 
@@ -18,7 +19,50 @@ type Report = {
   created_at: string;
 };
 
-type Message = { id: string; report_id: string; from_admin: boolean; body: string; read_at: string | null; created_at: string };
+type Message = {
+  id: string;
+  report_id: string;
+  from_admin: boolean;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  emailed_at?: string | null;
+  email_error?: string | null;
+};
+
+type Activity = {
+  lastSignIn: string | null;
+  lastDay: string | null;
+  days: number;
+  runs: number;
+  runsAfterReport: number;
+  runsAfterAnswer: number | null;
+  lastRun: string | null;
+  tools: string[];
+};
+
+/** What the person did around the report: last visit, uses before and after it, and after our answer. */
+async function activity(report: Report, messages: Message[]): Promise<Activity | null> {
+  if (!report.user_id) return null;
+  const db = admin();
+  const lastAnswer = messages.filter((message) => message.from_admin).at(-1)?.created_at ?? null;
+  const [user, days, runs] = await Promise.all([
+    db.auth.admin.getUserById(report.user_id),
+    db.from("activity_days").select("day").eq("user_id", report.user_id).order("day", { ascending: false }),
+    db.from("tool_runs").select("tool, created_at").eq("user_id", report.user_id).order("created_at", { ascending: false }).limit(1000),
+  ]);
+  const list = (runs.data ?? []) as { tool: string; created_at: string }[];
+  return {
+    lastSignIn: user.data.user?.last_sign_in_at ?? null,
+    lastDay: days.data?.[0]?.day ?? null,
+    days: days.data?.length ?? 0,
+    runs: list.length,
+    runsAfterReport: list.filter((run) => run.created_at > report.created_at).length,
+    runsAfterAnswer: lastAnswer ? list.filter((run) => run.created_at > lastAnswer).length : null,
+    lastRun: list[0]?.created_at ?? null,
+    tools: [...new Set(list.map((run) => run.tool))],
+  };
+}
 
 const STATUSES = {
   new: "Nuevos",
@@ -73,6 +117,8 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reportes
     ? ((await admin().from("bug_report_messages").select("*").in("report_id", reports.map((report) => report.id)).order("created_at")).data ?? [])
     : [];
   const messagesOf = (id: string) => (thread as Message[]).filter((message) => message.report_id === id);
+  const activities = await Promise.all(reports.map((report) => activity(report, messagesOf(report.id))));
+  const mailReady = emailConfigured();
 
   const tab = "rounded-lg px-3 py-1.5 text-sm font-medium text-muted hover:bg-raised aria-[current=true]:bg-raised aria-[current=true]:text-white";
 
@@ -101,6 +147,9 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reportes
         const { screenshot, file } = extras[index];
         const context = Object.entries(report.context ?? {}).filter(([, value]) => value !== null && value !== "");
         const messages = messagesOf(report.id);
+        const seen = activities[index];
+        const answered = messages.some((message) => message.from_admin);
+        const lastAnswer = messages.filter((message) => message.from_admin).at(-1);
         return (
           <article key={report.id} className="card grid gap-4 lg:grid-cols-[1fr_16rem]">
             <div className="flex min-w-0 flex-col gap-3 text-sm">
@@ -144,6 +193,30 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reportes
                 </details>
               )}
 
+              {seen && (
+                <section className="flex flex-col gap-1 rounded-lg border border-line p-3 text-xs">
+                  <h3 className="text-sm font-semibold">Actividad del usuario</h3>
+                  <p>
+                    Último ingreso: {seen.lastSignIn ? dateTime(seen.lastSignIn) : "—"} · último día activo: {seen.lastDay ?? "—"} · {seen.days} día{seen.days === 1 ? "" : "s"} activo
+                    {seen.days === 1 ? "" : "s"}
+                  </p>
+                  <p>
+                    Usos de herramientas: {seen.runs} en total · {seen.runsAfterReport} después del reporte
+                    {seen.lastRun && ` · último: ${dateTime(seen.lastRun)}`}
+                    {seen.tools.length > 0 && ` (${seen.tools.join(", ")})`}
+                  </p>
+                  {answered && (
+                    <p className={lastAnswer?.read_at || (seen.runsAfterAnswer ?? 0) > 0 ? "text-money" : "text-bad"}>
+                      {lastAnswer?.read_at
+                        ? `Leyó tu respuesta${(seen.runsAfterAnswer ?? 0) > 0 ? ` y usó las herramientas ${seen.runsAfterAnswer} ${seen.runsAfterAnswer === 1 ? "vez" : "veces"} desde entonces` : ", pero no ha vuelto a usar las herramientas"}.`
+                        : (seen.runsAfterAnswer ?? 0) > 0
+                          ? `Volvió a usar las herramientas (${seen.runsAfterAnswer}) pero no ha abierto tu respuesta.`
+                          : "No ha vuelto desde tu respuesta."}
+                    </p>
+                  )}
+                </section>
+              )}
+
               <section className="flex flex-col gap-2 rounded-lg border border-line p-3">
                 <h3 className="text-sm font-semibold">Conversación con el usuario</h3>
                 {messages.length === 0 && <p className="text-xs text-muted">Sin mensajes. Lo que escribas aquí le aparece en «Mis reportes» con un aviso arriba de la página.</p>}
@@ -151,7 +224,9 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reportes
                   <div key={message.id} className={`max-w-[90%] rounded-lg p-2 ${message.from_admin ? "self-end bg-raised" : "self-start border border-warn/50"}`}>
                     <p className="text-xs text-muted">
                       {message.from_admin ? "Tú (admin)" : "Usuario"} · {dateTime(message.created_at)}
-                      {message.from_admin && (message.read_at ? " · leído" : " · sin leer")}
+                      {message.from_admin && (message.read_at ? ` · leído el ${dateTime(message.read_at)}` : " · sin leer")}
+                      {message.from_admin && message.emailed_at && " · correo enviado"}
+                      {message.from_admin && message.email_error && <span className="text-bad"> · el correo falló: {message.email_error}</span>}
                     </p>
                     <p className="whitespace-pre-line">{message.body}</p>
                   </div>
@@ -160,6 +235,14 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reportes
                   <form action={replyBugReport} className="flex flex-col gap-2">
                     <input type="hidden" name="id" value={report.id} />
                     <textarea name="body" required maxLength={5000} className="input min-h-20" placeholder="Hola, ¿nos puedes mandar el archivo o contarnos en qué paso falló?" />
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" name="notify" defaultChecked={mailReady && !!report.email} disabled={!mailReady || !report.email} />
+                      {!report.email
+                        ? "Sin correo: solo lo verá en Mis reportes"
+                        : mailReady
+                          ? `Avisarle por correo a ${report.email}`
+                          : "Avisarle por correo (falta RESEND_API_KEY en Vercel)"}
+                    </label>
                     <button className="btn btn-primary self-start">Enviar mensaje</button>
                   </form>
                 ) : (

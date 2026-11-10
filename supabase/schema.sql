@@ -3493,3 +3493,7 @@ language sql security definer set search_path = public as $$
 $$;
 revoke all on function public.bug_report_seen(uuid) from public, anon;
 grant execute on function public.bug_report_seen(uuid) to authenticated;
+
+-- Aviso por correo de la respuesta del administrador (Resend, desde el panel admin).
+alter table public.bug_report_messages add column if not exists emailed_at timestamptz;
+alter table public.bug_report_messages add column if not exists email_error text;

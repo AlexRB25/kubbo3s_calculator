@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { admin, must } from "@/lib/supabase/admin";
 import { serverClient } from "@/lib/supabase/server";
 import { cleanUrl } from "@/lib/format";
+import { sendEmail } from "@/lib/email";
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const number = (form: FormData, key: string) => Number(text(form, key) || 0);
@@ -402,6 +403,24 @@ async function markRepliesRead(report: string) {
   await admin().from("bug_report_messages").update({ read_at: new Date().toISOString() }).eq("report_id", report).eq("from_admin", false).is("read_at", null);
 }
 
+/** "We answered your report": an email with a button to Mis reportes, so they read it there (and come back). */
+async function emailReply(report: string, message: string) {
+  const { data } = await admin().from("bug_reports").select("number, email, app").eq("id", report).single();
+  if (!data?.email) return;
+  const tools = (process.env.TOOLS_URL || "https://tools.kubbo3d.com").replace(/\/+$/, "");
+  const failed = await sendEmail(
+    data.email,
+    `Respondimos tu reporte #${data.number} en Kubbo3D`,
+    ["¡Hola!", `Ya revisamos el problema que nos reportaste (#${data.number}) y te dejamos un mensaje en tu cuenta de Kubbo3D.`, "Entra para leerlo y, si hace falta, contestarnos ahí mismo."],
+    { label: "Ver mensaje", url: `${tools}/reportes?n=${data.number}` },
+  );
+  // Before the SQL of these two columns runs, this update just does nothing.
+  await admin()
+    .from("bug_report_messages")
+    .update(failed ? { email_error: failed } : { emailed_at: new Date().toISOString(), email_error: null })
+    .eq("id", message);
+}
+
 /** A message to whoever sent the report: they see it in Mis reportes, with a notice at the top of the page. */
 export async function replyBugReport(form: FormData) {
   await requireAdmin();
@@ -409,8 +428,9 @@ export async function replyBugReport(form: FormData) {
   const body = text(form, "body");
   if (!body) throw new Error("Escribe el mensaje.");
   if (body.length > 5000) throw new Error("El mensaje es muy largo (máximo 5000 caracteres).");
-  must(await admin().from("bug_report_messages").insert({ report_id: report, from_admin: true, body }));
+  const message = must(await admin().from("bug_report_messages").insert({ report_id: report, from_admin: true, body }).select("id").single()) as { id: string };
   await markRepliesRead(report);
+  if (flag(form, "notify")) await emailReply(report, message.id);
   // Answering a new report means it is being looked at.
   must(await admin().from("bug_reports").update({ status: "reviewing", updated_at: new Date().toISOString() }).eq("id", report).eq("status", "new"));
   revalidatePath("/reportes");
