@@ -36,13 +36,15 @@ export default async function PanelLayout({ children }: LayoutProps<"/">) {
     .select("id", { count: "exact", head: true })
     .eq("status", "pending");
   const { count: newReports } = await admin().from("bug_reports").select("id", { count: "exact", head: true }).eq("status", "new");
+  // Answers from users the administrator has not seen (empty before the messages SQL runs).
+  const { count: replies } = await admin().from("bug_report_messages").select("id", { count: "exact", head: true }).eq("from_admin", false).is("read_at", null);
   // Before the marketplace part of the schema runs these tables do not exist: the counts just stay empty.
   const { count: modelReports } = await admin().from("model_reports").select("id", { count: "exact", head: true }).eq("status", "new");
   const { count: payouts } = await admin().from("maker_payouts").select("id", { count: "exact", head: true }).eq("status", "requested");
   const { count: claims } = await admin().from("model_claims").select("id", { count: "exact", head: true }).eq("status", "new");
   const badges: Record<string, number | null> = {
     "/pedidos": pending,
-    "/reportes": newReports,
+    "/reportes": (newReports ?? 0) + (replies ?? 0),
     "/marketplace": modelReports,
     "/retiros": payouts,
     "/derechos": claims,

@@ -393,6 +393,26 @@ export async function saveBugReport(form: FormData) {
       .update({ status, admin_note: text(form, "admin_note"), updated_at: new Date().toISOString() })
       .eq("id", text(form, "id")),
   );
+  await markRepliesRead(text(form, "id"));
+  revalidatePath("/reportes");
+}
+
+/** The user's answers on this report count as seen by the administrator. */
+async function markRepliesRead(report: string) {
+  await admin().from("bug_report_messages").update({ read_at: new Date().toISOString() }).eq("report_id", report).eq("from_admin", false).is("read_at", null);
+}
+
+/** A message to whoever sent the report: they see it in Mis reportes, with a notice at the top of the page. */
+export async function replyBugReport(form: FormData) {
+  await requireAdmin();
+  const report = text(form, "id");
+  const body = text(form, "body");
+  if (!body) throw new Error("Escribe el mensaje.");
+  if (body.length > 5000) throw new Error("El mensaje es muy largo (máximo 5000 caracteres).");
+  must(await admin().from("bug_report_messages").insert({ report_id: report, from_admin: true, body }));
+  await markRepliesRead(report);
+  // Answering a new report means it is being looked at.
+  must(await admin().from("bug_reports").update({ status: "reviewing", updated_at: new Date().toISOString() }).eq("id", report).eq("status", "new"));
   revalidatePath("/reportes");
 }
 

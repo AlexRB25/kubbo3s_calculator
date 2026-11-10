@@ -3434,3 +3434,62 @@ alter table public.profiles add column if not exists reseller_by_channel boolean
 alter table public.channels add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 90);
 -- Venta hecha por un revendedor: el % que se llevó (ya va sumado en fees).
 alter table public.sales add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 100);
+
+-- ───────────────────────── Mensajes de los reportes ─────────────────────────
+-- Conversación de cada reporte de problema entre el administrador y quien lo envió. El panel admin
+-- escribe con la llave secreta; el usuario solo lee y responde en sus propios reportes.
+
+create table if not exists public.bug_report_messages (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.bug_reports (id) on delete cascade,
+  from_admin boolean not null default false,
+  body text not null check (char_length(body) between 1 and 5000),
+  -- Cuándo lo leyó el otro lado (el usuario si es del admin; el admin si es del usuario).
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists bug_report_messages_report_idx on public.bug_report_messages (report_id, created_at);
+create index if not exists bug_report_messages_unread_idx on public.bug_report_messages (from_admin, report_id) where read_at is null;
+
+alter table public.bug_report_messages enable row level security;
+revoke all on public.bug_report_messages from anon;
+revoke update, delete on public.bug_report_messages from authenticated;
+drop policy if exists bug_report_messages_select_own on public.bug_report_messages;
+create policy bug_report_messages_select_own on public.bug_report_messages for select to authenticated
+  using (exists (select 1 from public.bug_reports r where r.id = report_id and r.user_id = (select auth.uid())));
+drop policy if exists bug_report_messages_insert_own on public.bug_report_messages;
+create policy bug_report_messages_insert_own on public.bug_report_messages for insert to authenticated
+  with check (
+    not from_admin and read_at is null
+    and exists (select 1 from public.bug_reports r where r.id = report_id and r.user_id = (select auth.uid()))
+  );
+
+-- Respuesta del usuario: máximo 30 por hora, y si el reporte estaba resuelto o descartado se reabre.
+create or replace function public.bug_report_messages_on_reply() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.from_admin then
+    return new;
+  end if;
+  if (select count(*) from public.bug_report_messages m join public.bug_reports r on r.id = m.report_id
+      where r.user_id = (select auth.uid()) and not m.from_admin and m.created_at > now() - interval '1 hour') >= 30 then
+    raise exception using errcode = 'P0001', message = 'Enviaste muchos mensajes en la última hora. Espera un poco.';
+  end if;
+  update public.bug_reports
+     set status = case when status in ('fixed', 'dismissed') then 'reviewing' else status end, updated_at = now()
+   where id = new.report_id;
+  return new;
+end;
+$$;
+drop trigger if exists bug_report_messages_on_reply on public.bug_report_messages;
+create trigger bug_report_messages_on_reply before insert on public.bug_report_messages for each row execute function public.bug_report_messages_on_reply();
+
+-- El usuario abrió el reporte: marca como leídos los mensajes del administrador.
+create or replace function public.bug_report_seen(p_report uuid) returns void
+language sql security definer set search_path = public as $$
+  update public.bug_report_messages m set read_at = now()
+   where m.report_id = p_report and m.from_admin and m.read_at is null
+     and exists (select 1 from public.bug_reports r where r.id = p_report and r.user_id = (select auth.uid()));
+$$;
+revoke all on function public.bug_report_seen(uuid) from public, anon;
+grant execute on function public.bug_report_seen(uuid) to authenticated;
