@@ -1,3 +1,4 @@
+import { preflight, withCors } from "@/lib/cors";
 import { kiriConfigured, startScan, type ScanRow } from "@/lib/kiri";
 import { adminClient, UUID } from "@/lib/server";
 
@@ -8,7 +9,11 @@ export const maxDuration = 300;
  * Sends a claimed scan (claim_scan()) to KIRI once its photos or video are uploaded to the bucket scans, in
  * <user>/<scan>/in/. Header "Authorization: Bearer <access token>", body {"scan_id"}.
  */
-export async function POST(request: Request) {
+export const OPTIONS = preflight;
+
+export const POST = async (request: Request) => withCors(request, await handle(request));
+
+async function handle(request: Request) {
   if (!kiriConfigured()) return Response.json({ error: "El escáner todavía no está configurado." }, { status: 503 });
   const token = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const { data: auth } = token ? await adminClient().auth.getUser(token) : { data: { user: null } };

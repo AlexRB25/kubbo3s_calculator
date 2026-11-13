@@ -17,7 +17,6 @@ const LINKS: { href: string; label: string; icon: NavIconName; roles?: ShopRole[
   { href: "/app/calculadora", icon: "calculadora", label: "Cálculo rápido" },
   { href: "/app/cotizaciones", icon: "cotizaciones", label: "Cotizaciones" },
   { href: "/app/clientes", icon: "clientes", label: "Clientes" },
-  { href: "/app/escaner", icon: "escaner", label: "Escáner 3D" },
   { href: "/app/inventario", icon: "inventario", label: "Inventario" },
   { href: "/app/productos", icon: "productos", label: "Productos" },
   { href: "/app/catalogo", icon: "catalogo", label: "Mi catálogo", roles: ["owner", "admin"] },

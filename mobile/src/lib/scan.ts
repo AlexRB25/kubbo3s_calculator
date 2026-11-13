@@ -1,4 +1,4 @@
-// Same file in web/src/lib and mobile/src/lib: keep them identical.
+// Same file in the calculator app (mobile/src/lib) and in kubbo3d-tools/src/lib: keep them identical.
 
 /** How to take the photos or video so KIRI can rebuild the object. */
 export const SCAN_TIPS = [

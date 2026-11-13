@@ -112,7 +112,7 @@ function PhoneInput({ name, value, placeholder }: { name: string; value: string;
   const known = DIAL_CODES.some((item) => item.code === code);
   return (
     <div className="flex gap-2">
-      <select name={`${name}__code`} defaultValue={code} aria-label="Lada del país" className="input w-auto shrink-0">
+      <select name={`${name}__code`} defaultValue={code} aria-label="Lada del país" className="input shrink-0" style={{ width: "8.5rem" }}>
         {!known && <option value={code}>{code}</option>}
         {DIAL_CODES.map((item) => (
           <option key={item.code} value={item.code}>

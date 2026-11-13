@@ -1,3 +1,4 @@
+import { preflight, toolsOrigin, withCors } from "@/lib/cors";
 import { createClient } from "@supabase/supabase-js";
 import { loadRates } from "@/lib/currency";
 import { adminClient, createCheckout, paymentsConfigured, UUID } from "@/lib/server";
@@ -8,7 +9,11 @@ import { chargeCurrency } from "@/lib/stripe";
  * with the buyer's own session (buy_scans() checks the active subscription and sets the price); the price is
  * in dollars and is charged in the buyer's currency at today's rate.
  */
-export async function POST(request: Request) {
+export const OPTIONS = preflight;
+
+export const POST = async (request: Request) => withCors(request, await handle(request));
+
+async function handle(request: Request) {
   if (!paymentsConfigured()) return Response.json({ error: "El pago en línea no está configurado todavía." }, { status: 503 });
   const url = process.env.PB_SUPABASE_URL!;
   const key = process.env.PB_SUPABASE_PUBLISHABLE_KEY!;
@@ -36,7 +41,8 @@ export async function POST(request: Request) {
     email: auth.user.email,
     lines: [{ name: `Kubbo3D: paquete de ${purchase.scans} escaneos 3D`, mxn, quantity: 1 }],
     currency: chargeCurrency(body?.currency),
-    back: `${origin}/app/escaner`,
+    // From the tools site the buyer comes back to its scanner page.
+    back: toolsOrigin(request) ? `${toolsOrigin(request)}/escaner` : `${origin}/app/escaner`,
   });
   return checkout ? Response.json({ url: checkout }) : Response.json({ error: "No pudimos iniciar el pago." }, { status: 502 });
 }

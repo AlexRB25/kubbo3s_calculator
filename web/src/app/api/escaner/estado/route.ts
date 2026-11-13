@@ -1,3 +1,4 @@
+import { preflight, withCors } from "@/lib/cors";
 import { kiriConfigured, refreshScan, type ScanRow } from "@/lib/kiri";
 import { adminClient } from "@/lib/server";
 
@@ -7,7 +8,11 @@ export const maxDuration = 120;
  * The user's scans, the ones in progress asked again to KIRI, and a download link (valid one hour) for the
  * finished ones. Header "Authorization: Bearer <access token>".
  */
-export async function GET(request: Request) {
+export const OPTIONS = preflight;
+
+export const GET = async (request: Request) => withCors(request, await handle(request));
+
+async function handle(request: Request) {
   const token = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const { data: auth } = token ? await adminClient().auth.getUser(token) : { data: { user: null } };
   if (!auth.user) return Response.json({ error: "Entra a tu cuenta." }, { status: 401 });
