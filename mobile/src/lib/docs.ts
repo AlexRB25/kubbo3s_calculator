@@ -1,4 +1,4 @@
-// Same file in web/src/lib and mobile/src/lib: keep them identical.
+// Same file in the calculator app (mobile/src/lib) and in kubbo3d-tools/src/lib: keep them identical.
 
 /**
  * Kubbo3D's printing guides: what each slicer setting does, what it is called in each slicer, the filament types,

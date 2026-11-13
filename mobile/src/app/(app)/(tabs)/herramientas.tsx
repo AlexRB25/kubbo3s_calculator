@@ -95,6 +95,12 @@ export default function ToolsScreen() {
         subtitle="Convierte un objeto en modelo 3D con fotos o video"
         onPress={() => router.push('/escaner')}
       />
+      <ListItem
+        left={<Ionicons name="school" size={22} color={Colors.accent} />}
+        title="Aprende"
+        subtitle="Cursos, guías de parámetros y diseño, calibración"
+        onPress={() => router.push('/biblioteca')}
+      />
       {NATIVE.map((tool) => (
         <ListItem
           key={tool.slug}

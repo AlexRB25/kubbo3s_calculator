@@ -1,4 +1,4 @@
-// Same file in web/src/lib and mobile/src/lib: keep them identical.
+// Same file in the calculator app (mobile/src/lib) and in kubbo3d-tools/src/lib: keep them identical.
 
 /** A calibration test: what it is for, when to run it, how, and how to read what comes out. */
 export type Guide = {
