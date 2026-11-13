@@ -114,6 +114,7 @@ export default function PackagingCatalogScreen() {
       <ErrorText>{failure}</ErrorText>
       {!catalog && !failure && <Muted>Cargando el catálogo…</Muted>}
       <ErrorText>{error}</ErrorText>
+      {catalog && added.size > 0 && <Muted>Las cajas que ya tienes no se tocan (ni precio ni piezas); solo se agregan las que te faltan.</Muted>}
       {catalog && missing.length > 0 && (
         <View style={{ gap: Spacing.two }}>
           {choosing ? (
@@ -133,7 +134,7 @@ export default function PackagingCatalogScreen() {
           )}
           <Button
             variant="secondary"
-            label={group === 'all' && !needle ? `Agregar todas (${missing.length})` : `Agregar todas las que se ven (${missing.length})`}
+            label={`${added.size ? 'Agregar las que me faltan' : 'Agregar todas'}${group === 'all' && !needle ? '' : ' de lo que se ve'} (${missing.length})`}
             disabled={busy}
             onPress={() => addMany(missing)}
           />

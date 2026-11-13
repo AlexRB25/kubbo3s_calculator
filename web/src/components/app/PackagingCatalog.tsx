@@ -145,14 +145,14 @@ export function PackagingCatalog({ onDone }: { onDone: () => void }) {
             {busy ? "Agregando…" : `Agregar seleccionadas (${chosen.filter((id) => !added.has(id)).length})`}
           </button>
           <button className="btn" disabled={busy} onClick={() => addMany(missing)}>
-            {group === "all" && !needle ? `Agregar todas (${missing.length})` : `Agregar todas las que se ven (${missing.length})`}
+            {`${added.size ? "Agregar las que me faltan" : "Agregar todas"}${group === "all" && !needle ? "" : " de lo que se ve"} (${missing.length})`}
           </button>
           {chosen.length > 0 && (
             <button className="text-muted hover:text-white" onClick={() => setChosen([])}>
               Quitar selección
             </button>
           )}
-          <span className="text-xs text-muted">Marca la casilla de cada caja para elegir varias.</span>
+          <span className="text-xs text-muted">Marca la casilla de cada caja para elegir varias. Las que ya tienes no se tocan (ni precio ni piezas).</span>
         </div>
       )}
       {!catalog && !error && <p className="text-muted">Cargando el catálogo…</p>}

@@ -13,7 +13,10 @@ export default function FilamentsScreen() {
 
   return (
     <Screen>
-      <Button icon="add" label="Nuevo filamento" onPress={() => router.push('/filamento/form')} />
+      <Row>
+        <Button style={{ flex: 1 }} icon="albums" label="Del catálogo" onPress={() => router.push('/filamento/catalogo')} />
+        <Button style={{ flex: 1 }} variant="secondary" icon="add" label="Nuevo" onPress={() => router.push('/filamento/form')} />
+      </Row>
       {filaments.length === 0 ? (
         <Empty icon="color-fill-outline" text="Registra tus filamentos para llevar cuántos gramos te quedan y cuánto cuesta cada pieza." />
       ) : (

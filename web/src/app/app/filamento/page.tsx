@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PurchaseForm } from "@/components/app/PurchaseForm";
 import { CountForm, StockHistory } from "@/components/app/StockDialogs";
+import { FilamentCatalog } from "@/components/app/FilamentCatalog";
 import { FilamentForm } from "@/components/app/FilamentForm";
 import { Swatch } from "@/components/app/Swatch";
 import { Empty, Modal, PageHeader, Stat, TableCard } from "@/components/app/ui";
@@ -19,6 +20,7 @@ export default function FilamentsPage() {
   const [buying, setBuying] = useState<Filament | "any" | null>(null);
   const [counting, setCounting] = useState<Filament | null>(null);
   const [history, setHistory] = useState<Filament | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const totalGrams = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0);
   const totalValue = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0) * costPerGram(filament), 0);
@@ -32,6 +34,9 @@ export default function FilamentsPage() {
             Registrar compra
           </button>
         )}
+        <button className="btn" onClick={() => setImporting(true)}>
+          Importar del catálogo
+        </button>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>
           Nuevo filamento
         </button>
@@ -117,6 +122,12 @@ export default function FilamentsPage() {
       {editing && (
         <Modal title={current ? filamentName(current) : "Nuevo filamento"} onClose={() => setEditing(null)} wide>
           <FilamentForm filament={current} onDone={() => setEditing(null)} />
+        </Modal>
+      )}
+
+      {importing && (
+        <Modal title="Importar filamentos del catálogo Kubbo" onClose={() => setImporting(false)} wide>
+          <FilamentCatalog onDone={() => setImporting(false)} />
         </Modal>
       )}
 
