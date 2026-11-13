@@ -1435,6 +1435,8 @@ alter table public.expenses add column if not exists quantity numeric(14,3) chec
 -- escribe el usuario (cost_per_kg, cost_per_unit) es su referencia de lo que normalmente cuesta.
 alter table public.filaments add column if not exists avg_cost_per_g numeric(14,6) not null default 0;
 alter table public.materials add column if not exists avg_cost_per_unit numeric(14,6) not null default 0;
+-- Foto del insumo (bucket products, como las de productos y filamentos).
+alter table public.materials add column if not exists image_url text;
 update public.filaments f set avg_cost_per_g = coalesce((
     select sum(e.amount) / nullif(sum(e.grams), 0) from public.expenses e where e.filament_id = f.id and e.grams is not null
   ), 0);

@@ -450,6 +450,8 @@ export type Material = {
   low_stock: number;
   supplier_id: string | null;
   notes: string;
+  /** Photo (public link in the products bucket); undefined before supabase/schema.sql adds the column. */
+  image_url?: string | null;
 };
 
 export type InventoryItemType = 'filament' | 'material' | 'product';
