@@ -56,7 +56,7 @@ export function CategoryPicker({ value, onChange }: { value: string[]; onChange:
               key={name}
               type="button"
               onClick={() => toggle(name)}
-              className="rounded-full bg-brand px-3 py-1 text-xs font-semibold text-on-brand"
+              className="rounded-full bg-brand px-3 py-1 text-xs font-semibold text-ink"
               aria-label={`Quitar ${name}`}
             >
               {name} ✕

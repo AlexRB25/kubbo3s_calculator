@@ -1,66 +1,160 @@
-import { Ionicons } from '@expo/vector-icons';
-import { File } from 'expo-file-system';
-import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import { File } from "expo-file-system";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet } from "react-native";
 
-import { Button, Card, Chips, confirmDelete, ErrorText, Field, Heading, Line, Muted, Row, Screen, Select } from '@/components/ui';
-import { Colors, Radius, Spacing, themed } from '@/constants/theme';
-import { costPerGram, filamentName, LEVEL_LABEL, levelOf, levelPrices, packagingName, overheadPerPiece, priceLevels, productCost, shippingFor, suggestedPrice, suggestedPriceWithShipping, unitProfit } from '@/lib/costs';
-import { draftOf, levelsLine, ownLevelsOnly, readLevels } from '@/lib/levels';
-import { field, money, num, weight } from '@/lib/format';
-import { BoxAdvisor, ParcelFacts, type SizeDraft } from '@/components/box-advisor';
-import { matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice } from '@/lib/slice';
-import { imageUrl, supabase, uploadProductImage } from '@/lib/supabase';
-import type { Product } from '@/lib/types';
-import { useData, useSave } from '@/store/data';
-import { useSession } from '@/store/session';
+import {
+  Button,
+  Card,
+  Chips,
+  confirmDelete,
+  ErrorText,
+  Field,
+  Heading,
+  Line,
+  Muted,
+  Row,
+  Screen,
+  Select,
+} from "@/components/ui";
+import { Colors, Radius, Spacing, themed } from "@/constants/theme";
+import {
+  costPerGram,
+  filamentName,
+  LEVEL_LABEL,
+  levelOf,
+  levelPrices,
+  packagingName,
+  overheadPerPiece,
+  priceLevels,
+  productCost,
+  shippingFor,
+  suggestedPrice,
+  suggestedPriceWithShipping,
+  unitProfit,
+} from "@/lib/costs";
+import { draftOf, levelsLine, ownLevelsOnly, readLevels } from "@/lib/levels";
+import { field, money, num, weight } from "@/lib/format";
+import {
+  BoxAdvisor,
+  ParcelFacts,
+  type SizeDraft,
+} from "@/components/box-advisor";
+import {
+  matchFilament,
+  matchPrinter,
+  neededPerProduct,
+  pieceGroups,
+  readSlice,
+} from "@/lib/slice";
+import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
+import type { Printer, Product } from "@/lib/types";
+import { useData, useSave } from "@/store/data";
+import { useSession } from "@/store/session";
 
 type RecipeRow = { filament_id: string | null; grams: string };
+
+/** Tabs of the product form. */
+const SECTIONS = [
+  { value: "general", label: "General" },
+  { value: "impresion", label: "Impresión" },
+  { value: "costos", label: "Costos" },
+  { value: "embalaje", label: "Embalaje" },
+  { value: "precios", label: "Precios" },
+] as const;
+type Section = (typeof SECTIONS)[number]["value"];
+
+/** The workshop's printers grouped by model ("Bambu Lab A1"), without the device id. */
+function modelsOf(printers: Printer[]) {
+  const groups: { id: string; name: string; ids: string[] }[] = [];
+  for (const printer of printers) {
+    const name =
+      `${printer.brand} ${printer.model}`.trim() ||
+      printer.name.split("·")[0].trim();
+    const same = groups.find(
+      (group) => group.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (same) same.ids.push(printer.id);
+    else groups.push({ id: printer.id, name, ids: [printer.id] });
+  }
+  return groups;
+}
 
 export default function ProductFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { session } = useSession();
-  const { products, filaments, printers, channels, profile, packaging, materials, carriers, shop } = useData();
+  const {
+    products,
+    filaments,
+    printers,
+    channels,
+    profile,
+    packaging,
+    materials,
+    carriers,
+    shop,
+  } = useData();
   const { busy, error, setError, save } = useSave();
   const product = products.find((item) => item.id === id);
 
-  const [name, setName] = useState(product?.name ?? '');
-  const [sku, setSku] = useState(product?.sku ?? '');
-  const [description, setDescription] = useState(product?.description ?? '');
-  const [categories, setCategories] = useState<string[]>(product?.categories ?? []);
-  const [newCategory, setNewCategory] = useState('');
+  const [name, setName] = useState(product?.name ?? "");
+  const [sku, setSku] = useState(product?.sku ?? "");
+  const [description, setDescription] = useState(product?.description ?? "");
+  const [categories, setCategories] = useState<string[]>(
+    product?.categories ?? [],
+  );
+  const [newCategory, setNewCategory] = useState("");
   // The 3D-printing categories Kubbo3D keeps up to date.
   const [catalog, setCatalog] = useState<string[]>([]);
   useEffect(() => {
     let current = true;
     supabase
-      .from('product_categories')
-      .select('name')
-      .order('sort')
-      .order('name')
-      .then(({ data }) => current && setCatalog((data ?? []).map((row: { name: string }) => row.name)));
+      .from("product_categories")
+      .select("name")
+      .order("sort")
+      .order("name")
+      .then(
+        ({ data }) =>
+          current &&
+          setCatalog((data ?? []).map((row: { name: string }) => row.name)),
+      );
     return () => {
       current = false;
     };
   }, []);
-  const [hours, setHours] = useState(field(Math.floor((product?.print_minutes ?? 0) / 60)));
-  const [minutes, setMinutes] = useState(field((product?.print_minutes ?? 0) % 60));
+  const [hours, setHours] = useState(
+    field(Math.floor((product?.print_minutes ?? 0) / 60)),
+  );
+  const [minutes, setMinutes] = useState(
+    field((product?.print_minutes ?? 0) % 60),
+  );
   const [extraCost, setExtraCost] = useState(field(product?.extra_cost));
   const [stock, setStock] = useState(String(product?.stock ?? 0));
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [recipe, setRecipe] = useState<RecipeRow[]>(
-    product?.filaments.map((use) => ({ filament_id: use.filament_id, grams: String(use.grams) })) ?? [
-      { filament_id: null, grams: '' },
-    ],
+    product?.filaments.map((use) => ({
+      filament_id: use.filament_id,
+      grams: String(use.grams),
+    })) ?? [{ filament_id: null, grams: "" }],
   );
-  const [printerIds, setPrinterIds] = useState<string[]>(product?.printer_ids ?? []);
-  const [packagingId, setPackagingId] = useState<string | null>(product?.packaging_id ?? null);
+  const [printerIds, setPrinterIds] = useState<string[]>(
+    product?.printer_ids ?? [],
+  );
+  // Printers grouped by model: any printer of a model can print the product.
+  const models = modelsOf(printers);
+  // The form goes in tabs: general data, printing, costs, packaging and prices.
+  const [section, setSection] = useState<Section>("general");
+  const [packagingId, setPackagingId] = useState<string | null>(
+    product?.packaging_id ?? null,
+  );
   const box = packaging.find((item) => item.id === packagingId);
   // The finished product's size and its protection, in cm, to recommend a box (only once the database has them).
-  const withSizes = product ? product.length_mm !== undefined : profile?.client_fields !== undefined;
+  const withSizes = product
+    ? product.length_mm !== undefined
+    : profile?.client_fields !== undefined;
   const [sizeDraft, setSizeDraft] = useState<SizeDraft>({
     length: field(product?.length_mm ? product.length_mm / 10 : 0),
     width: field(product?.width_mm ? product.width_mm / 10 : 0),
@@ -70,26 +164,57 @@ export default function ProductFormScreen() {
   const [sizeHint, setSizeHint] = useState<string | undefined>(undefined);
   // Profit levels: the workshop's, or ones of its own (only those that differ are saved).
   const workshopLevels = priceLevels(profile);
-  const [ownLevels, setOwnLevels] = useState(Object.keys(product?.price_levels ?? {}).length > 0);
-  const [levelsDraft, setLevelsDraft] = useState(() => draftOf(priceLevels(profile, product)));
+  const [ownLevels, setOwnLevels] = useState(
+    Object.keys(product?.price_levels ?? {}).length > 0,
+  );
+  const [levelsDraft, setLevelsDraft] = useState(() =>
+    draftOf(priceLevels(profile, product)),
+  );
   const typedLevels = readLevels(levelsDraft);
-  const levels = ownLevels && 'levels' in typedLevels ? typedLevels.levels : workshopLevels;
+  const levels =
+    ownLevels && "levels" in typedLevels ? typedLevels.levels : workshopLevels;
   const [prices, setPrices] = useState<Record<string, string>>(
-    Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
+    Object.fromEntries(
+      Object.entries(product?.prices ?? {}).map(([channel, price]) => [
+        channel,
+        String(price),
+      ]),
+    ),
   );
 
   // Products with plates per printer are set up on the web; here their recipe is kept as it is.
   const plated = !!product?.plates?.length;
-  const draft: Pick<Product, 'filaments' | 'printer_ids' | 'print_minutes' | 'plates' | 'extra_cost'> = plated
-    ? { filaments: product!.filaments, printer_ids: product!.printer_ids, print_minutes: product!.print_minutes, plates: product!.plates, extra_cost: num(extraCost) }
+  const draft: Pick<
+    Product,
+    "filaments" | "printer_ids" | "print_minutes" | "plates" | "extra_cost"
+  > = plated
+    ? {
+        filaments: product!.filaments,
+        printer_ids: product!.printer_ids,
+        print_minutes: product!.print_minutes,
+        plates: product!.plates,
+        extra_cost: num(extraCost),
+      }
     : {
-        filaments: recipe.flatMap((row) => (row.filament_id && num(row.grams) > 0 ? [{ filament_id: row.filament_id, grams: num(row.grams) }] : [])),
+        filaments: recipe.flatMap((row) =>
+          row.filament_id && num(row.grams) > 0
+            ? [{ filament_id: row.filament_id, grams: num(row.grams) }]
+            : [],
+        ),
         printer_ids: printerIds,
         print_minutes: Math.round(num(hours) * 60 + num(minutes)),
         plates: [],
         extra_cost: num(extraCost),
       };
-  const cost = productCost({ ...draft, materials: product?.materials }, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile));
+  const cost = productCost(
+    { ...draft, materials: product?.materials },
+    filaments,
+    printers,
+    profile?.kwh_price ?? 0,
+    materials,
+    profile?.waste_rules,
+    overheadPerPiece(profile),
+  );
 
   // What the last sliced file said, shown under the recipe so the user can check the matches.
   const [sliceNote, setSliceNote] = useState<string[]>([]);
@@ -105,61 +230,127 @@ export default function ProductFormScreen() {
       const picked = await File.pickFileAsync();
       if (picked.canceled) return;
       const file = picked.result;
-      const report = readSlice(new Uint8Array(await file.arrayBuffer()), file.name);
+      const report = readSlice(
+        new Uint8Array(await file.arrayBuffer()),
+        file.name,
+      );
       // The G-code is made for one model: without a printer of it, the file cannot be printed here.
       const printer = matchPrinter(report.printerModel, printers);
       if (report.printerModel && !printer) {
-        setSliceNote([`No tienes impresoras compatibles para este archivo (se laminó para ${report.printerModel}). Lamínalo para una de tus impresoras o da de alta esa impresora.`]);
+        setSliceNote([
+          `No tienes impresoras compatibles para este archivo (se laminó para ${report.printerModel}). Lamínalo para una de tus impresoras o da de alta esa impresora.`,
+        ]);
         return;
       }
       // Copies of one object are one piece; a product takes one set (6 bodies + 6 right + 6 left hands → 6 products).
-      const groups = pieceGroups(report.plates.flatMap((plate) => plate.objects));
+      const groups = pieceGroups(
+        report.plates.flatMap((plate) => plate.objects),
+      );
       const needed = neededPerProduct(groups.map((group) => group.count));
       const objects = groups.reduce((total, group) => total + group.count, 0);
-      const pieces = Math.max(1, Math.floor(objects / Math.max(1, needed.reduce((total, count) => total + count, 0))));
-      const totalMinutes = report.plates.reduce((total, plate) => total + plate.minutes, 0) / pieces;
+      const pieces = Math.max(
+        1,
+        Math.floor(
+          objects /
+            Math.max(
+              1,
+              needed.reduce((total, count) => total + count, 0),
+            ),
+        ),
+      );
+      const totalMinutes =
+        report.plates.reduce((total, plate) => total + plate.minutes, 0) /
+        pieces;
       const grams: Record<string, number> = {};
       const found =
         groups.length > 1
-          ? `${objects} objetos, ${groups.length} piezas distintas (${groups.map((group, index) => `${group.name} ×${group.count}${needed[index] > 1 ? `, ${needed[index]} por producto` : ''}`).join('; ')}) → ${pieces} ${pieces === 1 ? 'producto' : 'productos'}`
-          : `${pieces} ${pieces === 1 ? 'pieza' : 'piezas'}`;
-      const notes = [`${report.slicer}: ${found}; tiempo y gramos divididos entre ${pieces === 1 ? 'él' : 'ellos'}.`, ...report.warnings];
+          ? `${objects} objetos, ${groups.length} piezas distintas (${groups.map((group, index) => `${group.name} ×${group.count}${needed[index] > 1 ? `, ${needed[index]} por producto` : ""}`).join("; ")}) → ${pieces} ${pieces === 1 ? "producto" : "productos"}`
+          : `${pieces} ${pieces === 1 ? "pieza" : "piezas"}`;
+      const notes = [
+        `${report.slicer}: ${found}; tiempo y gramos divididos entre ${pieces === 1 ? "él" : "ellos"}.`,
+        ...report.warnings,
+      ];
       for (const plate of report.plates) {
         for (const sliced of plate.filaments) {
           const { filament, close } = matchFilament(sliced, filaments);
           if (!filament) {
-            notes.push(`No tienes filamentos para ${sliced.type} ${sliced.color}: da de alta uno.`);
+            notes.push(
+              `No tienes filamentos para ${sliced.type} ${sliced.color}: da de alta uno.`,
+            );
             continue;
           }
-          grams[filament.id] = (grams[filament.id] ?? 0) + sliced.grams / pieces;
-          if (!close) notes.push(`${sliced.type} ${sliced.color} → ${filamentName(filament)}: color o material distinto, revísalo.`);
+          grams[filament.id] =
+            (grams[filament.id] ?? 0) + sliced.grams / pieces;
+          if (!close)
+            notes.push(
+              `${sliced.type} ${sliced.color} → ${filamentName(filament)}: color o material distinto, revísalo.`,
+            );
         }
       }
       // The biggest piece suggests the product's size while none was typed.
-      const biggest = [...(report.sizes ?? [])].sort((a, b) => Math.max(...b.size) - Math.max(...a.size))[0]?.size;
-      if (biggest && !num(sizeDraft.length) && !num(sizeDraft.width) && !num(sizeDraft.height)) {
+      const biggest = [...(report.sizes ?? [])].sort(
+        (a, b) => Math.max(...b.size) - Math.max(...a.size),
+      )[0]?.size;
+      if (
+        biggest &&
+        !num(sizeDraft.length) &&
+        !num(sizeDraft.width) &&
+        !num(sizeDraft.height)
+      ) {
         const cmOf = (value: number) => String(Math.round(value) / 10);
-        setSizeDraft({ ...sizeDraft, length: cmOf(biggest[0]), width: cmOf(biggest[1]), height: cmOf(biggest[2]) });
-        setSizeHint('Las tomamos de la pieza más grande del archivo. Si el producto se arma con varias piezas, ajústalas.');
+        setSizeDraft({
+          ...sizeDraft,
+          length: cmOf(biggest[0]),
+          width: cmOf(biggest[1]),
+          height: cmOf(biggest[2]),
+        });
+        setSizeHint(
+          "Las tomamos de la pieza más grande del archivo. Si el producto se arma con varias piezas, ajústalas.",
+        );
       }
-      setRecipe(Object.entries(grams).map(([filament_id, value]) => ({ filament_id, grams: String(Math.round(value * 100) / 100) })));
+      setRecipe(
+        Object.entries(grams).map(([filament_id, value]) => ({
+          filament_id,
+          grams: String(Math.round(value * 100) / 100),
+        })),
+      );
       setHours(field(Math.floor(Math.round(totalMinutes) / 60)));
       setMinutes(field(Math.round(totalMinutes) % 60));
-      if (printer && !printerIds.includes(printer.id)) setPrinterIds([...printerIds, printer.id]);
-      if (!printer) notes.push('El archivo no dice para qué impresora es: elige abajo en cuál sale.');
-      notes.push('Tu merma de Ajustes (piezas que salen mal) se sigue sumando aparte.');
+      if (printer && !printerIds.includes(printer.id)) {
+        const ids = models.find((group) => group.ids.includes(printer.id))
+          ?.ids ?? [printer.id];
+        setPrinterIds([
+          ...printerIds,
+          ...ids.filter((id) => !printerIds.includes(id)),
+        ]);
+      }
+      if (!printer)
+        notes.push(
+          "El archivo no dice para qué impresora es: elige abajo en cuál sale.",
+        );
+      notes.push(
+        "Tu merma de Ajustes (piezas que salen mal) se sigue sumando aparte.",
+      );
       setSliceNote(notes);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'No se pudo leer el archivo.');
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "No se pudo leer el archivo.",
+      );
     }
   }
 
   const setRow = (index: number, change: Partial<RecipeRow>) =>
-    setRecipe(recipe.map((row, position) => (position === index ? { ...row, ...change } : row)));
+    setRecipe(
+      recipe.map((row, position) =>
+        position === index ? { ...row, ...change } : row,
+      ),
+    );
 
   async function pickPhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.6,
@@ -170,12 +361,22 @@ export default function ProductFormScreen() {
   async function write() {
     let imagePath = product?.image_path ?? null;
     if (photo) {
-      const upload = await uploadProductImage(shop?.shop_id ?? session!.user.id, photo.uri, photo.mimeType);
-      if (upload.error) return { error: { message: `No se pudo subir la foto: ${upload.error.message}` } };
+      const upload = await uploadProductImage(
+        shop?.shop_id ?? session!.user.id,
+        photo.uri,
+        photo.mimeType,
+      );
+      if (upload.error)
+        return {
+          error: {
+            message: `No se pudo subir la foto: ${upload.error.message}`,
+          },
+        };
       imagePath = upload.path;
     }
 
-    if (ownLevels && 'error' in typedLevels) return { error: { message: typedLevels.error } };
+    if (ownLevels && "error" in typedLevels)
+      return { error: { message: typedLevels.error } };
     const row = {
       name: name.trim(),
       sku: sku.trim(),
@@ -189,40 +390,62 @@ export default function ProductFormScreen() {
             length_mm: Math.round(num(sizeDraft.length) * 10),
             width_mm: Math.round(num(sizeDraft.width) * 10),
             height_mm: Math.round(num(sizeDraft.height) * 10),
-            pack_margin_mm: Math.min(500, Math.max(0, Math.round(num(sizeDraft.margin) * 10))),
+            pack_margin_mm: Math.min(
+              500,
+              Math.max(0, Math.round(num(sizeDraft.margin) * 10)),
+            ),
           }
         : {}),
-      prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
-      price_levels: ownLevels && 'levels' in typedLevels ? ownLevelsOnly(typedLevels.levels, workshopLevels) : null,
+      prices: Object.fromEntries(
+        Object.entries(prices).flatMap(([channel, price]) =>
+          num(price) > 0 ? [[channel, num(price)]] : [],
+        ),
+      ),
+      price_levels:
+        ownLevels && "levels" in typedLevels
+          ? ownLevelsOnly(typedLevels.levels, workshopLevels)
+          : null,
       // Stock is typed only for a new product; later prints, sales and arqueos move it.
       ...(product ? {} : { stock: Math.round(num(stock)) }),
     };
     const result = product
-      ? await supabase.from('products').update(row).eq('id', product.id)
-      : await supabase.from('products').insert(row);
+      ? await supabase.from("products").update(row).eq("id", product.id)
+      : await supabase.from("products").insert(row);
     if (!result.error && photo && product?.image_path) {
-      await supabase.storage.from('products').remove([product.image_path]);
+      await supabase.storage.from("products").remove([product.image_path]);
     }
     return result;
   }
 
   function submit() {
-    if (!name.trim()) return setError('Ponle nombre al producto.');
-    if (!plated && recipe.some((row) => !row.filament_id && num(row.grams) > 0)) return setError('Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo.');
-    if (!plated && recipe.some((row) => row.filament_id && num(row.grams) <= 0)) return setError('Indica cuántos gramos consume cada filamento.');
+    if (!name.trim()) return setError("Ponle nombre al producto.");
+    if (!plated && recipe.some((row) => !row.filament_id && num(row.grams) > 0))
+      return setError(
+        "Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo.",
+      );
+    if (!plated && recipe.some((row) => row.filament_id && num(row.grams) <= 0))
+      return setError("Indica cuántos gramos consume cada filamento.");
     save(write);
   }
 
   function remove() {
-    confirmDelete(`Se eliminará "${product!.name}". Sus impresiones y ventas se conservan en el historial.`, () =>
-      save(
-        async () => {
-          const result = await supabase.from('products').delete().eq('id', product!.id);
-          if (!result.error && product!.image_path) await supabase.storage.from('products').remove([product!.image_path]);
-          return result;
-        },
-        () => router.dismissTo('/productos'),
-      ),
+    confirmDelete(
+      `Se eliminará "${product!.name}". Sus impresiones y ventas se conservan en el historial.`,
+      () =>
+        save(
+          async () => {
+            const result = await supabase
+              .from("products")
+              .delete()
+              .eq("id", product!.id);
+            if (!result.error && product!.image_path)
+              await supabase.storage
+                .from("products")
+                .remove([product!.image_path]);
+            return result;
+          },
+          () => router.dismissTo("/productos"),
+        ),
     );
   }
 
@@ -230,237 +453,483 @@ export default function ProductFormScreen() {
 
   return (
     <Screen>
-      <Pressable accessibilityRole="button" accessibilityLabel="Elegir foto del producto" onPress={pickPhoto} style={styles.photo}>
-        {preview ? (
-          <Image source={preview} style={StyleSheet.absoluteFill} contentFit="cover" />
-        ) : (
-          <>
-            <Ionicons name="camera" size={32} color={Colors.textSecondary} />
-            <Muted>Agregar foto</Muted>
-          </>
-        )}
-      </Pressable>
-
-      <Field label="Nombre" value={name} onChangeText={setName} maxLength={80} />
-      <Field label="SKU o clave" value={sku} onChangeText={setSku} autoCapitalize="characters" maxLength={40} />
-      <Field label="Descripción" value={description} onChangeText={setDescription} multiline maxLength={500} />
-      <Chips
-        label="Categorías (puede tener varias)"
-        options={[...catalog, ...categories.filter((name) => !catalog.includes(name))].map((name) => ({ value: name, label: name }))}
-        value={categories}
-        onChange={(name) => setCategories(categories.includes(name) ? categories.filter((item) => item !== name) : [...categories, name])}
-      />
-      <Row style={{ alignItems: 'flex-end' }}>
-        <Field style={{ flex: 1 }} label="Otra categoría" value={newCategory} onChangeText={setNewCategory} maxLength={60} placeholder="Si no está en la lista" />
-        <Button
-          variant="secondary"
-          label="Agregar"
-          disabled={!newCategory.trim()}
-          onPress={() => {
-            const name = newCategory.trim();
-            if (name && !categories.includes(name)) setCategories([...categories, name]);
-            setNewCategory('');
-          }}
-        />
-      </Row>
-
-      {plated ? (
-        <Card>
-          <Heading>Placas por impresora</Heading>
-          <Muted>
-            {`Tiene ${product!.plates.length} ${product!.plates.length === 1 ? 'placa' : 'placas'} en ${product!.printer_ids.length} ${product!.printer_ids.length === 1 ? 'impresora' : 'impresoras'}. Sus filamentos, gramos y tiempos se editan desde la web.`}
-          </Muted>
-        </Card>
-      ) : (
+      <Chips options={[...SECTIONS]} value={section} onChange={setSection} />
+      {section === "general" && (
         <>
-      <Heading>Filamento por pieza</Heading>
-      <Button variant="secondary" icon="document-attach" label="Importar 3MF o G-code laminado" onPress={importSlice} />
-      <Muted>
-        En Bambu Studio u OrcaSlicer: lamina, y en el menú de «Imprimir placa» elige «Exportar la placa de impresión actual». Llena gramos, colores, tiempo e
-        impresora.
-      </Muted>
-      {sliceNote.length > 0 && (
-        <Card>
-          {sliceNote.map((note) => (
-            <Muted key={note}>{note}</Muted>
-          ))}
-        </Card>
-      )}
-      {recipe.map((row, index) => (
-        <Row key={index} style={{ alignItems: 'flex-end' }}>
-          <Select
-            style={{ flex: 2 }}
-            label={row.filament_id ? 'Filamento' : '⚠ Falta elegir'}
-            placeholder="Buscar y elegir…"
-            value={row.filament_id}
-            onChange={(filament_id) => setRow(index, { filament_id })}
-            options={filaments.map((filament) => ({
-              value: filament.id,
-              label: filamentName(filament),
-              hint: `${weight(filament.stock_g)} · ${money(costPerGram(filament) * 1000)}/kg`,
-            }))}
-          />
-          <Field style={{ flex: 1 }} label="Gramos" numeric value={row.grams} onChangeText={(grams) => setRow(index, { grams })} />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Quitar filamento"
-            hitSlop={8}
-            onPress={() => setRecipe(recipe.filter((_, position) => position !== index))}
-            style={{ paddingBottom: Spacing.three }}>
-            <Ionicons name="close-circle" size={22} color={Colors.textSecondary} />
+            accessibilityLabel="Elegir foto del producto"
+            onPress={pickPhoto}
+            style={styles.photo}
+          >
+            {preview ? (
+              <Image
+                source={preview}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
+            ) : (
+              <>
+                <Ionicons
+                  name="camera"
+                  size={32}
+                  color={Colors.textSecondary}
+                />
+                <Muted>Agregar foto</Muted>
+              </>
+            )}
           </Pressable>
-        </Row>
-      ))}
-      {recipe.some((row) => !row.filament_id) && filaments.length > 0 && (
-        <ErrorText>Falta elegir un filamento. Mientras falte, sus gramos no se cuentan y el precio sale más bajo de lo real. Elígelo o quítalo.</ErrorText>
-      )}
-      {recipe.some((row) => row.filament_id && num(row.grams) <= 0) && (
-        <ErrorText>Hay un filamento sin gramos: no suma al costo. Anota cuántos gramos usa.</ErrorText>
-      )}
-      <Button
-        variant="secondary"
-        icon="add"
-        label="Agregar otro filamento"
-        onPress={() => setRecipe([...recipe, { filament_id: null, grams: '' }])}
-      />
-      {filaments.length === 0 && <Muted>Aún no tienes filamentos: regístralos en la pestaña Filamento para calcular el costo.</Muted>}
 
-      <Heading>Impresión</Heading>
-      <Row>
-        <Field style={{ flex: 1 }} label="Horas" numeric value={hours} onChangeText={setHours} placeholder="0" />
-        <Field style={{ flex: 1 }} label="Minutos" numeric value={minutes} onChangeText={setMinutes} placeholder="0" />
-      </Row>
-      {printers.length > 0 ? (
-        <Chips
-          label="Máquinas en las que sale"
-          options={printers.map((printer) => ({ value: printer.id, label: printer.name }))}
-          value={printerIds}
-          onChange={(printer) =>
-            setPrinterIds(printerIds.includes(printer) ? printerIds.filter((item) => item !== printer) : [...printerIds, printer])
-          }
-        />
-      ) : (
-        <Muted>Da de alta tus impresoras en Más → Impresoras para sumar luz y desgaste al costo.</Muted>
-      )}
-        </>
-      )}
-      <Field
-        label="Posprocesado y otros costos"
-        unit="$"
-        numeric
-        value={extraCost}
-        onChangeText={setExtraCost}
-        placeholder="0"
-        hint="Lijar, pintar, armar, tornillos, imanes, etiquetas… El embalaje para envío va aparte."
-      />
-
-      <Card>
-        <Line label="Filamento" value={money(cost.filament)} />
-        <Line label="Luz" value={money(cost.electricity)} />
-        <Line label="Desgaste de máquina" value={money(cost.machine)} />
-        <Line label="Posprocesado y otros" value={money(cost.extra)} />
-        {(cost.overhead ?? 0) > 0 && <Line label="Gastos fijos" value={money(cost.overhead ?? 0)} />}
-        <Line strong label="Costo por pieza" value={money(cost.total)} />
-      </Card>
-
-      {withSizes && (
-        <BoxAdvisor draft={sizeDraft} onChange={setSizeDraft} packaging={packaging} chosen={packagingId} onPick={setPackagingId} hint={sizeHint} />
-      )}
-      <Select
-        label="Embalaje para envío"
-        value={packagingId}
-        onChange={setPackagingId}
-        none="Sin embalaje"
-        options={packaging.map((item) => ({ value: item.id, label: packagingName(item), hint: money(item.cost) }))}
-      />
-      {packaging.length === 0 && <Muted>Registra tus cajas, sobres y bolsas en Más → Embalaje para sumarlos al precio con envío.</Muted>}
-      {box && <ParcelFacts productGrams={draft.filaments.reduce((total, use) => total + use.grams, 0)} box={box} />}
-
-      <Heading>Precio de venta</Heading>
-      <Chips
-        label="Ganancia sobre el costo"
-        options={[
-          { value: 'workshop', label: 'La de Ajustes' },
-          { value: 'own', label: 'Propia de este producto' },
-        ]}
-        value={ownLevels ? 'own' : 'workshop'}
-        onChange={(value) => setOwnLevels(value === 'own')}
-      />
-      {ownLevels ? (
-        <>
-          <Field label="Ganancia normal" unit="%" numeric value={levelsDraft.normal} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, normal: text })} hint={`La del taller: ${workshopLevels.normal}%`} />
-          <Field label="Con descuento" unit="%" numeric value={levelsDraft.discount} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, discount: text })} hint={`La del taller: ${workshopLevels.discount}%`} />
-          <Field label="Mayoreo" unit="%" numeric value={levelsDraft.wholesale} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, wholesale: text })} hint={`La del taller: ${workshopLevels.wholesale}%`} />
-          <Field label="Mayoreo desde" unit="pzs" numeric value={levelsDraft.wholesale_min} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, wholesale_min: text })} hint={`El del taller: ${workshopLevels.wholesale_min} piezas`} />
-          <Field label="Margen extra para descontar" unit="%" numeric value={levelsDraft.list_extra} onChangeText={(text) => setLevelsDraft({ ...levelsDraft, list_extra: text })} hint={`El del taller: ${workshopLevels.list_extra}%`} />
-          {'error' in typedLevels && <ErrorText>{typedLevels.error}</ErrorText>}
-        </>
-      ) : (
-        <Muted>
-          {`Normal ${workshopLevels.normal}%, descuento ${workshopLevels.discount}%, mayoreo ${workshopLevels.wholesale}% desde ${workshopLevels.wholesale_min} piezas${workshopLevels.list_extra > 0 ? `, ${workshopLevels.list_extra}% extra para descontar` : ''}.`}
-        </Muted>
-      )}
-      <Muted>Con envío suma el embalaje y el envío del canal; sin envío, el cliente recoge o paga el envío.</Muted>
-      {channels.map((channel) => {
-        const price = num(prices[channel.id] ?? '');
-        const margin = levels.normal;
-        // Quoted with the channel's carriers for this weight and box.
-        const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
-        const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
-        const shipping = shippingAt(price > 0 ? price : suggestedPriceWithShipping(cost.total, channel, margin, shippingAt));
-        return (
           <Field
-            key={channel.id}
-            label={channel.name}
-            unit="$"
-            numeric
-            value={prices[channel.id] ?? ''}
-            onChangeText={(text) => setPrices({ ...prices, [channel.id]: text })}
-            placeholder={`Sugerido ${suggestedPrice(cost.total, channel, margin).toFixed(2)}`}
-            hint={
-              price > 0
-                ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío · es precio ${LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
-                : `Sugerido con envío: ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
+            label="Nombre"
+            value={name}
+            onChangeText={setName}
+            maxLength={80}
+          />
+          <Field
+            label="SKU o clave"
+            value={sku}
+            onChangeText={setSku}
+            autoCapitalize="characters"
+            maxLength={40}
+          />
+          <Field
+            label="Descripción"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            maxLength={500}
+          />
+          <Chips
+            label="Categorías (puede tener varias)"
+            options={[
+              ...catalog,
+              ...categories.filter((name) => !catalog.includes(name)),
+            ].map((name) => ({ value: name, label: name }))}
+            value={categories}
+            onChange={(name) =>
+              setCategories(
+                categories.includes(name)
+                  ? categories.filter((item) => item !== name)
+                  : [...categories, name],
+              )
             }
           />
-        );
-      })}
-
-      {product ? (
-        <Card>
-          <Line label="Piezas en stock" value={String(product.stock)} strong />
-          <Muted>Suben con cada impresión terminada y bajan con cada venta. Para corregirlas, arquéalas.</Muted>
-          <Button
-            label="Arquear"
-            variant="secondary"
-            onPress={() => router.push({ pathname: '/inventario/arqueo', params: { type: 'product', id: product.id } })}
-          />
-        </Card>
-      ) : (
-        <Field label="Piezas que ya tienes" numeric value={stock} onChangeText={setStock} hint="Quedan en el historial como existencia inicial." />
+          <Row style={{ alignItems: "flex-end" }}>
+            <Field
+              style={{ flex: 1 }}
+              label="Otra categoría"
+              value={newCategory}
+              onChangeText={setNewCategory}
+              maxLength={60}
+              placeholder="Si no está en la lista"
+            />
+            <Button
+              variant="secondary"
+              label="Agregar"
+              disabled={!newCategory.trim()}
+              onPress={() => {
+                const name = newCategory.trim();
+                if (name && !categories.includes(name))
+                  setCategories([...categories, name]);
+                setNewCategory("");
+              }}
+            />
+          </Row>
+        </>
       )}
+
+      {section === "impresion" &&
+        (plated ? (
+          <Card>
+            <Heading>Placas por impresora</Heading>
+            <Muted>
+              {`Tiene ${product!.plates.length} ${product!.plates.length === 1 ? "placa" : "placas"} en ${product!.printer_ids.length} ${product!.printer_ids.length === 1 ? "impresora" : "impresoras"}. Sus filamentos, gramos y tiempos se editan desde la web.`}
+            </Muted>
+          </Card>
+        ) : (
+          <>
+            <Heading>Filamento por pieza</Heading>
+            <Button
+              variant="secondary"
+              icon="document-attach"
+              label="Importar 3MF o G-code laminado"
+              onPress={importSlice}
+            />
+            <Muted>
+              En Bambu Studio u OrcaSlicer: lamina, y en el menú de «Imprimir
+              placa» elige «Exportar la placa de impresión actual». Llena
+              gramos, colores, tiempo e impresora.
+            </Muted>
+            {sliceNote.length > 0 && (
+              <Card>
+                {sliceNote.map((note) => (
+                  <Muted key={note}>{note}</Muted>
+                ))}
+              </Card>
+            )}
+            {recipe.map((row, index) => (
+              <Row key={index} style={{ alignItems: "flex-end" }}>
+                <Select
+                  style={{ flex: 2 }}
+                  label={row.filament_id ? "Filamento" : "⚠ Falta elegir"}
+                  placeholder="Buscar y elegir…"
+                  value={row.filament_id}
+                  onChange={(filament_id) => setRow(index, { filament_id })}
+                  options={filaments.map((filament) => ({
+                    value: filament.id,
+                    label: filamentName(filament),
+                    hint: `${weight(filament.stock_g)} · ${money(costPerGram(filament) * 1000)}/kg`,
+                  }))}
+                />
+                <Field
+                  style={{ flex: 1 }}
+                  label="Gramos"
+                  numeric
+                  value={row.grams}
+                  onChangeText={(grams) => setRow(index, { grams })}
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Quitar filamento"
+                  hitSlop={8}
+                  onPress={() =>
+                    setRecipe(
+                      recipe.filter((_, position) => position !== index),
+                    )
+                  }
+                  style={{ paddingBottom: Spacing.three }}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={22}
+                    color={Colors.textSecondary}
+                  />
+                </Pressable>
+              </Row>
+            ))}
+            {recipe.some((row) => !row.filament_id) && filaments.length > 0 && (
+              <ErrorText>
+                Falta elegir un filamento. Mientras falte, sus gramos no se
+                cuentan y el precio sale más bajo de lo real. Elígelo o quítalo.
+              </ErrorText>
+            )}
+            {recipe.some((row) => row.filament_id && num(row.grams) <= 0) && (
+              <ErrorText>
+                Hay un filamento sin gramos: no suma al costo. Anota cuántos
+                gramos usa.
+              </ErrorText>
+            )}
+            <Button
+              variant="secondary"
+              icon="add"
+              label="Agregar otro filamento"
+              onPress={() =>
+                setRecipe([...recipe, { filament_id: null, grams: "" }])
+              }
+            />
+            {filaments.length === 0 && (
+              <Muted>
+                Aún no tienes filamentos: regístralos en la pestaña Filamento
+                para calcular el costo.
+              </Muted>
+            )}
+
+            <Heading>Impresión</Heading>
+            <Row>
+              <Field
+                style={{ flex: 1 }}
+                label="Horas"
+                numeric
+                value={hours}
+                onChangeText={setHours}
+                placeholder="0"
+              />
+              <Field
+                style={{ flex: 1 }}
+                label="Minutos"
+                numeric
+                value={minutes}
+                onChangeText={setMinutes}
+                placeholder="0"
+              />
+            </Row>
+            {printers.length > 0 ? (
+              <Chips
+                label="Impresoras en las que sale (cualquiera de ese modelo)"
+                options={models.map((group) => ({
+                  value: group.id,
+                  label: group.name,
+                }))}
+                value={models
+                  .filter((group) =>
+                    group.ids.some((id) => printerIds.includes(id)),
+                  )
+                  .map((group) => group.id)}
+                onChange={(modelId) => {
+                  const ids = models.find((group) => group.id === modelId)
+                    ?.ids ?? [modelId];
+                  setPrinterIds(
+                    ids.some((id) => printerIds.includes(id))
+                      ? printerIds.filter((id) => !ids.includes(id))
+                      : [...printerIds, ...ids],
+                  );
+                }}
+              />
+            ) : (
+              <Muted>
+                Da de alta tus impresoras en Más → Impresoras para sumar luz y
+                desgaste al costo.
+              </Muted>
+            )}
+          </>
+        ))}
+      {section === "costos" && (
+        <>
+          <Field
+            label="Posprocesado y otros costos"
+            unit="$"
+            numeric
+            value={extraCost}
+            onChangeText={setExtraCost}
+            placeholder="0"
+            hint="Lijar, pintar, armar, tornillos, imanes, etiquetas… El embalaje para envío va aparte."
+          />
+
+          <Card>
+            <Line label="Filamento" value={money(cost.filament)} />
+            <Line label="Luz" value={money(cost.electricity)} />
+            <Line label="Desgaste de máquina" value={money(cost.machine)} />
+            <Line label="Posprocesado y otros" value={money(cost.extra)} />
+            {(cost.overhead ?? 0) > 0 && (
+              <Line label="Gastos fijos" value={money(cost.overhead ?? 0)} />
+            )}
+            <Line strong label="Costo por pieza" value={money(cost.total)} />
+          </Card>
+        </>
+      )}
+      {section === "embalaje" && (
+        <>
+          {withSizes && (
+            <BoxAdvisor
+              draft={sizeDraft}
+              onChange={setSizeDraft}
+              packaging={packaging}
+              chosen={packagingId}
+              onPick={setPackagingId}
+              hint={sizeHint}
+            />
+          )}
+          <Select
+            label="Embalaje para envío"
+            value={packagingId}
+            onChange={setPackagingId}
+            none="Sin embalaje"
+            options={packaging.map((item) => ({
+              value: item.id,
+              label: packagingName(item),
+              hint: money(item.cost),
+            }))}
+          />
+          {packaging.length === 0 && (
+            <Muted>
+              Registra tus cajas, sobres y bolsas en Más → Embalaje para
+              sumarlos al precio con envío.
+            </Muted>
+          )}
+          {box && (
+            <ParcelFacts
+              productGrams={draft.filaments.reduce(
+                (total, use) => total + use.grams,
+                0,
+              )}
+              box={box}
+            />
+          )}
+        </>
+      )}
+
+      {section === "precios" && (
+        <>
+          <Heading>Precio de venta</Heading>
+          <Chips
+            label="Ganancia sobre el costo"
+            options={[
+              { value: "workshop", label: "La de Ajustes" },
+              { value: "own", label: "Propia de este producto" },
+            ]}
+            value={ownLevels ? "own" : "workshop"}
+            onChange={(value) => setOwnLevels(value === "own")}
+          />
+          {ownLevels ? (
+            <>
+              <Field
+                label="Ganancia normal"
+                unit="%"
+                numeric
+                value={levelsDraft.normal}
+                onChangeText={(text) =>
+                  setLevelsDraft({ ...levelsDraft, normal: text })
+                }
+                hint={`La del taller: ${workshopLevels.normal}%`}
+              />
+              <Field
+                label="Con descuento"
+                unit="%"
+                numeric
+                value={levelsDraft.discount}
+                onChangeText={(text) =>
+                  setLevelsDraft({ ...levelsDraft, discount: text })
+                }
+                hint={`La del taller: ${workshopLevels.discount}%`}
+              />
+              <Field
+                label="Mayoreo"
+                unit="%"
+                numeric
+                value={levelsDraft.wholesale}
+                onChangeText={(text) =>
+                  setLevelsDraft({ ...levelsDraft, wholesale: text })
+                }
+                hint={`La del taller: ${workshopLevels.wholesale}%`}
+              />
+              <Field
+                label="Mayoreo desde"
+                unit="pzs"
+                numeric
+                value={levelsDraft.wholesale_min}
+                onChangeText={(text) =>
+                  setLevelsDraft({ ...levelsDraft, wholesale_min: text })
+                }
+                hint={`El del taller: ${workshopLevels.wholesale_min} piezas`}
+              />
+              <Field
+                label="Margen extra para descontar"
+                unit="%"
+                numeric
+                value={levelsDraft.list_extra}
+                onChangeText={(text) =>
+                  setLevelsDraft({ ...levelsDraft, list_extra: text })
+                }
+                hint={`El del taller: ${workshopLevels.list_extra}%`}
+              />
+              {"error" in typedLevels && (
+                <ErrorText>{typedLevels.error}</ErrorText>
+              )}
+            </>
+          ) : (
+            <Muted>
+              {`Normal ${workshopLevels.normal}%, descuento ${workshopLevels.discount}%, mayoreo ${workshopLevels.wholesale}% desde ${workshopLevels.wholesale_min} piezas${workshopLevels.list_extra > 0 ? `, ${workshopLevels.list_extra}% extra para descontar` : ""}.`}
+            </Muted>
+          )}
+          <Muted>
+            Con envío suma el embalaje y el envío del canal; sin envío, el
+            cliente recoge o paga el envío.
+          </Muted>
+          {channels.map((channel) => {
+            const price = num(prices[channel.id] ?? "");
+            const margin = levels.normal;
+            // Quoted with the channel's carriers for this weight and box.
+            const grams = draft.filaments.reduce(
+              (total, use) => total + use.grams,
+              0,
+            );
+            const shippingAt = (at: number) =>
+              shippingFor(channel, carriers, grams, box, at);
+            const shipping = shippingAt(
+              price > 0
+                ? price
+                : suggestedPriceWithShipping(
+                    cost.total,
+                    channel,
+                    margin,
+                    shippingAt,
+                  ),
+            );
+            return (
+              <Field
+                key={channel.id}
+                label={channel.name}
+                unit="$"
+                numeric
+                value={prices[channel.id] ?? ""}
+                onChangeText={(text) =>
+                  setPrices({ ...prices, [channel.id]: text })
+                }
+                placeholder={`Sugerido ${suggestedPrice(cost.total, channel, margin).toFixed(2)}`}
+                hint={
+                  price > 0
+                    ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío · es precio ${LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
+                    : `Sugerido con envío: ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
+                }
+              />
+            );
+          })}
+        </>
+      )}
+
+      {section === "general" &&
+        (product ? (
+          <Card>
+            <Line
+              label="Piezas en stock"
+              value={String(product.stock)}
+              strong
+            />
+            <Muted>
+              Suben con cada impresión terminada y bajan con cada venta. Para
+              corregirlas, arquéalas.
+            </Muted>
+            <Button
+              label="Arquear"
+              variant="secondary"
+              onPress={() =>
+                router.push({
+                  pathname: "/inventario/arqueo",
+                  params: { type: "product", id: product.id },
+                })
+              }
+            />
+          </Card>
+        ) : (
+          <Field
+            label="Piezas que ya tienes"
+            numeric
+            value={stock}
+            onChangeText={setStock}
+            hint="Quedan en el historial como existencia inicial."
+          />
+        ))}
 
       <ErrorText>{error}</ErrorText>
       <Button label="Guardar" onPress={submit} loading={busy} />
-      {product && <Button variant="danger" icon="trash" label="Eliminar producto" onPress={remove} disabled={busy} />}
+      {product && (
+        <Button
+          variant="danger"
+          icon="trash"
+          label="Eliminar producto"
+          onPress={remove}
+          disabled={busy}
+        />
+      )}
     </Screen>
   );
 }
 
 const styles = themed(() =>
   StyleSheet.create({
-  photo: {
-    alignSelf: 'center',
-    width: 160,
-    height: 160,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.one,
-    borderRadius: Radius.medium,
-    borderColor: Colors.border,
-    borderWidth: 1,
-    backgroundColor: Colors.surface,
-    overflow: 'hidden',
-  },
+    photo: {
+      alignSelf: "center",
+      width: 160,
+      height: 160,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: Spacing.one,
+      borderRadius: Radius.medium,
+      borderColor: Colors.border,
+      borderWidth: 1,
+      backgroundColor: Colors.surface,
+      overflow: "hidden",
+    },
   }),
 );
