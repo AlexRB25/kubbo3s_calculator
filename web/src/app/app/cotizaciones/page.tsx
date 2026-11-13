@@ -90,7 +90,7 @@ export default function QuotesPage() {
       {quotes.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {(["all", "pending", "accepted", "rejected"] as const).map((value) => (
-            <button key={value} className={`btn ${filter === value ? "border-brand text-brand" : ""}`} onClick={() => setFilter(value)}>
+            <button key={value} className={`btn ${filter === value ? "btn-on" : ""}`} onClick={() => setFilter(value)}>
               {value === "all" ? `Todas (${quotes.length})` : `${QUOTE_STATUS[value]} (${quotes.filter((quote) => quote.status === value).length})`}
             </button>
           ))}

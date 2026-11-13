@@ -3431,6 +3431,7 @@ grant execute on function public.buy_scans(uuid) to authenticated;
 -- precio sugerido deja la misma ganancia aunque el revendedor se lleve su %.
 alter table public.profiles add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 90);
 alter table public.profiles add column if not exists reseller_by_channel boolean not null default false;
+grant update (reseller_pct, reseller_by_channel) on public.profiles to authenticated;
 alter table public.channels add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 90);
 -- Venta hecha por un revendedor: el % que se llevó (ya va sumado en fees).
 alter table public.sales add column if not exists reseller_pct numeric(6,2) not null default 0 check (reseller_pct >= 0 and reseller_pct < 100);

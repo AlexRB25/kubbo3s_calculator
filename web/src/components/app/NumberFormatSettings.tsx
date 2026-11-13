@@ -33,7 +33,7 @@ export function NumberFormatSettings() {
           {DECIMALS.map((option) => (
             <button
               key={option.value}
-              className={`btn ${(format.decimals ?? "auto") === option.value ? "border-brand text-brand" : ""}`}
+              className={`btn ${(format.decimals ?? "auto") === option.value ? "btn-on" : ""}`}
               disabled={busy}
               onClick={() => write({ decimals: option.value })}
             >
@@ -45,10 +45,10 @@ export function NumberFormatSettings() {
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-muted">Mostrar la moneda como</span>
         <div className="flex flex-wrap gap-2">
-          <button className={`btn ${!format.code ? "border-brand text-brand" : ""}`} disabled={busy} onClick={() => write({ code: false })}>
+          <button className={`btn ${!format.code ? "btn-on" : ""}`} disabled={busy} onClick={() => write({ code: false })}>
             Símbolo ($15.00)
           </button>
-          <button className={`btn ${format.code ? "border-brand text-brand" : ""}`} disabled={busy} onClick={() => write({ code: true })}>
+          <button className={`btn ${format.code ? "btn-on" : ""}`} disabled={busy} onClick={() => write({ code: true })}>
             Con código ($15.00 {currency})
           </button>
         </div>

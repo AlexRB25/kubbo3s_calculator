@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type PropsWithChildren, type ReactNode } from "react";
 import { useSave, type WriteResult } from "@/lib/data";
+import { getWorkshopCurrency } from "@/lib/format";
+import { DIAL_CODES, defaultDialCode, joinPhone, splitPhone } from "@/lib/phone";
 
 export function PageHeader({ title, children }: PropsWithChildren<{ title: string }>) {
   return (
@@ -76,7 +78,8 @@ export function Modal({ title, onClose, wide, children }: PropsWithChildren<{ ti
 export type FieldDef = {
   name: string;
   label: string;
-  type?: "text" | "number" | "textarea" | "date" | "select" | "color";
+  /** "phone" adds a country code picker in front; the value is saved as "+52 3312345678". */
+  type?: "text" | "number" | "textarea" | "date" | "select" | "color" | "phone";
   /** For selects. */
   options?: { value: string; label: string }[];
   /** Label of the empty choice of a select; omit to force one. */
@@ -103,6 +106,25 @@ type FieldsFormProps = {
   children?: ReactNode;
 };
 
+/** Country code picker plus the number; the form joins both (see `joinPhone`). */
+function PhoneInput({ name, value, placeholder }: { name: string; value: string; placeholder?: string }) {
+  const { code, number } = splitPhone(value, defaultDialCode(getWorkshopCurrency()));
+  const known = DIAL_CODES.some((item) => item.code === code);
+  return (
+    <div className="flex gap-2">
+      <select name={`${name}__code`} defaultValue={code} aria-label="Lada del país" className="input w-auto shrink-0">
+        {!known && <option value={code}>{code}</option>}
+        {DIAL_CODES.map((item) => (
+          <option key={item.code} value={item.code}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+      <input name={name} defaultValue={number} type="tel" inputMode="tel" placeholder={placeholder ?? "33 1234 5678"} className="input min-w-0" />
+    </div>
+  );
+}
+
 /** A plain form described by its fields. Covers every simple record of the workshop. */
 export function FieldsForm({ fields, initial, submitLabel = "Guardar", onSubmit, onDelete, deleteConfirm, onDone, children }: FieldsFormProps) {
   const { busy, error, save } = useSave();
@@ -117,6 +139,7 @@ export function FieldsForm({ fields, initial, submitLabel = "Guardar", onSubmit,
       const raw = String(form.get(field.name) ?? "").trim();
       if (field.type === "number") values[field.name] = Number(raw) || 0;
       else if (field.type === "select" || field.type === "date") values[field.name] = raw || null;
+      else if (field.type === "phone") values[field.name] = joinPhone(String(form.get(`${field.name}__code`) ?? ""), raw);
       else values[field.name] = raw;
     }
     setSaved(false);
@@ -138,6 +161,8 @@ export function FieldsForm({ fields, initial, submitLabel = "Guardar", onSubmit,
             {field.label}
             {field.type === "textarea" ? (
               <textarea {...common} placeholder={field.placeholder} rows={3} />
+            ) : field.type === "phone" ? (
+              <PhoneInput name={field.name} value={common.defaultValue} placeholder={field.placeholder} />
             ) : field.type === "select" ? (
               <select {...common}>
                 {(field.none || !field.required) && <option value="">{field.none ?? "—"}</option>}

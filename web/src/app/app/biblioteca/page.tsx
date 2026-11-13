@@ -88,7 +88,7 @@ function Calibration() {
 
       <div className="flex flex-wrap gap-2">
         {CATEGORIES.map((item) => (
-          <button key={item} className={`btn ${category === item ? "border-brand text-brand" : ""}`} onClick={() => setCategory(item)}>
+          <button key={item} className={`btn ${category === item ? "btn-on" : ""}`} onClick={() => setCategory(item)}>
             {item}
           </button>
         ))}

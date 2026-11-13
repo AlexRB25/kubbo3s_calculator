@@ -56,10 +56,10 @@ export function ResellerSettings() {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={`btn ${!byChannel ? "border-brand text-brand" : ""}`} onClick={() => setByChannel(false)}>
+        <button type="button" className={`btn ${!byChannel ? "btn-on" : ""}`} onClick={() => setByChannel(false)}>
           Igual en todas las tiendas
         </button>
-        <button type="button" className={`btn ${byChannel ? "border-brand text-brand" : ""}`} onClick={() => setByChannel(true)}>
+        <button type="button" className={`btn ${byChannel ? "btn-on" : ""}`} onClick={() => setByChannel(true)}>
           Distinto por tienda
         </button>
       </div>

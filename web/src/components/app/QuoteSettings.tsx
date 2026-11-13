@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { QuoteSettings as Settings } from "@/lib/types";
 
 const FIELDS: FieldDef[] = [
-  { name: "phone", label: "Teléfono o WhatsApp" },
+  { name: "phone", label: "Teléfono o WhatsApp", type: "phone" },
   { name: "email", label: "Correo de contacto" },
   { name: "address", label: "Dirección", wide: true, placeholder: "Calle, colonia, ciudad" },
   { name: "tax_pct", label: "Impuesto que se suma (%)", type: "number", hint: "16 para IVA en México; 0 si no facturas." },

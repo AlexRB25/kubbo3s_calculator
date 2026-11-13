@@ -71,7 +71,7 @@ export function BoxAdvisor({ draft, onChange, packaging, chosen, onPick, hint }:
             <button
               key={option.value}
               type="button"
-              className={`btn py-1 text-xs ${margin === option.value ? "border-brand text-brand" : ""}`}
+              className={`btn py-1 text-xs ${margin === option.value ? "btn-on" : ""}`}
               onClick={() => set({ margin: String(option.value / 10) })}
             >
               {option.label} <span className="text-muted">{option.hint}</span>

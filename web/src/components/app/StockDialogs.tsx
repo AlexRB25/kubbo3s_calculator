@@ -56,7 +56,7 @@ export function CountForm({ item, onDone }: { item: Item; onDone: () => void }) 
         <span className="label">Motivo</span>
         <div className="flex flex-wrap gap-2">
           {REASONS.map((reason) => (
-            <button key={reason} type="button" className={`btn px-3 py-1 text-xs ${note === reason ? "border-brand text-brand" : ""}`} onClick={() => setNote(reason)}>
+            <button key={reason} type="button" className={`btn px-3 py-1 text-xs ${note === reason ? "btn-on" : ""}`} onClick={() => setNote(reason)}>
               {reason}
             </button>
           ))}

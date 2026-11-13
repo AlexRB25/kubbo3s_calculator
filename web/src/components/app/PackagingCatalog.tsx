@@ -86,7 +86,7 @@ export function PackagingCatalog({ onDone }: { onDone: () => void }) {
       <div className="flex flex-wrap gap-2">
         <input className="input max-w-xs flex-1" placeholder="Buscar: 20×20, pizza, maletín…" value={query} onChange={(event) => setQuery(event.target.value)} />
         {GROUPS.map((item) => (
-          <button key={item.value} className={`btn ${group === item.value ? "border-brand text-brand" : ""}`} onClick={() => setGroup(item.value)}>
+          <button key={item.value} className={`btn ${group === item.value ? "btn-on" : ""}`} onClick={() => setGroup(item.value)}>
             {item.label}
           </button>
         ))}
