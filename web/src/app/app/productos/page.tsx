@@ -192,6 +192,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const [plates, setPlates] = useState<Record<string, PlateRow[]>>(() => platesOf(product, printers));
   const [tab, setTab] = useState<string>(() => Object.keys(platesOf(product, printers))[0] ?? "");
   const [adding, setAdding] = useState(false);
+  // Plate open in the current printer's tabs.
+  const [plateTab, setPlateTab] = useState(0);
   const activeTab = printerIds.includes(tab) ? tab : (printerIds[0] ?? "");
   const [packagingId, setPackagingId] = useState(product?.packaging_id ?? "");
   const box = packaging.find((item) => item.id === packagingId);
@@ -223,6 +225,9 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     needed: Math.max(1, Math.round(num(row.needed))),
   }));
   const usedIds = [...new Set(used.filter(Boolean))];
+  // A slot without a filament, or with one that was deleted from Filamento: its grams cost nothing.
+  const missing = (id: string) => !id || !filaments.some((item) => item.id === id);
+  const missingCount = used.filter(missing).length;
   // The plates of a model are saved for each of its printers: any of them can print the product.
   const savedPlates: Plate[] = printerIds.flatMap((modelId) =>
     idsOfModel(modelId).flatMap((printerId) =>
@@ -406,7 +411,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     event.preventDefault();
     if (partRows.length > 1 && partRows.some((row) => !row.name.trim())) return fail("impresion", "Ponle nombre a cada pieza.");
     if (!usedIds.length) return fail("impresion", "Indica qué filamentos usa el producto.");
-    if (used.some((id) => !id)) return fail("impresion", "Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo con ✕.");
+    if (missingCount) return fail("impresion", "Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo con ✕.");
     if (!printerIds.length) return fail("impresion", "Elige al menos una impresora y llena sus placas.");
     for (const plate of savedPlates) {
       const where = `${plate.name} de ${modelLabel(plate.printer_id)}`;
@@ -581,7 +586,22 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                   value={filamentId}
                   taken={used}
                   label={`Filamento ${index + 1}`}
-                  onChange={(id) => setUsed(used.map((item, position) => (position === index ? id : item)))}
+                  onChange={(id) => {
+                    setUsed(used.map((item, position) => (position === index ? id : item)));
+                    // Replacing a deleted filament keeps the grams typed for it in every plate.
+                    if (filamentId && missing(filamentId))
+                      setPlates(
+                        Object.fromEntries(
+                          Object.entries(plates).map(([key, rows]) => [
+                            key,
+                            rows.map((plate) => {
+                              const { [filamentId]: grams, ...rest } = plate.grams;
+                              return grams === undefined ? plate : { ...plate, grams: { ...rest, [id]: grams } };
+                            }),
+                          ]),
+                        ),
+                      );
+                  }}
                 />
                 <button type="button" className="btn" aria-label="Quitar filamento" onClick={() => setUsed(used.filter((_, position) => position !== index))}>
                   ✕
@@ -589,10 +609,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
               </div>
             );
           })}
-          {used.some((id) => !id) && filaments.length > 0 && (
+          {missingCount > 0 && filaments.length > 0 && (
             <p role="alert" className="error">
-              Falta elegir {used.filter((id) => !id).length === 1 ? "un filamento" : `${used.filter((id) => !id).length} filamentos`}. Mientras falte, sus
-              gramos no se cuentan y el precio sale más bajo de lo real. Elígelo o quítalo con ✕.
+              Falta elegir {missingCount === 1 ? "un filamento" : `${missingCount} filamentos`} (vacío o borrado de Filamento). Mientras falte, sus gramos no se
+              cuentan y el precio sale más bajo de lo real. Elígelo (los gramos que ya anotaste pasan al nuevo) o quítalo con ✕.
             </p>
           )}
           {unweighed.length > 0 && (
@@ -643,7 +663,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                       role="tab"
                       aria-selected={modelId === activeTab}
                       className="py-2 pl-3 pr-1 font-semibold"
-                      onClick={() => setTab(modelId)}
+                      onClick={() => {
+                        setTab(modelId);
+                        setPlateTab(0);
+                      }}
                     >
                       {modelLabel(modelId)}
                       <span className="ml-1 text-xs font-normal opacity-70">({plates[modelId]?.length ?? 0})</span>
@@ -712,117 +735,151 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                     </button>
                   ))}
                 </div>
-                {rows.map((plate, index) => {
-                  const saved = savedPlates.filter((item) => item.printer_id === printerId)[index];
-                  return (
-                    <div key={index} className="grid grid-cols-2 gap-2 rounded-md bg-ink p-2 sm:grid-cols-4">
-                      <label className="label col-span-2">
-                        Placa
-                        <input
-                          className="input"
-                          value={plate.name}
-                          onChange={(event) => setPlate(printerId, index, { name: event.target.value })}
-                          maxLength={40}
-                        />
-                      </label>
-                      <label className="label">
-                        Horas
-                        <input
-                          className="input"
-                          type="number"
-                          min={0}
-                          value={plate.hours}
-                          onChange={(event) => setPlate(printerId, index, { hours: event.target.value })}
-                          placeholder="0"
-                        />
-                      </label>
-                      <label className="label">
-                        Minutos
-                        <input
-                          className="input"
-                          type="number"
-                          min={0}
-                          value={plate.minutes}
-                          onChange={(event) => setPlate(printerId, index, { minutes: event.target.value })}
-                          placeholder="0"
-                        />
-                      </label>
-                      <p className="col-span-2 text-xs font-semibold text-muted sm:col-span-4">Piezas que salen en esta placa</p>
-                      {parts.map((part) => (
-                        <label key={part.id} className="label">
-                          <span className="truncate">{part.name}</span>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <div role="tablist" aria-orientation="vertical" className="flex shrink-0 gap-1 overflow-x-auto sm:w-44 sm:flex-col sm:overflow-visible">
+                    {rows.map((plate, index) => {
+                      const time = Math.round(num(plate.hours) * 60 + num(plate.minutes));
+                      const pieces = Object.values(plate.parts).reduce((total, count) => total + Math.max(0, Math.round(num(count))), 0);
+                      const open = index === Math.min(plateTab, rows.length - 1);
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          role="tab"
+                          aria-selected={open}
+                          onClick={() => setPlateTab(index)}
+                          className={`flex shrink-0 flex-col rounded-lg border px-3 py-2 text-left text-sm ${open ? "border-brand bg-brand/15 text-brand" : "border-line text-muted hover:text-white"}`}
+                        >
+                          <span className="font-semibold">{plate.name || `Placa ${index + 1}`}</span>
+                          <span className="text-xs opacity-80">
+                            {time > 0 ? duration(time) : "sin tiempo"} · {pieces} {pieces === 1 ? "pieza" : "piezas"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className="btn shrink-0 text-sm"
+                      onClick={() => {
+                        setPlates({ ...plates, [printerId]: [...rows, emptyPlate(rows.length, partRows)] });
+                        setPlateTab(rows.length);
+                      }}
+                    >
+                      + Agregar placa
+                    </button>
+                  </div>
+                  {rows.map((plate, index) => {
+                    if (index !== Math.min(plateTab, rows.length - 1)) return null;
+                    const saved = savedPlates.filter((item) => item.printer_id === printerId)[index];
+                    return (
+                      <div key={index} className="grid flex-1 grid-cols-2 content-start gap-2 rounded-md bg-ink p-3 sm:grid-cols-4">
+                        <label className="label col-span-2">
+                          Placa
+                          <input
+                            className="input"
+                            value={plate.name}
+                            onChange={(event) => setPlate(printerId, index, { name: event.target.value })}
+                            maxLength={40}
+                          />
+                        </label>
+                        <label className="label">
+                          Horas
                           <input
                             className="input"
                             type="number"
                             min={0}
-                            step={1}
-                            value={plate.parts[part.id] ?? ""}
-                            onChange={(event) => setPlate(printerId, index, { parts: { ...plate.parts, [part.id]: event.target.value } })}
+                            value={plate.hours}
+                            onChange={(event) => setPlate(printerId, index, { hours: event.target.value })}
                             placeholder="0"
                           />
                         </label>
-                      ))}
-                      <p className="col-span-2 text-xs font-semibold text-muted sm:col-span-4">Filamento de toda la placa</p>
-                      {usedIds.map((id) => {
-                        const filament = filaments.find((item) => item.id === id);
-                        return (
-                          <label key={id} className="label">
-                            <span className="flex items-center gap-1">
-                              <Swatch
-                                colors={filament ? filamentColors(filament) : []}
-                                glow={filament?.glow}
-                                className="inline-block size-3 shrink-0 rounded-full border border-line"
-                              />
-                              <span className="truncate">{filament ? filament.color || filamentName(filament) : "Filamento"} (g)</span>
-                            </span>
+                        <label className="label">
+                          Minutos
+                          <input
+                            className="input"
+                            type="number"
+                            min={0}
+                            value={plate.minutes}
+                            onChange={(event) => setPlate(printerId, index, { minutes: event.target.value })}
+                            placeholder="0"
+                          />
+                        </label>
+                        <p className="col-span-2 text-xs font-semibold text-muted sm:col-span-4">Piezas que salen en esta placa</p>
+                        {parts.map((part) => (
+                          <label key={part.id} className="label">
+                            <span className="truncate">{part.name}</span>
                             <input
                               className="input"
                               type="number"
                               min={0}
-                              step="any"
-                              value={plate.grams[id] ?? ""}
-                              onChange={(event) => setPlate(printerId, index, { grams: { ...plate.grams, [id]: event.target.value } })}
+                              step={1}
+                              value={plate.parts[part.id] ?? ""}
+                              onChange={(event) => setPlate(printerId, index, { parts: { ...plate.parts, [part.id]: event.target.value } })}
                               placeholder="0"
                             />
                           </label>
-                        );
-                      })}
-                      {usedIds.length === 0 && (
-                        <p className="col-span-2 text-xs text-muted sm:col-span-4">Elige arriba los filamentos para anotar sus gramos.</p>
-                      )}
-                      <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 sm:col-span-4">
-                        <span className="text-sm text-muted">
-                          {saved &&
-                            (() => {
-                              const count = piecesOnPlate(saved, parts);
-                              const waste = wastePct(profile?.waste_rules, count);
-                              const total = plateCost(saved, printer, filaments, kwhPrice, waste).total;
-                              const extraNote = waste > 0 ? ` · incluye ${waste}% de merma en filamento` : "";
-                              return count > 0
-                                ? `Imprimirla cuesta ${money(total)} · ${money(total / count)} por pieza (${count} ${count === 1 ? "pieza" : "piezas"})${extraNote}`
-                                : `Imprimirla cuesta ${money(total)}`;
-                            })()}
-                        </span>
-                        {rows.length > 1 && (
-                          <button
-                            type="button"
-                            className="btn text-xs"
-                            onClick={() => setPlates({ ...plates, [printerId]: rows.filter((_, position) => position !== index) })}
-                          >
-                            Quitar {plate.name || "placa"}
-                          </button>
+                        ))}
+                        <p className="col-span-2 text-xs font-semibold text-muted sm:col-span-4">Filamento de toda la placa</p>
+                        {usedIds.map((id) => {
+                          const filament = filaments.find((item) => item.id === id);
+                          return (
+                            <label key={id} className="label">
+                              <span className="flex items-center gap-1">
+                                <Swatch
+                                  colors={filament ? filamentColors(filament) : []}
+                                  glow={filament?.glow}
+                                  className="inline-block size-3 shrink-0 rounded-full border border-line"
+                                />
+                                <span className="truncate">
+                                  {filament ? filament.color || filamentName(filament) : <span className="text-bad">⚠ Filamento borrado</span>} (g)
+                                </span>
+                              </span>
+                              <input
+                                className="input"
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={plate.grams[id] ?? ""}
+                                onChange={(event) => setPlate(printerId, index, { grams: { ...plate.grams, [id]: event.target.value } })}
+                                placeholder="0"
+                              />
+                            </label>
+                          );
+                        })}
+                        {usedIds.length === 0 && (
+                          <p className="col-span-2 text-xs text-muted sm:col-span-4">Elige arriba los filamentos para anotar sus gramos.</p>
                         )}
+                        <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 sm:col-span-4">
+                          <span className="text-sm text-muted">
+                            {saved &&
+                              (() => {
+                                const count = piecesOnPlate(saved, parts);
+                                const waste = wastePct(profile?.waste_rules, count);
+                                const total = plateCost(saved, printer, filaments, kwhPrice, waste).total;
+                                const extraNote = waste > 0 ? ` · incluye ${waste}% de merma en filamento` : "";
+                                return count > 0
+                                  ? `Imprimirla cuesta ${money(total)} · ${money(total / count)} por pieza (${count} ${count === 1 ? "pieza" : "piezas"})${extraNote}`
+                                  : `Imprimirla cuesta ${money(total)}`;
+                              })()}
+                          </span>
+                          {rows.length > 1 && (
+                            <button
+                              type="button"
+                              className="btn text-xs"
+                              onClick={() => {
+                                if (!confirm(`¿Quitar ${plate.name || "esta placa"}?`)) return;
+                                setPlates({ ...plates, [printerId]: rows.filter((_, position) => position !== index) });
+                                setPlateTab(Math.max(0, index - 1));
+                              }}
+                            >
+                              Quitar {plate.name || "placa"}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-                <button
-                  type="button"
-                  className="btn self-start"
-                  onClick={() => setPlates({ ...plates, [printerId]: [...rows, emptyPlate(rows.length, partRows)] })}
-                >
-                  + Agregar placa
-                </button>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
@@ -1346,7 +1403,7 @@ export default function ProductsPage() {
       )}
 
       {editing && (
-        <Modal wide title={editing === "new" ? "Nuevo producto" : editing.name} onClose={() => setEditing(null)}>
+        <Modal wide="xl" title={editing === "new" ? "Nuevo producto" : editing.name} onClose={() => setEditing(null)}>
           <ProductForm product={editing === "new" ? undefined : editing} onDone={() => setEditing(null)} />
         </Modal>
       )}

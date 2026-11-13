@@ -18,9 +18,7 @@ export function Stat({ label, value, hint, tone }: { label: string; value: strin
   return (
     <div className="card flex flex-col gap-1 p-4">
       <span className="text-xs font-medium text-muted">{label}</span>
-      <span className={`text-2xl font-semibold tabular-nums ${tone === "good" ? "text-money" : tone === "bad" ? "text-bad" : ""}`}>
-        {value}
-      </span>
+      <span className={`text-2xl font-semibold tabular-nums ${tone === "good" ? "text-money" : tone === "bad" ? "text-bad" : ""}`}>{value}</span>
       {hint && <span className="text-xs text-muted">{hint}</span>}
     </div>
   );
@@ -45,7 +43,7 @@ export function TableCard({ children }: PropsWithChildren) {
   return <div className="card overflow-x-auto p-0">{children}</div>;
 }
 
-export function Modal({ title, onClose, wide, children }: PropsWithChildren<{ title: string; onClose: () => void; wide?: boolean }>) {
+export function Modal({ title, onClose, wide, children }: PropsWithChildren<{ title: string; onClose: () => void; wide?: boolean | "xl" }>) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -60,7 +58,7 @@ export function Modal({ title, onClose, wide, children }: PropsWithChildren<{ ti
         role="dialog"
         aria-modal
         aria-label={title}
-        className={`card my-8 flex w-full flex-col gap-4 ${wide ? "max-w-3xl" : "max-w-lg"}`}
+        className={`card my-8 flex w-full flex-col gap-4 ${wide === "xl" ? "max-w-6xl" : wide ? "max-w-3xl" : "max-w-lg"}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3">
