@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { BoxAdvisor, ParcelFacts, type SizeDraft } from "@/components/app/BoxAdvisor";
 import { CategoryPicker } from "@/components/app/CategoryPicker";
+import { FilamentPicker } from "@/components/app/FilamentPicker";
 import { InfoTip, TipLine } from "@/components/app/InfoTip";
 import { SliceImport, type SliceImportResult } from "@/components/app/SliceImport";
 import { Swatch } from "@/components/app/Swatch";
@@ -12,7 +13,6 @@ import { Empty, Line, Modal, PageHeader, Switch, TableCard } from "@/components/
 import {
   channelFees,
   channelPct,
-  costPerGram,
   materialUnitCost,
   overheadPerPiece,
   suppliesCost,
@@ -176,6 +176,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       parts: Object.fromEntries(parts.map((part) => [part.id, Math.max(0, Math.round(num(plate.parts[part.id] ?? "")))])),
     })),
   );
+  // Chosen filaments that no plate weighs: they add nothing to the cost.
+  const unweighed = savedPlates.length
+    ? usedIds.flatMap((id) => (savedPlates.some((plate) => (plate.grams[id] ?? 0) > 0) ? [] : filaments.filter((item) => item.id === id)))
+    : [];
   const extra = num(extraCost);
   const savedSupplies = supplies.flatMap((row) => (row.material_id && num(row.quantity) > 0 ? [{ material_id: row.material_id, quantity: num(row.quantity) }] : []));
   const supplyCost = suppliesCost(savedSupplies, materials);
@@ -317,6 +321,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     event.preventDefault();
     if (partRows.length > 1 && partRows.some((row) => !row.name.trim())) return setError("Ponle nombre a cada pieza.");
     if (!usedIds.length) return setError("Indica qué filamentos usa el producto.");
+    if (used.some((id) => !id)) return setError("Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo con ✕.");
     if (!printerIds.length) return setError("Elige al menos una impresora y llena sus placas.");
     for (const plate of savedPlates) {
       const where = `${plate.name} de ${printers.find((item) => item.id === plate.printer_id)?.name ?? "la impresora"}`;
@@ -451,25 +456,31 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           return (
             <div key={index} className="flex items-center gap-2">
               <Swatch colors={filament ? filamentColors(filament) : []} glow={filament?.glow} className="size-5 shrink-0 rounded-full border border-line" />
-              <select
-                className="input flex-1"
-                aria-label={`Filamento ${index + 1}`}
+              <FilamentPicker
+                filaments={filaments}
                 value={filamentId}
-                onChange={(event) => setUsed(used.map((item, position) => (position === index ? event.target.value : item)))}
-              >
-                <option value="">Elegir…</option>
-                {filaments.map((item) => (
-                  <option key={item.id} value={item.id} disabled={item.id !== filamentId && used.includes(item.id)}>
-                    {filamentName(item)} · {money(costPerGram(item) * 1000)}/kg
-                  </option>
-                ))}
-              </select>
+                taken={used}
+                label={`Filamento ${index + 1}`}
+                onChange={(id) => setUsed(used.map((item, position) => (position === index ? id : item)))}
+              />
               <button type="button" className="btn" aria-label="Quitar filamento" onClick={() => setUsed(used.filter((_, position) => position !== index))}>
                 ✕
               </button>
             </div>
           );
         })}
+        {used.some((id) => !id) && filaments.length > 0 && (
+          <p role="alert" className="error">
+            Falta elegir {used.filter((id) => !id).length === 1 ? "un filamento" : `${used.filter((id) => !id).length} filamentos`}. Mientras falte, sus gramos no se
+            cuentan y el precio sale más bajo de lo real. Elígelo o quítalo con ✕.
+          </p>
+        )}
+        {unweighed.length > 0 && (
+          <p role="alert" className="error">
+            {unweighed.map((filament) => filamentName(filament)).join(", ")} no {unweighed.length === 1 ? "tiene" : "tienen"} gramos en ninguna placa: no suma al costo.
+            Anota sus gramos abajo o quítalo.
+          </p>
+        )}
         <button type="button" className="btn self-start" onClick={() => setUsed([...used, ""])}>
           + Otro filamento
         </button>

@@ -208,6 +208,7 @@ export default function ProductFormScreen() {
 
   function submit() {
     if (!name.trim()) return setError('Ponle nombre al producto.');
+    if (!plated && recipe.some((row) => !row.filament_id && num(row.grams) > 0)) return setError('Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo.');
     if (!plated && recipe.some((row) => row.filament_id && num(row.grams) <= 0)) return setError('Indica cuántos gramos consume cada filamento.');
     save(write);
   }
@@ -289,7 +290,8 @@ export default function ProductFormScreen() {
         <Row key={index} style={{ alignItems: 'flex-end' }}>
           <Select
             style={{ flex: 2 }}
-            label="Filamento"
+            label={row.filament_id ? 'Filamento' : '⚠ Falta elegir'}
+            placeholder="Buscar y elegir…"
             value={row.filament_id}
             onChange={(filament_id) => setRow(index, { filament_id })}
             options={filaments.map((filament) => ({
@@ -309,6 +311,12 @@ export default function ProductFormScreen() {
           </Pressable>
         </Row>
       ))}
+      {recipe.some((row) => !row.filament_id) && filaments.length > 0 && (
+        <ErrorText>Falta elegir un filamento. Mientras falte, sus gramos no se cuentan y el precio sale más bajo de lo real. Elígelo o quítalo.</ErrorText>
+      )}
+      {recipe.some((row) => row.filament_id && num(row.grams) <= 0) && (
+        <ErrorText>Hay un filamento sin gramos: no suma al costo. Anota cuántos gramos usa.</ErrorText>
+      )}
       <Button
         variant="secondary"
         icon="add"
