@@ -10,6 +10,8 @@ export type UserFile = {
   size: number;
   kind: "model" | "image" | "other";
   app: "tools" | "calculator";
+  /** Preview picture the 3D tools make for a model. */
+  thumb_path?: string | null;
   created_at: string;
 };
 
@@ -42,13 +44,24 @@ export async function saveFile(file: File, userId: string): Promise<UserFile | n
   const db = supabase();
   const existing = await db.from("user_files").select("*").eq("name", file.name).eq("size", file.size).limit(1).maybeSingle();
   if (existing.data) return existing.data;
-  const safe = file.name.normalize("NFD").replace(/[^\w.-]+/g, "_").slice(-120);
+  const safe = file.name
+    .normalize("NFD")
+    .replace(/[^\w.-]+/g, "_")
+    .slice(-120);
   const path = `${userId}/${crypto.randomUUID()}-${safe}`;
-  const upload = await db.storage.from(BUCKET).upload(path, file, { contentType: file.type || "application/octet-stream" });
+  const upload = await db.storage.from(BUCKET).upload(path, file, {
+    contentType: file.type || "application/octet-stream",
+  });
   if (upload.error) throw new Error(`No se pudo guardar ${file.name}: ${upload.error.message}`);
   const row = await db
     .from("user_files")
-    .insert({ name: file.name, path, size: file.size, kind: fileKind(file.name), app: "calculator" })
+    .insert({
+      name: file.name,
+      path,
+      size: file.size,
+      kind: fileKind(file.name),
+      app: "calculator",
+    })
     .select()
     .single();
   if (row.error) {
@@ -66,10 +79,22 @@ export async function openStoredFile(stored: UserFile): Promise<File> {
   return new File([data], stored.name, { type: data.type });
 }
 
-export async function deleteFile(stored: UserFile) {
+export const deleteFile = (stored: UserFile) => deleteFiles([stored]);
+
+/** Deletes several files (and their previews) at once: storage first, then their rows. */
+export async function deleteFiles(list: UserFile[]) {
+  if (!list.length) return;
   const db = supabase();
-  const removed = await db.storage.from(BUCKET).remove([stored.path]);
-  if (removed.error) throw new Error(`No se pudo borrar ${stored.name}: ${removed.error.message}`);
-  const row = await db.from("user_files").delete().eq("id", stored.id);
-  if (row.error) throw new Error(`No se pudo borrar ${stored.name}: ${row.error.message}`);
+  const paths = list.flatMap((file) => (file.thumb_path ? [file.path, file.thumb_path] : [file.path]));
+  const what = list.length === 1 ? list[0].name : `${list.length} archivos`;
+  const removed = await db.storage.from(BUCKET).remove(paths);
+  if (removed.error) throw new Error(`No se pudo borrar ${what}: ${removed.error.message}`);
+  const rows = await db
+    .from("user_files")
+    .delete()
+    .in(
+      "id",
+      list.map((file) => file.id),
+    );
+  if (rows.error) throw new Error(`No se pudo borrar ${what}: ${rows.error.message}`);
 }

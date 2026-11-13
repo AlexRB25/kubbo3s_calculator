@@ -24,7 +24,24 @@ function groupOf(item: CatalogPackaging): Group {
 }
 
 const cm = (mm: number) => `${Math.round(Number(mm)) / 10}`.replace(/\.0$/, "");
-const measures = (item: Pick<CatalogPackaging, "length_mm" | "width_mm" | "height_mm">) => `${cm(item.length_mm)}×${cm(item.width_mm)}×${cm(item.height_mm)} cm`;
+const measures = (item: Pick<CatalogPackaging, "length_mm" | "width_mm" | "height_mm">) =>
+  `${cm(item.length_mm)}×${cm(item.width_mm)}×${cm(item.height_mm)} cm`;
+
+/** The row of the workshop's packaging for a catalog box, at the given cost. */
+const packagingRow = (item: CatalogPackaging, cost: number, name = item.name, stock = 0) => ({
+  name: name.trim() || item.name,
+  kind: item.kind,
+  length_mm: item.length_mm,
+  width_mm: item.width_mm,
+  height_mm: item.height_mm,
+  cost: Math.round(cost * 100) / 100,
+  stock,
+  weight_g: item.weight_g,
+  notes: item.notes,
+  catalog_id: item.id,
+  style: item.style,
+  material: item.material,
+});
 
 /** One still frame of the box, for the list. */
 function BoxThumb({ item }: { item: CatalogPackaging }) {
@@ -48,6 +65,9 @@ export function PackagingCatalog({ onDone }: { onDone: () => void }) {
   const [group, setGroup] = useState<Group>("all");
   const [picked, setPicked] = useState<CatalogPackaging | null>(null);
   const [rates, setRates] = useState<Awaited<ReturnType<typeof loadRates>> | null>(null);
+  // Boxes ticked to add several at once.
+  const [chosen, setChosen] = useState<string[]>([]);
+  const { busy, error: saveError, save } = useSave();
   const currency = getWorkshopCurrency();
 
   useEffect(() => {
@@ -75,8 +95,26 @@ export function PackagingCatalog({ onDone }: { onDone: () => void }) {
     (item) => (group === "all" || groupOf(item) === group) && (!needle || `${item.name} ${measures(item)} ${item.notes}`.toLowerCase().includes(needle)),
   );
   const added = new Set(packaging.map((item) => item.catalog_id).filter(Boolean));
+  const missing = shown.filter((item) => !added.has(item.id));
+  const toggle = (id: string) => setChosen((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
 
-  if (picked) return <CatalogBox item={picked} price={local(picked.price_mxn)} wholesale={local(picked.wholesale_price_mxn)} onBack={() => setPicked(null)} onDone={onDone} />;
+  /** Adds several boxes at their reference price per piece (0 when there is none), skipping the ones already added. */
+  function addMany(list: CatalogPackaging[]) {
+    const rows = list.filter((item) => !added.has(item.id)).map((item) => packagingRow(item, local(item.price_mxn) ?? 0));
+    if (!rows.length) return;
+    if (
+      !window.confirm(
+        `¿Agregar ${rows.length} ${rows.length === 1 ? "caja" : "cajas"} a tu embalaje con su precio de referencia por pieza? Luego puedes cambiar el precio y las piezas de cada una.`,
+      )
+    )
+      return;
+    save(() => supabase().from("packaging").insert(rows), onDone);
+  }
+
+  if (picked)
+    return (
+      <CatalogBox item={picked} price={local(picked.price_mxn)} wholesale={local(picked.wholesale_price_mxn)} onBack={() => setPicked(null)} onDone={onDone} />
+    );
 
   return (
     <div className="flex flex-col gap-4">
@@ -84,34 +122,71 @@ export function PackagingCatalog({ onDone }: { onDone: () => void }) {
         Cajas con medidas y precios de referencia de tiendas de empaque. Elige una, revísala en 3D y agrégala a tu embalaje con el precio que tú pagas.
       </p>
       <div className="flex flex-wrap gap-2">
-        <input className="input max-w-xs flex-1" placeholder="Buscar: 20×20, pizza, maletín…" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input
+          className="input max-w-xs flex-1"
+          placeholder="Buscar: 20×20, pizza, maletín…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
         {GROUPS.map((item) => (
           <button key={item.value} className={`btn ${group === item.value ? "btn-on" : ""}`} onClick={() => setGroup(item.value)}>
             {item.label}
           </button>
         ))}
       </div>
-      {error && <p className="error">{error}</p>}
+      {(error || saveError) && <p className="error">{error || saveError}</p>}
+      {catalog && missing.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <button
+            className="btn btn-primary"
+            disabled={busy || !chosen.some((id) => !added.has(id))}
+            onClick={() => addMany((catalog ?? []).filter((item) => chosen.includes(item.id)))}
+          >
+            {busy ? "Agregando…" : `Agregar seleccionadas (${chosen.filter((id) => !added.has(id)).length})`}
+          </button>
+          <button className="btn" disabled={busy} onClick={() => addMany(missing)}>
+            {group === "all" && !needle ? `Agregar todas (${missing.length})` : `Agregar todas las que se ven (${missing.length})`}
+          </button>
+          {chosen.length > 0 && (
+            <button className="text-muted hover:text-white" onClick={() => setChosen([])}>
+              Quitar selección
+            </button>
+          )}
+          <span className="text-xs text-muted">Marca la casilla de cada caja para elegir varias.</span>
+        </div>
+      )}
       {!catalog && !error && <p className="text-muted">Cargando el catálogo…</p>}
       <div className="grid max-h-[60vh] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4">
         {shown.map((item) => {
           const price = local(item.price_mxn);
           const wholesale = local(item.wholesale_price_mxn);
+          const have = added.has(item.id);
+          const ticked = chosen.includes(item.id);
           return (
-            <button
-              key={item.id}
-              className="flex flex-col items-center gap-1 rounded-xl border border-line p-2 text-center transition hover:border-brand/60 hover:bg-raised/50"
-              onClick={() => setPicked(item)}
-            >
-              <BoxThumb item={item} />
-              <span className="text-sm leading-tight font-semibold">{item.name}</span>
-              <span className="text-xs text-muted">{measures(item)}</span>
-              <span className="text-xs">
-                {price !== null ? money(price) : <span className="text-muted">Sin precio</span>}
-                {wholesale !== null && <span className="text-money"> · {money(wholesale)} mayoreo</span>}
-              </span>
-              {added.has(item.id) && <span className="text-[10px] font-semibold text-brand">Ya la tienes</span>}
-            </button>
+            <div key={item.id} className="relative">
+              <input
+                type="checkbox"
+                aria-label={`Elegir ${item.name}`}
+                title={have ? "Ya la tienes" : "Elegir para agregar varias"}
+                className="absolute top-2 left-2 z-10 size-4 cursor-pointer accent-brand disabled:cursor-not-allowed"
+                disabled={have}
+                checked={ticked && !have}
+                onChange={() => toggle(item.id)}
+              />
+              <button
+                className={`flex w-full flex-col items-center gap-1 rounded-xl border p-2 text-center transition hover:border-brand/60 hover:bg-raised/50 ${ticked && !have ? "border-brand bg-brand/10" : "border-line"}`}
+                onClick={() => setPicked(item)}
+              >
+                <BoxThumb item={item} />
+                <span className="text-sm leading-tight font-semibold">{item.name}</span>
+                <span className="text-xs text-muted">{measures(item)}</span>
+                <span className="text-xs">
+                  {price !== null ? money(price) : <span className="text-muted">Sin precio</span>}
+                  {wholesale !== null && <span className="text-money"> · {money(wholesale)} mayoreo</span>}
+                </span>
+                {have && <span className="text-[10px] font-semibold text-brand">Ya la tienes</span>}
+              </button>
+            </div>
           );
         })}
       </div>
@@ -119,7 +194,19 @@ export function PackagingCatalog({ onDone }: { onDone: () => void }) {
   );
 }
 
-function CatalogBox({ item, price, wholesale, onBack, onDone }: { item: CatalogPackaging; price: number | null; wholesale: number | null; onBack: () => void; onDone: () => void }) {
+function CatalogBox({
+  item,
+  price,
+  wholesale,
+  onBack,
+  onDone,
+}: {
+  item: CatalogPackaging;
+  price: number | null;
+  wholesale: number | null;
+  onBack: () => void;
+  onDone: () => void;
+}) {
   const { busy, error, save } = useSave();
   const [which, setWhich] = useState<"piece" | "wholesale" | "own">(price !== null ? "piece" : "own");
   const [own, setOwn] = useState("");
@@ -132,20 +219,7 @@ function CatalogBox({ item, price, wholesale, onBack, onDone }: { item: CatalogP
       () =>
         supabase()
           .from("packaging")
-          .insert({
-            name: name.trim() || item.name,
-            kind: item.kind,
-            length_mm: item.length_mm,
-            width_mm: item.width_mm,
-            height_mm: item.height_mm,
-            cost: Math.round(cost * 100) / 100,
-            stock: Math.round(num(stock)),
-            weight_g: item.weight_g,
-            notes: item.notes,
-            catalog_id: item.id,
-            style: item.style,
-            material: item.material,
-          }),
+          .insert(packagingRow(item, cost, name, Math.round(num(stock)))),
       onDone,
     );
   }
@@ -180,7 +254,9 @@ function CatalogBox({ item, price, wholesale, onBack, onDone }: { item: CatalogP
           <label className="flex items-center gap-2 text-sm">
             <input type="radio" checked={which === "own"} onChange={() => setWhich("own")} />
             Otro precio
-            {which === "own" && <input className="input w-28" inputMode="decimal" autoFocus value={own} placeholder="0" onChange={(event) => setOwn(event.target.value)} />}
+            {which === "own" && (
+              <input className="input w-28" inputMode="decimal" autoFocus value={own} placeholder="0" onChange={(event) => setOwn(event.target.value)} />
+            )}
           </label>
           {price === null && <p className="text-xs text-muted">No tenemos su precio; escribe lo que te cuesta en tu tienda.</p>}
           <p className="text-xs text-muted">Precios de referencia de una tienda de empaques; pueden variar en la tuya.</p>

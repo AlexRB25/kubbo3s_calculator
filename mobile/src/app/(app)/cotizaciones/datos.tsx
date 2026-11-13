@@ -2,9 +2,10 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 
-import { Button, ErrorText, Field, Muted, Row, Screen } from '@/components/ui';
+import { Button, ErrorText, Field, Muted, Row, Screen, Select } from '@/components/ui';
 import { Colors, Radius } from '@/constants/theme';
-import { field, num } from '@/lib/format';
+import { field, getWorkshopCurrency, num } from '@/lib/format';
+import { DIAL_CODES, defaultDialCode, joinPhone, splitPhone } from '@/lib/phone';
 import { publicFile } from '@/lib/quote-share';
 import { supabase, uploadProductImage } from '@/lib/supabase';
 import type { QuoteSettings } from '@/lib/types';
@@ -16,7 +17,10 @@ export default function QuoteSettingsScreen() {
   const { busy, error, setError, save } = useSave();
   const settings: QuoteSettings = profile?.quote_settings ?? {};
 
-  const [phone, setPhone] = useState(settings.phone ?? '');
+  // The phone is saved with its country code: "+52 3312345678".
+  const [savedPhone] = useState(() => splitPhone(settings.phone ?? '', defaultDialCode(getWorkshopCurrency())));
+  const [dialCode, setDialCode] = useState(savedPhone.code);
+  const [phone, setPhone] = useState(savedPhone.number);
   const [email, setEmail] = useState(settings.email ?? '');
   const [address, setAddress] = useState(settings.address ?? '');
   const [tax, setTax] = useState(field(settings.tax_pct ?? 16));
@@ -49,7 +53,7 @@ export default function QuoteSettingsScreen() {
       }
       const next: QuoteSettings = {
         ...settings,
-        phone: phone.trim(),
+        phone: joinPhone(dialCode, phone),
         email: email.trim(),
         address: address.trim(),
         tax_pct: num(tax),
@@ -86,7 +90,16 @@ export default function QuoteSettingsScreen() {
           />
         ) : null}
       </Row>
-      <Field label="Teléfono o WhatsApp" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+      <Row>
+        <Select
+          style={{ width: 140 }}
+          label="Lada"
+          options={[...(DIAL_CODES.some((item) => item.code === dialCode) ? [] : [{ value: dialCode, label: dialCode }]), ...DIAL_CODES.map((item) => ({ value: item.code, label: item.label }))]}
+          value={dialCode}
+          onChange={(value) => value && setDialCode(value)}
+        />
+        <Field style={{ flex: 1 }} label="Teléfono o WhatsApp" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="33 1234 5678" />
+      </Row>
       <Field label="Correo de contacto" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
       <Field label="Dirección" value={address} onChangeText={setAddress} placeholder="Calle, colonia, ciudad" />
       <Row>

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 
 import { BoxPreview, BoxThumb } from '@/components/box-preview';
 import { Button, Card, Chips, ErrorText, Field, Muted, Screen } from '@/components/ui';
@@ -28,6 +28,22 @@ function groupOf(item: CatalogPackaging): Group {
 const cm = (mm: number) => `${Math.round(Number(mm)) / 10}`.replace(/\.0$/, '');
 const measures = (item: CatalogPackaging) => `${cm(item.length_mm)}×${cm(item.width_mm)}×${cm(item.height_mm)} cm`;
 
+/** The row of the workshop's packaging for a catalog box, at the given cost. */
+const packagingRow = (item: CatalogPackaging, cost: number, name = item.name, stock = 0) => ({
+  name: name.trim() || item.name,
+  kind: item.kind,
+  length_mm: item.length_mm,
+  width_mm: item.width_mm,
+  height_mm: item.height_mm,
+  cost: Math.round(cost * 100) / 100,
+  stock,
+  weight_g: item.weight_g,
+  notes: item.notes,
+  catalog_id: item.id,
+  style: item.style,
+  material: item.material,
+});
+
 /** Boxes Kubbo3D keeps ready: pick one, see it in 3D, and add it to your packaging at the price you pay. */
 export default function PackagingCatalogScreen() {
   const { packaging } = useData();
@@ -37,6 +53,10 @@ export default function PackagingCatalogScreen() {
   const [group, setGroup] = useState<Group>('all');
   const [picked, setPicked] = useState<CatalogPackaging | null>(null);
   const [rates, setRates] = useState<Awaited<ReturnType<typeof loadRates>> | null>(null);
+  // "Elegir varias": tapping a box ticks it instead of opening it.
+  const [choosing, setChoosing] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const { busy, error, save } = useSave();
   const currency = getWorkshopCurrency();
 
   useEffect(() => {
@@ -68,6 +88,23 @@ export default function PackagingCatalogScreen() {
     (item) => (group === 'all' || groupOf(item) === group) && (!needle || `${item.name} ${measures(item)} ${item.notes}`.toLowerCase().includes(needle)),
   );
   const added = new Set(packaging.map((item) => item.catalog_id).filter(Boolean));
+  const missing = shown.filter((item) => !added.has(item.id));
+  const ticked = chosen.filter((id) => !added.has(id));
+  const toggle = (id: string) => setChosen((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
+
+  /** Adds several boxes at their reference price per piece (0 when there is none), skipping the ones already added. */
+  function addMany(list: CatalogPackaging[]) {
+    const rows = list.filter((item) => !added.has(item.id)).map((item) => packagingRow(item, local(item.price_mxn) ?? 0));
+    if (!rows.length) return;
+    Alert.alert(
+      `¿Agregar ${rows.length} ${rows.length === 1 ? 'caja' : 'cajas'}?`,
+      'Se agregan a tu embalaje con su precio de referencia por pieza. Luego puedes cambiar el precio y las piezas de cada una.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Agregar', onPress: () => save(() => supabase.from('packaging').insert(rows), () => router.back()) },
+      ],
+    );
+  }
 
   return (
     <Screen>
@@ -76,15 +113,44 @@ export default function PackagingCatalogScreen() {
       <Chips options={GROUPS} value={group} onChange={setGroup} />
       <ErrorText>{failure}</ErrorText>
       {!catalog && !failure && <Muted>Cargando el catálogo…</Muted>}
+      <ErrorText>{error}</ErrorText>
+      {catalog && missing.length > 0 && (
+        <View style={{ gap: Spacing.two }}>
+          {choosing ? (
+            <>
+              <Button icon="add" label={`Agregar seleccionadas (${ticked.length})`} loading={busy} disabled={!ticked.length} onPress={() => addMany(catalog.filter((item) => chosen.includes(item.id)))} />
+              <Button
+                variant="secondary"
+                label="Dejar de elegir"
+                onPress={() => {
+                  setChoosing(false);
+                  setChosen([]);
+                }}
+              />
+            </>
+          ) : (
+            <Button variant="secondary" icon="checkbox-outline" label="Elegir varias" onPress={() => setChoosing(true)} />
+          )}
+          <Button
+            variant="secondary"
+            label={group === 'all' && !needle ? `Agregar todas (${missing.length})` : `Agregar todas las que se ven (${missing.length})`}
+            disabled={busy}
+            onPress={() => addMany(missing)}
+          />
+        </View>
+      )}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two }}>
         {shown.map((item) => {
           const price = local(item.price_mxn);
           const wholesale = local(item.wholesale_price_mxn);
+          const have = added.has(item.id);
+          const on = choosing && !have && chosen.includes(item.id);
           return (
             <Pressable
               key={item.id}
-              accessibilityRole="button"
-              onPress={() => setPicked(item)}
+              accessibilityRole={choosing ? 'checkbox' : 'button'}
+              accessibilityState={choosing ? { checked: on, disabled: have } : undefined}
+              onPress={() => (choosing ? !have && toggle(item.id) : setPicked(item))}
               style={({ pressed }) => ({
                 width: '48%',
                 flexGrow: 1,
@@ -93,9 +159,9 @@ export default function PackagingCatalogScreen() {
                 padding: Spacing.two,
                 borderRadius: Radius.medium,
                 borderWidth: 1,
-                borderColor: Colors.border,
-                backgroundColor: Colors.surface,
-                opacity: pressed ? 0.6 : 1,
+                borderColor: on ? Colors.accent : Colors.border,
+                backgroundColor: on ? Colors.accentSoft : Colors.surface,
+                opacity: pressed ? 0.6 : choosing && have ? 0.45 : 1,
               })}>
               <BoxThumb box={item} size={84} />
               <Text style={{ color: Colors.text, fontWeight: '700', textAlign: 'center' }} numberOfLines={2}>
@@ -106,7 +172,8 @@ export default function PackagingCatalogScreen() {
                 {price !== null ? money(price) : 'Sin precio'}
                 {wholesale !== null ? <Text style={{ color: Colors.money }}> · {money(wholesale)} may.</Text> : null}
               </Text>
-              {added.has(item.id) && <Text style={{ color: Colors.accent, fontSize: 11, fontWeight: '700' }}>Ya la tienes</Text>}
+              {on && <Text style={{ position: 'absolute', top: 6, left: 8, color: Colors.accent, fontWeight: '800' }}>✓</Text>}
+              {have && <Text style={{ color: Colors.accent, fontSize: 11, fontWeight: '700' }}>Ya la tienes</Text>}
             </Pressable>
           );
         })}
@@ -149,20 +216,7 @@ function CatalogBox({ item, price, wholesale, onBack }: { item: CatalogPackaging
         onPress={() =>
           save(
             () =>
-              supabase.from('packaging').insert({
-                name: name.trim() || item.name,
-                kind: item.kind,
-                length_mm: item.length_mm,
-                width_mm: item.width_mm,
-                height_mm: item.height_mm,
-                cost: Math.round(cost * 100) / 100,
-                stock: Math.round(num(stock)),
-                weight_g: item.weight_g,
-                notes: item.notes,
-                catalog_id: item.id,
-                style: item.style,
-                material: item.material,
-              }),
+              supabase.from('packaging').insert(packagingRow(item, cost, name, Math.round(num(stock)))),
             () => router.back(),
           )
         }
