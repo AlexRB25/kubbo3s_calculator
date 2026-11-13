@@ -12,28 +12,44 @@ import { useSession } from "@/lib/session";
 import { supabase } from "@/lib/supabase";
 
 /** Who sees each page (empty = everyone): staff do the daily work; settings and team are the owner's. */
-const LINKS: { href: string; label: string; icon: NavIconName; roles?: ShopRole[] }[] = [
-  { href: "/app", icon: "resumen", label: "Resumen" },
-  { href: "/app/calculadora", icon: "calculadora", label: "Cálculo rápido" },
-  { href: "/app/cotizaciones", icon: "cotizaciones", label: "Cotizaciones" },
-  { href: "/app/clientes", icon: "clientes", label: "Clientes" },
-  { href: "/app/inventario", icon: "inventario", label: "Inventario" },
-  { href: "/app/productos", icon: "productos", label: "Productos" },
-  { href: "/app/catalogo", icon: "catalogo", label: "Mi catálogo", roles: ["owner", "admin"] },
-  { href: "/app/filamento", icon: "filamento", label: "Filamento" },
-  { href: "/app/insumos", icon: "insumos", label: "Insumos" },
-  { href: "/app/impresiones", icon: "impresiones", label: "Impresiones" },
-  { href: "/app/ventas", icon: "ventas", label: "Ventas" },
-  { href: "/app/gastos", icon: "gastos", label: "Gastos" },
-  { href: "/app/embalaje", icon: "embalaje", label: "Embalaje" },
-  { href: "/app/paqueterias", icon: "paqueterias", label: "Paqueterías", roles: ["owner", "admin"] },
-  { href: "/app/archivos", icon: "archivos", label: "Mis archivos" },
-  { href: "/app/impresoras", icon: "impresoras", label: "Impresoras" },
-  { href: "/app/proveedores", icon: "proveedores", label: "Proveedores", roles: ["owner", "admin"] },
-  { href: "/app/canales", icon: "canales", label: "Canales de venta", roles: ["owner", "admin"] },
-  { href: "/app/equipo", icon: "equipo", label: "Equipo" },
-  { href: "/app/ajustes", icon: "ajustes", label: "Ajustes" },
+const LINKS: { group: NavGroup; href: string; label: string; icon: NavIconName; roles?: ShopRole[] }[] = [
+  { group: "inicio", href: "/app", icon: "resumen", label: "Resumen" },
+  { group: "ventas", href: "/app/calculadora", icon: "calculadora", label: "Cálculo rápido" },
+  { group: "ventas", href: "/app/cotizaciones", icon: "cotizaciones", label: "Cotizaciones" },
+  { group: "ventas", href: "/app/clientes", icon: "clientes", label: "Clientes" },
+  { group: "ventas", href: "/app/catalogo", icon: "catalogo", label: "Mi catálogo", roles: ["owner", "admin"] },
+  { group: "ventas", href: "/app/ventas", icon: "ventas", label: "Ventas" },
+  { group: "ventas", href: "/app/canales", icon: "canales", label: "Canales de venta", roles: ["owner", "admin"] },
+  { group: "produccion", href: "/app/productos", icon: "productos", label: "Productos" },
+  { group: "produccion", href: "/app/impresiones", icon: "impresiones", label: "Impresiones" },
+  { group: "produccion", href: "/app/archivos", icon: "archivos", label: "Mis archivos" },
+  { group: "produccion", href: "/app/impresoras", icon: "impresoras", label: "Impresoras" },
+  { group: "materiales", href: "/app/inventario", icon: "inventario", label: "Inventario" },
+  { group: "materiales", href: "/app/filamento", icon: "filamento", label: "Filamento" },
+  { group: "materiales", href: "/app/insumos", icon: "insumos", label: "Insumos" },
+  { group: "materiales", href: "/app/gastos", icon: "gastos", label: "Gastos" },
+  { group: "materiales", href: "/app/embalaje", icon: "embalaje", label: "Embalaje" },
+  { group: "materiales", href: "/app/paqueterias", icon: "paqueterias", label: "Paqueterías", roles: ["owner", "admin"] },
+  { group: "materiales", href: "/app/proveedores", icon: "proveedores", label: "Proveedores", roles: ["owner", "admin"] },
+  { group: "taller", href: "/app/equipo", icon: "equipo", label: "Equipo" },
+  { group: "taller", href: "/app/ajustes", icon: "ajustes", label: "Ajustes" },
 ];
+
+type NavGroup = "inicio" | "ventas" | "produccion" | "materiales" | "taller";
+
+/** Sections of the menu, in order; the first has no title. */
+const GROUPS: { id: NavGroup; title: string }[] = [
+  { id: "inicio", title: "" },
+  { id: "ventas", title: "Ventas y clientes" },
+  { id: "produccion", title: "Producción" },
+  { id: "materiales", title: "Materiales y compras" },
+  { id: "taller", title: "Taller" },
+];
+
+/** The links split by section, leaving out empty ones. */
+function byGroup<T extends { group: NavGroup }>(links: T[]) {
+  return GROUPS.map((group) => ({ ...group, links: links.filter((link) => link.group === group.id) })).filter((group) => group.links.length);
+}
 
 const ROLE_NAMES: Record<ShopRole, string> = { owner: "Dueño", admin: "Administrador", staff: "Colaborador" };
 
@@ -48,18 +64,28 @@ function useLinks() {
 function Nav({ pathname, collapsed }: { pathname: string; collapsed: boolean }) {
   return (
     <nav className="flex flex-col gap-0.5">
-      {useLinks().map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          aria-current={pathname === link.href ? "page" : undefined}
-          aria-label={collapsed ? link.label : undefined}
-          title={collapsed ? link.label : undefined}
-          className={`flex items-center gap-2.5 rounded-lg py-2 text-sm font-medium text-muted hover:bg-raised hover:text-white aria-[current=page]:bg-brand/15 aria-[current=page]:text-brand ${collapsed ? "justify-center px-0" : "px-3"}`}
-        >
-          <NavIcon name={link.icon} size={18} />
-          {!collapsed && link.label}
-        </Link>
+      {byGroup(useLinks()).map((group) => (
+        <div key={group.id} className="flex flex-col gap-0.5">
+          {group.title &&
+            (collapsed ? (
+              <hr className="mx-2 my-2 border-line" />
+            ) : (
+              <p className="mt-3 mb-1 px-3 text-[11px] font-semibold tracking-wider text-muted/70 uppercase">{group.title}</p>
+            ))}
+          {group.links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              aria-current={pathname === link.href ? "page" : undefined}
+              aria-label={collapsed ? link.label : undefined}
+              title={collapsed ? link.label : undefined}
+              className={`flex items-center gap-2.5 rounded-lg py-2 text-sm font-medium text-muted hover:bg-raised hover:text-white aria-[current=page]:bg-brand/15 aria-[current=page]:text-brand ${collapsed ? "justify-center px-0" : "px-3"}`}
+            >
+              <NavIcon name={link.icon} size={18} />
+              {!collapsed && link.label}
+            </Link>
+          ))}
+        </div>
       ))}
     </nav>
   );
@@ -69,7 +95,15 @@ function Nav({ pathname, collapsed }: { pathname: string; collapsed: boolean }) 
 function Extras({ onGo, collapsed = false }: { onGo?: () => void; collapsed?: boolean }) {
   const items: { href: string; external?: boolean; icon: NavIconName; title: string; text: string }[] = [
     ...(process.env.PB_TOOLS_URL
-      ? [{ href: process.env.PB_TOOLS_URL, external: true, icon: "herramientas" as const, title: "Herramientas 3D", text: "Moldes, cortadores, alcancías y lámparas" }]
+      ? [
+          {
+            href: process.env.PB_TOOLS_URL,
+            external: true,
+            icon: "herramientas" as const,
+            title: "Herramientas 3D",
+            text: "Moldes, cortadores, alcancías y lámparas",
+          },
+        ]
       : []),
     { href: "/modelos", icon: "modelos", title: "Modelos 3D", text: "Compra y vende STL y 3MF" },
     { href: "/tienda", icon: "tienda", title: "Tienda Kubbo", text: "Lo que vendemos en Kubbo3D" },
@@ -167,20 +201,27 @@ function MobileMenu({ pathname, userId, email }: { pathname: string; userId: str
             </button>
           </div>
           <ShopSwitcher userId={userId} />
-          <nav className="grid grid-cols-3 gap-2">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={close}
-                aria-current={link === current ? "page" : undefined}
-                className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-raised/50 p-2 text-center text-xs leading-tight font-medium text-white transition active:scale-95 aria-[current=page]:border-brand aria-[current=page]:bg-brand/15 aria-[current=page]:text-brand"
-              >
-                <span className="grid size-10 place-items-center rounded-xl bg-brand/10 text-brand">
-                  <NavIcon name={link.icon} size={22} />
-                </span>
-                {link.label}
-              </Link>
+          <nav className="flex flex-col gap-3">
+            {byGroup(links).map((group) => (
+              <div key={group.id} className="flex flex-col gap-2">
+                {group.title && <p className="text-xs font-semibold tracking-wide text-muted uppercase">{group.title}</p>}
+                <div className="grid grid-cols-3 gap-2">
+                  {group.links.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={close}
+                      aria-current={link === current ? "page" : undefined}
+                      className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border border-line bg-raised/50 p-2 text-center text-xs leading-tight font-medium text-white transition active:scale-95 aria-[current=page]:border-brand aria-[current=page]:bg-brand/15 aria-[current=page]:text-brand"
+                    >
+                      <span className="grid size-10 place-items-center rounded-xl bg-brand/10 text-brand">
+                        <NavIcon name={link.icon} size={22} />
+                      </span>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
           <div className="flex flex-col gap-2">
@@ -306,7 +347,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               title={collapsed ? "Abrir menú" : "Cerrar menú"}
               className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-raised hover:text-white"
             >
-              <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg
+                viewBox="0 0 24 24"
+                width={18}
+                height={18}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
                 <path d={collapsed ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} />
               </svg>
             </button>

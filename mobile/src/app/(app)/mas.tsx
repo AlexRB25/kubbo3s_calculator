@@ -1,39 +1,144 @@
-import { Ionicons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { Ionicons } from "@expo/vector-icons";
+import { router, type Href } from "expo-router";
+import { View } from "react-native";
 
-import { ThemePicker } from '@/components/theme-picker';
-import { Button, Card, Heading, ListItem, Muted, Screen, type IconName } from '@/components/ui';
-import { Colors } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
-import type { ShopRole } from '@/lib/types';
-import { useData } from '@/store/data';
-import { useSession } from '@/store/session';
+import { ThemePicker } from "@/components/theme-picker";
+import {
+  Button,
+  Card,
+  Heading,
+  ListItem,
+  Muted,
+  Screen,
+  type IconName,
+} from "@/components/ui";
+import { Colors } from "@/constants/theme";
+import { supabase } from "@/lib/supabase";
+import type { ShopRole } from "@/lib/types";
+import { useData } from "@/store/data";
+import { useSession } from "@/store/session";
 
-const ROLE_NAMES: Record<ShopRole, string> = { owner: 'Dueño', admin: 'Administrador', staff: 'Colaborador' };
+/** Sections of the menu, like the web's sidebar. */
+const GROUPS = [
+  { id: "ventas", title: "Ventas y clientes" },
+  { id: "produccion", title: "Producción" },
+  { id: "materiales", title: "Materiales y compras" },
+  { id: "taller", title: "Taller" },
+];
+
+const ROLE_NAMES: Record<ShopRole, string> = {
+  owner: "Dueño",
+  admin: "Administrador",
+  staff: "Colaborador",
+};
 
 export default function MoreScreen() {
-  const { printers, suppliers, expenses, channels, packaging, quotes, clients, shop, reload } = useData();
+  const {
+    printers,
+    suppliers,
+    expenses,
+    channels,
+    packaging,
+    quotes,
+    clients,
+    shop,
+    reload,
+  } = useData();
   const { session } = useSession();
-  const role = shop?.role ?? 'owner';
+  const role = shop?.role ?? "owner";
   const userId = session?.user.id;
 
   // Staff do the daily work; channels and suppliers are for the owner and admins, settings only for the owner.
-  const links: { href: Href; icon: IconName; title: string; subtitle: string; roles?: ShopRole[] }[] = [
-    { href: '/calculadora', icon: 'calculator', title: 'Cálculo rápido', subtitle: 'El precio de una pieza sin crear producto' },
-    { href: '/cotizaciones', icon: 'document-text', title: 'Cotizaciones', subtitle: `${quotes.length} · PDF y WhatsApp para tus clientes` },
-    { href: '/clientes', icon: 'people', title: 'Clientes', subtitle: `${clients.length} · contacto y datos de facturación` },
-    { href: '/impresoras', icon: 'print', title: 'Impresoras', subtitle: `${printers.length} · mantenimientos y ajustes` },
-    { href: '/proveedores', icon: 'business', title: 'Proveedores', subtitle: `${suppliers.length} registrados`, roles: ['owner', 'admin'] },
-    { href: '/embalaje', icon: 'cube', title: 'Embalaje', subtitle: `${packaging.length} cajas, sobres y bolsas` },
-    { href: '/gastos', icon: 'receipt', title: 'Gastos', subtitle: `${expenses.length} registrados` },
-    { href: '/canales', icon: 'storefront', title: 'Canales de venta', subtitle: channels.map((channel) => channel.name).join(', '), roles: ['owner', 'admin'] },
-    { href: '/ajustes', icon: 'settings', title: 'Ajustes', subtitle: 'Negocio, precio de la luz y ganancia deseada', roles: ['owner'] },
-    { href: '/cotizaciones/datos', icon: 'briefcase', title: 'Datos de tus cotizaciones', subtitle: 'Logo, teléfono, impuesto y condiciones', roles: ['owner'] },
+  const links: {
+    group: string;
+    href: Href;
+    icon: IconName;
+    title: string;
+    subtitle: string;
+    roles?: ShopRole[];
+  }[] = [
+    {
+      group: "ventas",
+      href: "/calculadora",
+      icon: "calculator",
+      title: "Cálculo rápido",
+      subtitle: "El precio de una pieza sin crear producto",
+    },
+    {
+      group: "ventas",
+      href: "/cotizaciones",
+      icon: "document-text",
+      title: "Cotizaciones",
+      subtitle: `${quotes.length} · PDF y WhatsApp para tus clientes`,
+    },
+    {
+      group: "ventas",
+      href: "/clientes",
+      icon: "people",
+      title: "Clientes",
+      subtitle: `${clients.length} · contacto y datos de facturación`,
+    },
+    {
+      group: "produccion",
+      href: "/impresoras",
+      icon: "print",
+      title: "Impresoras",
+      subtitle: `${printers.length} · mantenimientos y ajustes`,
+    },
+    {
+      group: "materiales",
+      href: "/proveedores",
+      icon: "business",
+      title: "Proveedores",
+      subtitle: `${suppliers.length} registrados`,
+      roles: ["owner", "admin"],
+    },
+    {
+      group: "materiales",
+      href: "/embalaje",
+      icon: "cube",
+      title: "Embalaje",
+      subtitle: `${packaging.length} cajas, sobres y bolsas`,
+    },
+    {
+      group: "materiales",
+      href: "/gastos",
+      icon: "receipt",
+      title: "Gastos",
+      subtitle: `${expenses.length} registrados`,
+    },
+    {
+      group: "ventas",
+      href: "/canales",
+      icon: "storefront",
+      title: "Canales de venta",
+      subtitle: channels.map((channel) => channel.name).join(", "),
+      roles: ["owner", "admin"],
+    },
+    {
+      group: "taller",
+      href: "/ajustes",
+      icon: "settings",
+      title: "Ajustes",
+      subtitle: "Negocio, precio de la luz y ganancia deseada",
+      roles: ["owner"],
+    },
+    {
+      group: "taller",
+      href: "/cotizaciones/datos",
+      icon: "briefcase",
+      title: "Datos de tus cotizaciones",
+      subtitle: "Logo, teléfono, impuesto y condiciones",
+      roles: ["owner"],
+    },
   ];
 
   async function switchTo(ownerId: string) {
     if (!userId) return;
-    await supabase.from('profiles').update({ active_shop: ownerId === userId ? null : ownerId }).eq('id', userId);
+    await supabase
+      .from("profiles")
+      .update({ active_shop: ownerId === userId ? null : ownerId })
+      .eq("id", userId);
     await reload();
   }
 
@@ -45,37 +150,76 @@ export default function MoreScreen() {
           {shop.shops.map((item) => (
             <ListItem
               key={item.owner_id}
-              left={<Ionicons name={item.owner_id === shop.shop_id ? 'radio-button-on' : 'radio-button-off'} size={22} color={Colors.accent} />}
+              left={
+                <Ionicons
+                  name={
+                    item.owner_id === shop.shop_id
+                      ? "radio-button-on"
+                      : "radio-button-off"
+                  }
+                  size={22}
+                  color={Colors.accent}
+                />
+              }
               title={item.name}
               subtitle={ROLE_NAMES[item.role]}
-              onPress={item.owner_id === shop.shop_id ? undefined : () => switchTo(item.owner_id)}
+              onPress={
+                item.owner_id === shop.shop_id
+                  ? undefined
+                  : () => switchTo(item.owner_id)
+              }
             />
           ))}
         </>
       )}
-      {links
-        .filter((link) => !link.roles || link.roles.includes(role))
-        .map((link) => (
-          <ListItem
-            key={link.title}
-            left={<Ionicons name={link.icon} size={22} color={Colors.accent} />}
-            title={link.title}
-            subtitle={link.subtitle}
-            onPress={() => router.push(link.href)}
-          />
-        ))}
+      {GROUPS.map((group) => {
+        const shown = links.filter(
+          (link) =>
+            link.group === group.id &&
+            (!link.roles || link.roles.includes(role)),
+        );
+        if (!shown.length) return null;
+        return (
+          <View key={group.id} style={{ gap: 8 }}>
+            <Heading>{group.title}</Heading>
+            {shown.map((link) => (
+              <ListItem
+                key={link.title}
+                left={
+                  <Ionicons name={link.icon} size={22} color={Colors.accent} />
+                }
+                title={link.title}
+                subtitle={link.subtitle}
+                onPress={() => router.push(link.href)}
+              />
+            ))}
+          </View>
+        );
+      })}
       <Card>
         <Heading>Tema de la app</Heading>
         <ThemePicker />
         <Muted>Se guarda en este teléfono.</Muted>
       </Card>
-      <Muted style={{ textAlign: 'center' }}>
+      <Muted style={{ textAlign: "center" }}>
         {session?.user.email}
-        {role !== 'owner' ? ` · ${ROLE_NAMES[role]}` : ''}
+        {role !== "owner" ? ` · ${ROLE_NAMES[role]}` : ""}
       </Muted>
-      <Muted style={{ textAlign: 'center' }}>Para invitar a tu equipo entra a la calculadora web → Equipo.</Muted>
-      <Button variant="secondary" icon="log-out" label="Cerrar sesión" onPress={() => supabase.auth.signOut()} />
-      <Button variant="danger" icon="trash" label="Eliminar mi cuenta" onPress={() => router.push('/eliminar-cuenta')} />
+      <Muted style={{ textAlign: "center" }}>
+        Para invitar a tu equipo entra a la calculadora web → Equipo.
+      </Muted>
+      <Button
+        variant="secondary"
+        icon="log-out"
+        label="Cerrar sesión"
+        onPress={() => supabase.auth.signOut()}
+      />
+      <Button
+        variant="danger"
+        icon="trash"
+        label="Eliminar mi cuenta"
+        onPress={() => router.push("/eliminar-cuenta")}
+      />
     </Screen>
   );
 }
