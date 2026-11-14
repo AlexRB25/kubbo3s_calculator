@@ -68,7 +68,7 @@ export function templateSheets(channels: Named[]): Sheet[] {
         ['Categorías', 'Varias separadas por coma: Macetas, Decoración.'],
         ['Fotos', 'Nombres de archivo separados por coma (maceta-1.jpg) y al importar eliges esas fotos; o enlaces https:// a la imagen. La primera es la portada.'],
         ['Stock inicial', 'Solo para productos nuevos. El de los que ya existen se corrige con «Arquear» en Inventario.'],
-        ['Costo extra', 'Posprocesado y otros costos por producto ($).'],
+        ['Costo extra', 'Otros costos por producto ($). El posprocesado por tiempo (lijado, pintado…) se elige en cada producto.'],
         ['Precio …', 'Una columna por canal de venta. Vacío = usa el precio sugerido.'],
         ['Mostrar en catálogo', 'sí o no (vacío = sí).'],
         ['', 'Las celdas vacías no cambian nada en los productos que ya existen. Filamentos, impresoras y placas se agregan después en cada producto (pestaña Impresión) para calcular su costo.'],

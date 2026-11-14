@@ -9,7 +9,7 @@ import type { Product } from '@/lib/types';
 import { useData } from '@/store/data';
 
 export default function ProductsScreen() {
-  const { products, filaments, printers, profile, materials, channels, carriers, packaging } = useData();
+  const { products, filaments, printers, profile, materials, channels, carriers, packaging, postProcesses } = useData();
   const [query, setQuery] = useState('');
   const needle = query.trim().toLowerCase();
   const visible = needle
@@ -18,7 +18,7 @@ export default function ProductsScreen() {
 
   /** Cost, and the profit per piece: at its own price in each channel, or estimated at the suggested price. */
   function summary(product: Product) {
-    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile)).total;
+    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile), postProcesses).total;
     const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
     const box = packaging.find((item) => item.id === product.packaging_id);
     let estimated = false;

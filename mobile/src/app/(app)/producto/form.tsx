@@ -96,6 +96,7 @@ export default function ProductFormScreen() {
     materials,
     carriers,
     shop,
+    postProcesses,
   } = useData();
   const { busy, error, setError, save } = useSave();
   const product = products.find((item) => item.id === id);
@@ -132,6 +133,13 @@ export default function ProductFormScreen() {
     field((product?.print_minutes ?? 0) % 60),
   );
   const [extraCost, setExtraCost] = useState(field(product?.extra_cost));
+  // Minutes of each post-processing job (Más → Posprocesado) one product takes; empty = not used.
+  const [jobMinutes, setJobMinutes] = useState<Record<string, string>>(() =>
+    Object.fromEntries((product?.processes ?? []).map((use) => [use.process_id, String(use.minutes)])),
+  );
+  const savedJobs = postProcesses.flatMap((item) =>
+    num(jobMinutes[item.id] ?? "") > 0 ? [{ process_id: item.id, minutes: num(jobMinutes[item.id]) }] : [],
+  );
   const [stock, setStock] = useState(String(product?.stock ?? 0));
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [recipe, setRecipe] = useState<RecipeRow[]>(
@@ -207,13 +215,14 @@ export default function ProductFormScreen() {
         extra_cost: num(extraCost),
       };
   const cost = productCost(
-    { ...draft, materials: product?.materials },
+    { ...draft, materials: product?.materials, processes: savedJobs },
     filaments,
     printers,
     profile?.kwh_price ?? 0,
     materials,
     profile?.waste_rules,
     overheadPerPiece(profile),
+    postProcesses,
   );
 
   // What the last sliced file said, shown under the recipe so the user can check the matches.
@@ -384,6 +393,8 @@ export default function ProductFormScreen() {
       categories,
       image_path: imagePath,
       ...draft,
+      // Only once the post-processing catalog exists (before its SQL the column is missing too).
+      ...(postProcesses.length || product?.processes?.length ? { processes: savedJobs } : {}),
       packaging_id: packagingId,
       ...(withSizes
         ? {
@@ -697,21 +708,50 @@ export default function ProductFormScreen() {
         ))}
       {section === "costos" && (
         <>
+          <Heading>Posprocesado por tiempo</Heading>
+          {postProcesses.length ? (
+            postProcesses.map((item) => (
+              <Field
+                key={item.id}
+                label={`${item.name} · ${money(Number(item.cost_per_hour))}/h`}
+                unit="min"
+                numeric
+                value={jobMinutes[item.id] ?? ""}
+                onChangeText={(text) => setJobMinutes({ ...jobMinutes, [item.id]: text })}
+                placeholder="0"
+                hint={
+                  num(jobMinutes[item.id] ?? "") > 0
+                    ? `${money((Number(item.cost_per_hour) * num(jobMinutes[item.id])) / 60)} por producto`
+                    : undefined
+                }
+              />
+            ))
+          ) : (
+            <Muted>
+              Da de alta tus procesos (lijado $100 por hora, pintado…) en Más → Posprocesado y aquí pones cuántos minutos lleva cada producto.
+            </Muted>
+          )}
           <Field
-            label="Posprocesado y otros costos"
+            label="Otros costos"
             unit="$"
             numeric
             value={extraCost}
             onChangeText={setExtraCost}
             placeholder="0"
-            hint="Lijar, pintar, armar, tornillos, imanes, etiquetas… El embalaje para envío va aparte."
+            hint="Libre: lo que no llevas en Insumos ni en Posprocesado (etiquetas, un acabado especial…). El embalaje para envío va aparte."
           />
 
           <Card>
             <Line label="Filamento" value={money(cost.filament)} />
             <Line label="Luz" value={money(cost.electricity)} />
             <Line label="Desgaste de máquina" value={money(cost.machine)} />
-            <Line label="Posprocesado y otros" value={money(cost.extra)} />
+            {(cost.supplies ?? 0) > 0 && (
+              <Line label="Insumos" value={money(cost.supplies ?? 0)} />
+            )}
+            {(cost.processes ?? 0) > 0 && (
+              <Line label="Posprocesado" value={money(cost.processes ?? 0)} />
+            )}
+            <Line label="Otros costos" value={money(cost.extra)} />
             {(cost.overhead ?? 0) > 0 && (
               <Line label="Gastos fijos" value={money(cost.overhead ?? 0)} />
             )}

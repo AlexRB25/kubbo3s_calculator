@@ -170,7 +170,7 @@ export default function QuotesPage() {
 const inDays = (days: number) => isoDay(new Date(Date.now() + days * 86400000));
 
 function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft: QuoteDraft | null; onDone: () => void; onPdf: (quote: Quote, page: Window | null) => void }) {
-  const { profile, products, filaments, printers, materials, clients } = useData();
+  const { profile, products, filaments, printers, materials, clients, postProcesses } = useData();
   const { busy, error, setError, save } = useSave();
   // Before the clients table exists a quote keeps only the typed contact.
   const withClients = profile?.client_fields !== undefined;
@@ -231,7 +231,7 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
   function addProduct(id: string) {
     const product = products.find((item) => item.id === id);
     if (!product) return;
-    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile)).total;
+    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile), postProcesses).total;
     const price = Math.round(cost * (1 + priceLevels(profile, product).normal / 100) * 100) / 100;
     setItems((list) => [...list.filter((item) => item.name.trim()), { name: product.name, detail: "", quantity: 1, unit_price: price }]);
   }

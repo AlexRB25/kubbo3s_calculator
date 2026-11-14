@@ -56,6 +56,8 @@ export default function AppLayout() {
           <Stack.Screen name="impresoras/mantenimiento" options={{ title: 'Registrar mantenimiento' }} />
           <Stack.Screen name="proveedores/index" options={{ title: 'Proveedores' }} />
           <Stack.Screen name="proveedores/form" options={{ title: 'Proveedor' }} />
+          <Stack.Screen name="posprocesado/index" options={{ title: 'Posprocesado' }} />
+          <Stack.Screen name="posprocesado/form" options={{ title: 'Proceso' }} />
           <Stack.Screen name="gastos/index" options={{ title: 'Gastos' }} />
           <Stack.Screen name="gastos/nuevo" options={{ title: 'Registrar gasto' }} />
           <Stack.Screen name="embalaje/index" options={{ title: 'Embalaje' }} />

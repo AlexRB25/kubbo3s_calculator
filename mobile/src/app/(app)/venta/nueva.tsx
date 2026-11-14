@@ -9,7 +9,7 @@ import { useData, useSave } from '@/store/data';
 
 export default function NewSaleScreen() {
   const { producto } = useLocalSearchParams<{ producto?: string }>();
-  const { products, channels, filaments, printers, profile, packaging, materials, carriers } = useData();
+  const { products, channels, filaments, printers, profile, packaging, materials, carriers, postProcesses } = useData();
   const { busy, error, setError, save } = useSave();
 
   const [productId, setProductId] = useState<string | null>(producto ?? null);
@@ -48,7 +48,7 @@ export default function NewSaleScreen() {
   // One package per sale, whatever the number of pieces.
   const autoPackaging = shipped ? (packaging.find((item) => item.id === product?.packaging_id)?.cost ?? 0) : 0;
   const totalPackaging = shipped && packagingCost !== '' ? num(packagingCost) : autoPackaging;
-  const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile)).total : num(customCost);
+  const unitCost = product ? productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile), postProcesses).total : num(customCost);
   const profit = pieces * unitPrice - totalFees - totalShipping - totalPackaging - pieces * unitCost;
 
   function submit() {

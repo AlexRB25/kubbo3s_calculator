@@ -27,6 +27,7 @@ const LINKS: { group: NavGroup; href: string; label: string; icon: NavIconName; 
   { group: "materiales", href: "/app/inventario", icon: "inventario", label: "Inventario" },
   { group: "materiales", href: "/app/filamento", icon: "filamento", label: "Filamento" },
   { group: "materiales", href: "/app/insumos", icon: "insumos", label: "Insumos" },
+  { group: "materiales", href: "/app/posprocesado", icon: "posprocesado", label: "Posprocesado" },
   { group: "materiales", href: "/app/gastos", icon: "gastos", label: "Gastos" },
   { group: "materiales", href: "/app/embalaje", icon: "embalaje", label: "Embalaje" },
   { group: "materiales", href: "/app/paqueterias", icon: "paqueterias", label: "Paqueterías", roles: ["owner", "admin"] },

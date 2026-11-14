@@ -286,6 +286,12 @@ export type FilamentUse = { filament_id: string; grams: number };
 /** How many units of a supply (LED, bulb, screw…) one product takes. */
 export type MaterialUse = { material_id: string; quantity: number };
 
+/** Minutes of a post-processing job (sanding, painting, gluing…) one product takes. */
+export type ProcessUse = { process_id: string; minutes: number };
+
+/** A hand job done after printing, with what one hour of it costs. */
+export type PostProcess = { id: string; name: string; cost_per_hour: number; notes: string };
+
 /** A piece the product is made of, and how many of it one product takes. */
 export type Part = { id: string; name: string; needed: number };
 
@@ -315,6 +321,8 @@ export type Product = {
   printer_ids: string[];
   /** Supplies one product takes (LEDs, bulbs, screws…): their cost adds to the product's. */
   materials: MaterialUse[];
+  /** Minutes of each post-processing job one product takes (undefined before the column exists). */
+  processes?: ProcessUse[];
   /** More photos after the cover (`image_path`), in order. */
   image_paths: string[];
   /** Categories it belongs to (several allowed): from the Kubbo3D list or typed by the user. */

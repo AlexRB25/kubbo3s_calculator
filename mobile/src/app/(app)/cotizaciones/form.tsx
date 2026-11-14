@@ -28,7 +28,7 @@ const inDays = (days: number) => isoDay(new Date(Date.now() + days * 86400000));
 
 export default function QuoteFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { quotes, profile, products, filaments, printers, materials, clients } = useData();
+  const { quotes, profile, products, filaments, printers, materials, clients, postProcesses } = useData();
   const { busy, error, setError, save } = useSave();
   const quote = quotes.find((item) => item.id === id) ?? null;
   const settings = profile?.quote_settings ?? {};
@@ -100,7 +100,7 @@ export default function QuoteFormScreen() {
   function addProduct(productId: string | null) {
     const product = products.find((item) => item.id === productId);
     if (!product) return;
-    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile)).total;
+    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile), postProcesses).total;
     const price = Math.round(cost * (1 + priceLevels(profile, product).normal / 100) * 100) / 100;
     setLines((list) => [...list.filter((line) => line.name.trim()), toLine({ name: product.name, detail: '', quantity: 1, unit_price: price })]);
   }

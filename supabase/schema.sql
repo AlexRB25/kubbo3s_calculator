@@ -3500,3 +3500,30 @@ grant execute on function public.bug_report_seen(uuid) to authenticated;
 -- Aviso por correo de la respuesta del administrador (Resend, desde el panel admin).
 alter table public.bug_report_messages add column if not exists emailed_at timestamptz;
 alter table public.bug_report_messages add column if not exists email_error text;
+
+-- ───────────────────────── Posprocesado ─────────────────────────
+-- Trabajos a mano con su costo por hora (lijar, pintar, pegar…). Cada producto dice cuántos minutos
+-- lleva de cada uno (products.processes) y su costo se suma solo al del producto.
+create table if not exists public.post_processes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default public.current_shop() references auth.users (id) on delete cascade,
+  name text not null check (char_length(trim(name)) between 1 and 120),
+  cost_per_hour numeric(12,2) not null default 0 check (cost_per_hour >= 0),
+  notes text not null default '' check (char_length(notes) <= 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists post_processes_user_idx on public.post_processes (user_id, name);
+
+alter table public.post_processes enable row level security;
+drop policy if exists own_rows on public.post_processes;
+create policy own_rows on public.post_processes for all to authenticated
+  using (user_id = (select public.current_shop())) with check (user_id = (select public.current_shop()));
+revoke all on public.post_processes from anon;
+drop trigger if exists guard_shop_role on public.post_processes;
+create trigger guard_shop_role before delete on public.post_processes
+  for each row execute function public.guard_shop_role('data');
+
+-- Minutos de cada proceso por producto: [{ "process_id": uuid, "minutes": número }].
+alter table public.products add column if not exists processes jsonb not null default '[]'::jsonb;
+alter table public.products drop constraint if exists products_processes_check;
+alter table public.products add constraint products_processes_check check (jsonb_typeof(processes) = 'array');

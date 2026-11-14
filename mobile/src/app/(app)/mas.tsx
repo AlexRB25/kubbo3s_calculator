@@ -41,6 +41,7 @@ export default function MoreScreen() {
     packaging,
     quotes,
     clients,
+    postProcesses,
     shop,
     reload,
   } = useData();
@@ -92,6 +93,13 @@ export default function MoreScreen() {
       title: "Proveedores",
       subtitle: `${suppliers.length} registrados`,
       roles: ["owner", "admin"],
+    },
+    {
+      group: "materiales",
+      href: "/posprocesado",
+      icon: "brush",
+      title: "Posprocesado",
+      subtitle: `${postProcesses.length} · lijado, pintado… con su costo por hora`,
     },
     {
       group: "materiales",

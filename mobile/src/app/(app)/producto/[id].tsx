@@ -11,11 +11,11 @@ import { useData } from '@/store/data';
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials, carriers, postProcesses } = useData();
   const product = products.find((item) => item.id === id);
   if (!product) return <Empty icon="cube-outline" text="Este producto ya no existe." />;
 
-  const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile));
+  const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, overheadPerPiece(profile), postProcesses);
   const machines = printers.filter((printer) => product.printer_ids.includes(printer.id));
   const box = packaging.find((item) => item.id === product.packaging_id);
   const levels = priceLevels(profile, product);

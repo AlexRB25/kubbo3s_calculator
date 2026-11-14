@@ -1,5 +1,5 @@
 import { boxGrams } from './box-fit';
-import type { Carrier, Channel, WasteRule, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, Printer, Product } from './types';
+import type { Carrier, Channel, WasteRule, Filament, FilamentUse, Material, MaterialUse, Packaging, Part, Plate, PostProcess, Printer, ProcessUse, Product } from './types';
 
 export type CostBreakdown = {
   filament: number;
@@ -8,6 +8,8 @@ export type CostBreakdown = {
   extra: number;
   /** Supplies (LEDs, bulbs, screws…) one product takes; included in total. */
   supplies?: number;
+  /** Post-processing by time (sanding, painting…) one product takes; included in total. */
+  processes?: number;
   /** Its share of the workshop's fixed costs (rent, internet…); included in total. */
   overhead?: number;
   total: number;
@@ -134,16 +136,24 @@ export function plateCombos(product: Recipe, filaments: Filament[], printers: Pr
  * without plates use one recipe and the average electricity and wear of their printers.
  */
 export function productCost(
-  product: Recipe & { materials?: MaterialUse[] },
+  product: Recipe & { materials?: MaterialUse[]; processes?: ProcessUse[] },
   filaments: Filament[],
   printers: Printer[],
   kwhPrice: number,
   materials: Material[] = [],
   waste: WasteRule[] = [],
   overhead = 0,
+  postProcesses: PostProcess[] = [],
 ): CostBreakdown {
   const supplies = suppliesCost(product.materials, materials);
-  const withSupplies = (cost: CostBreakdown): CostBreakdown => ({ ...cost, supplies, overhead, total: cost.total + supplies + overhead });
+  const processes = processesCost(product.processes, postProcesses);
+  const withSupplies = (cost: CostBreakdown): CostBreakdown => ({
+    ...cost,
+    supplies,
+    processes,
+    overhead,
+    total: cost.total + supplies + processes + overhead,
+  });
   if (product.plates?.length) {
     const combo = choose(optionsOf(product, filaments, printers, kwhPrice, waste), partsOf(product), product.extra_cost, true);
     if (combo) return withSupplies(combo.cost);
@@ -173,6 +183,14 @@ export function suppliesCost(uses: MaterialUse[] | undefined, materials: Materia
   return (uses ?? []).reduce((total, use) => {
     const material = materials.find((item) => item.id === use.material_id);
     return total + (material ? materialUnitCost(material) * use.quantity : 0);
+  }, 0);
+}
+
+/** The post-processing one product takes: minutes of each job at its cost per hour. */
+export function processesCost(uses: ProcessUse[] | undefined, processes: PostProcess[]) {
+  return (uses ?? []).reduce((total, use) => {
+    const process = processes.find((item) => item.id === use.process_id);
+    return total + (process ? (Number(process.cost_per_hour) * Number(use.minutes)) / 60 : 0);
   }, 0);
 }
 

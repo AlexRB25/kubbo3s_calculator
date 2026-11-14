@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase";
 import type { Material } from "@/lib/types";
 
 export default function InventoryPage() {
-  const { filaments, materials, products, printers, suppliers, profile } = useData();
+  const { filaments, materials, products, printers, suppliers, profile, postProcesses } = useData();
   const [tab, setTab] = useState<"raw" | "products">("raw");
   const [buying, setBuying] = useState<Item | "any" | null>(null);
   const [adjusting, setAdjusting] = useState<Item | null>(null);
@@ -24,7 +24,7 @@ export default function InventoryPage() {
 
   const raw: Item[] = [...filaments.map(filamentItem), ...materials.map(materialItem)];
   const finished: Item[] = products.map((product) => {
-    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules).total;
+    const cost = productCost(product, filaments, printers, profile?.kwh_price ?? 0, materials, profile?.waste_rules, 0, postProcesses).total;
     return {
       type: "product" as const,
       id: product.id,

@@ -16,6 +16,7 @@ import {
   channelPct,
   materialUnitCost,
   overheadPerPiece,
+  processesCost,
   suppliesCost,
   filamentName,
   packagingName,
@@ -158,7 +159,7 @@ function ComboCard({ title, hint, combo }: { title: string; hint: string; combo:
 
 function ProductForm({ product, onDone }: { product?: Product; onDone: () => void }) {
   const { session } = useSession();
-  const { filaments, printers, channels, profile, packaging, materials, carriers, shop } = useData();
+  const { filaments, printers, channels, profile, packaging, materials, carriers, shop, postProcesses } = useData();
   const { busy, error, setError, save } = useSave();
   // The form goes in tabs: general data, printing, costs, packaging and prices.
   const [section, setSection] = useState<Section>("general");
@@ -172,6 +173,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   // Supplies the product takes (LEDs, bulbs, screws…), from Insumos.
   const [supplies, setSupplies] = useState<{ material_id: string; quantity: string }[]>(
     product?.materials?.length ? product.materials.map((use) => ({ material_id: use.material_id, quantity: String(use.quantity) })) : [],
+  );
+  // Post-processing by time (sanding, painting…), from Posprocesado: minutes per product.
+  const [jobs, setJobs] = useState<{ process_id: string; minutes: string }[]>(
+    product?.processes?.length ? product.processes.map((use) => ({ process_id: use.process_id, minutes: String(use.minutes) })) : [],
   );
   const [extraCost, setExtraCost] = useState(field(product?.extra_cost));
   const [stock, setStock] = useState(String(product?.stock ?? 0));
@@ -250,10 +255,14 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     row.material_id && num(row.quantity) > 0 ? [{ material_id: row.material_id, quantity: num(row.quantity) }] : [],
   );
   const supplyCost = suppliesCost(savedSupplies, materials);
+  const savedJobs = jobs.flatMap((row) => (row.process_id && num(row.minutes) > 0 ? [{ process_id: row.process_id, minutes: num(row.minutes) }] : []));
+  const jobCost = processesCost(savedJobs, postProcesses);
+  // Supplies and post-processing go with the free extra cost into each combination.
+  const added = extra + supplyCost + jobCost;
 
   // React Compiler memoizes this: the search only runs again when plates, pieces or costs change.
   const combos = plateCombos(
-    { plates: savedPlates, parts, extra_cost: extra + supplyCost, filaments: [], printer_ids: [], print_minutes: 0 },
+    { plates: savedPlates, parts, extra_cost: added, filaments: [], printer_ids: [], print_minutes: 0 },
     filaments,
     printers,
     kwhPrice,
@@ -262,7 +271,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const dearest = combos.dearest;
   // Each piece's share of the workshop's fixed costs (Ajustes → Gastos fijos).
   const share = overheadPerPiece(profile);
-  const made = dearest?.cost ?? { filament: 0, electricity: 0, machine: 0, extra: extra + supplyCost, total: extra + supplyCost };
+  const made = dearest?.cost ?? { filament: 0, electricity: 0, machine: 0, extra: added, total: added };
   const cost = { ...made, overhead: share, total: made.total + share };
 
   const draft = {
@@ -274,6 +283,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     print_minutes: Math.round(dearest?.minutes ?? 0),
     extra_cost: extra,
     materials: savedSupplies,
+    // Only once the post-processing catalog exists (before its SQL the column is missing too).
+    ...(postProcesses.length || product?.processes?.length ? { processes: savedJobs } : {}),
   };
 
   const setPlate = (printerId: string, index: number, change: Partial<PlateRow>) =>
@@ -957,10 +968,74 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           )}
         </fieldset>
 
+        <fieldset className="flex flex-col gap-2 sm:col-span-2">
+          <legend className="mb-1 text-sm font-semibold">Posprocesado por tiempo</legend>
+          <p className="text-xs text-muted">
+            Lijado, pintado, pegado… y cuántos minutos lleva cada producto. Su costo sale de lo que vale la hora en{" "}
+            <Link href="/app/posprocesado" className="text-brand hover:underline">
+              Posprocesado
+            </Link>
+            .
+          </p>
+          {jobs.map((row, index) => {
+            const job = postProcesses.find((item) => item.id === row.process_id);
+            return (
+              <div key={index} className="flex items-end gap-2">
+                <label className="label flex-1">
+                  Proceso
+                  <select
+                    className="input"
+                    value={row.process_id}
+                    onChange={(event) => setJobs(jobs.map((item, position) => (position === index ? { ...item, process_id: event.target.value } : item)))}
+                  >
+                    <option value="">Elegir…</option>
+                    {postProcesses.map((item) => (
+                      <option key={item.id} value={item.id} disabled={item.id !== row.process_id && jobs.some((other) => other.process_id === item.id)}>
+                        {item.name} · {money(Number(item.cost_per_hour))} por hora
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="label w-32">
+                  Minutos
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={row.minutes}
+                    onChange={(event) => setJobs(jobs.map((item, position) => (position === index ? { ...item, minutes: event.target.value } : item)))}
+                    placeholder="10"
+                  />
+                </label>
+                <span className="w-24 pb-3 text-right text-sm text-muted">{job ? money((Number(job.cost_per_hour) * num(row.minutes)) / 60) : ""}</span>
+                <button type="button" className="btn" aria-label="Quitar proceso" onClick={() => setJobs(jobs.filter((_, position) => position !== index))}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          {postProcesses.length ? (
+            <button type="button" className="btn self-start" onClick={() => setJobs([...jobs, { process_id: "", minutes: "" }])}>
+              + Agregar proceso
+            </button>
+          ) : (
+            <p className="text-sm text-muted">
+              Primero da de alta tus procesos (lijado $100 por hora, pintado…) en{" "}
+              <Link href="/app/posprocesado" className="text-brand hover:underline">
+                Posprocesado
+              </Link>
+              .
+            </p>
+          )}
+        </fieldset>
+
         <label className="label">
-          Posprocesado y otros costos por producto ($)
+          Otros costos por producto ($)
           <input className="input" type="number" min={0} step="any" value={extraCost} onChange={(event) => setExtraCost(event.target.value)} placeholder="0" />
-          <span className="font-normal">Lijar, pintar, armar y lo que no llevas en Insumos (etiquetas, mano de obra…). El embalaje para envío va aparte.</span>
+          <span className="font-normal">
+            Libre: lo que no llevas en Insumos ni en Posprocesado (etiquetas, un acabado especial…). El embalaje para envío va aparte.
+          </span>
         </label>
       </div>
       <div className={part("general")}>
@@ -1009,7 +1084,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
             <Line label="Luz" value={money(cost.electricity)} />
             <Line label="Desgaste de máquina" value={money(cost.machine)} />
             {supplyCost > 0 && <Line label="Insumos" value={money(supplyCost)} />}
-            <Line label="Posprocesado y otros" value={money(cost.extra - supplyCost)} />
+            {jobCost > 0 && <Line label="Posprocesado" value={money(jobCost)} />}
+            <Line label="Otros costos" value={money(cost.extra - supplyCost - jobCost)} />
             {share > 0 && <Line label="Gastos fijos (renta, internet…)" value={money(share)} />}
             <Line strong label="Costo por producto (combinación más cara)" value={money(cost.total)} />
             <p className="mt-1 text-xs text-muted">
@@ -1175,7 +1251,7 @@ function CatalogSwitch({ product }: { product: Product }) {
 }
 
 export default function ProductsPage() {
-  const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
+  const { products, filaments, printers, channels, profile, packaging, materials, carriers, postProcesses } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [importing, setImporting] = useState(false);
   // Only the products of one category; "" = all.
@@ -1233,6 +1309,7 @@ export default function ProductsPage() {
                   materials,
                   profile?.waste_rules,
                   overheadPerPiece(profile),
+                  postProcesses,
                 );
                 const cost = breakdown.total;
                 const photo = imageUrl(product.image_path);
@@ -1288,8 +1365,9 @@ export default function ProductsPage() {
                         <TipLine label="Luz" value={money(breakdown.electricity)} />
                         <TipLine label="Desgaste de máquina" value={money(breakdown.machine)} />
                         {(breakdown.supplies ?? 0) > 0 && <TipLine label="Insumos" value={money(breakdown.supplies ?? 0)} />}
+                        {(breakdown.processes ?? 0) > 0 && <TipLine label="Posprocesado" value={money(breakdown.processes ?? 0)} />}
                         {(breakdown.overhead ?? 0) > 0 && <TipLine label="Gastos fijos" value={money(breakdown.overhead ?? 0)} />}
-                        {breakdown.extra > 0 && <TipLine label="Posprocesado y otros" value={money(breakdown.extra)} />}
+                        {breakdown.extra > 0 && <TipLine label="Otros costos" value={money(breakdown.extra)} />}
                         <TipLine strong label="Costo por pieza" value={money(cost)} />
                       </InfoTip>
                     </td>
