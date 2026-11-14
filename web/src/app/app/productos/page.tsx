@@ -212,9 +212,14 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     margin: String((product?.pack_margin_mm ?? 30) / 10),
   });
   const [sizeHint, setSizeHint] = useState<string | undefined>(undefined);
+  // Tab of the store whose price is shown (the first while none was picked).
+  const [channelTab, setChannelTab] = useState("");
+  const activeChannel = channels.some((channel) => channel.id === channelTab) ? channelTab : (channels[0]?.id ?? "");
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(product?.prices ?? {}).map(([channel, price]) => [channel, String(price)])),
   );
+  // Stores with a price of their own (switch «Usar el precio sugerido» off); the rest sell at the suggested one.
+  const [custom, setCustom] = useState<string[]>(() => Object.keys(product?.prices ?? {}));
   // Where it is listed in each channel; the public catalog shows these as buttons.
   const [links, setLinks] = useState<Record<string, string>>(product?.links ?? {});
   const [inCatalog, setInCatalog] = useState(product?.in_catalog ?? true);
@@ -397,7 +402,9 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
             pack_margin_mm: Math.min(500, Math.max(0, Math.round(num(sizeDraft.margin) * 10))),
           }
         : {}),
-      prices: Object.fromEntries(Object.entries(prices).flatMap(([channel, price]) => (num(price) > 0 ? [[channel, num(price)]] : []))),
+      prices: Object.fromEntries(
+        Object.entries(prices).flatMap(([channel, price]) => (custom.includes(channel) && num(price) > 0 ? [[channel, num(price)]] : [])),
+      ),
       links: Object.fromEntries(
         Object.entries(links).flatMap(([channel, link]) => (link.trim() && channels.some((item) => item.id === channel) ? [[channel, link.trim()]] : [])),
       ),
@@ -440,6 +447,12 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     if (combos.missing.length) return fail("impresion", `Ninguna placa imprime: ${combos.missing.map((part) => part.name).join(", ")}.`);
     if (!dearest) return fail("impresion", "Con estas placas no se completa un producto.");
     const badLink = channels.find((channel) => (links[channel.id] ?? "").trim() && !/^https?:\/\/\S+\.\S+$/i.test(links[channel.id].trim()));
+    const noPrice = channels.find((channel) => custom.includes(channel.id) && !(num(prices[channel.id] ?? "") > 0));
+    if (noPrice) {
+      setChannelTab(noPrice.id);
+      return fail("precios", `Pon tu precio en ${noPrice.name} o enciende «Usar el precio sugerido».`);
+    }
+    if (badLink) setChannelTab(badLink.id);
     if (badLink) return fail("precios", `El enlace de ${badLink.name} debe empezar con https:// (cópialo de tu publicación).`);
     save(write, onDone);
   }
@@ -1153,58 +1166,161 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
           )}
         </div>
 
-        {channels.map((channel) => {
-          const price = num(prices[channel.id] ?? "");
-          const margin = levels.normal;
-          // Shipping is quoted with the channel's carriers for this weight and box (and price, when they charge by it).
-          const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
-          const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
-          const suggestedShipped = suggestedPriceWithShipping(cost.total, channel, margin, shippingAt);
-          const quotes = shippingQuotes(channel, carriers, grams, box, price > 0 ? price : suggestedShipped);
-          const shipping = shippingAt(price > 0 ? price : suggestedShipped);
-          return (
-            <label key={channel.id} className="label">
-              Precio en {channel.name} ($)
-              <input
-                className="input"
-                type="number"
-                min={0}
-                step="any"
-                value={prices[channel.id] ?? ""}
-                onChange={(event) => setPrices({ ...prices, [channel.id]: event.target.value })}
-                placeholder={`Sugerido ${suggestedPrice(cost.total, channel, margin).toFixed(2)}`}
-              />
-              <span className="font-normal">
-                {price > 0
-                  ? `Ganas ${money(unitProfit(price, cost.total, channel))} (${Math.round((unitProfit(price, cost.total, channel) / price) * 100)}% de la venta) sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío · es precio ${LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}`
-                  : `Sugerido con envío: ${money(suggestedShipped)}`}
-              </span>
-              <LevelPricesInfo cost={cost.total} channel={channel} levels={levels} shippingAt={shippingAt} />
-              {quotes.length > 0 && (
-                <span className="font-normal">
-                  {quotes.length === 1
-                    ? `Envío con ${quotes[0].carrier.name}: ${money(quotes[0].cost)}`
-                    : `Envío más barato: ${money(quotes[0].cost)} (${quotes[0].carrier.name}) · más caro: ${money(quotes[quotes.length - 1].cost)} (${quotes[quotes.length - 1].carrier.name})`}
-                  {` · cobra ${quotes[quotes.length - 1].kg.toFixed(2)} kg`}
-                  {box ? "" : " (sin caja asignada: solo el peso del producto)"}
-                </span>
-              )}
-              {channel.carrier_ids?.length > 0 && quotes.length === 0 && (
-                <span className="font-normal text-warn">Ninguna paquetería de este canal tiene tarifa para este peso: se usa el envío fijo del canal.</span>
-              )}
-              <input
-                className="input mt-1"
-                type="url"
-                inputMode="url"
-                value={links[channel.id] ?? ""}
-                onChange={(event) => setLinks({ ...links, [channel.id]: event.target.value })}
-                placeholder={`Enlace de tu publicación en ${channel.name} (opcional)`}
-                aria-label={`Enlace de tu publicación en ${channel.name}`}
-                maxLength={500}
-              />
-            </label>
-          );
-        })}
+        {channels.length > 0 && (
+          <div className="flex flex-col gap-3 sm:col-span-2">
+            <div role="tablist" aria-label="Tiendas" className="flex flex-wrap gap-1 border-b border-line">
+              {channels.map((channel) => {
+                const own = custom.includes(channel.id) && num(prices[channel.id] ?? "") > 0;
+                return (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={channel.id === activeChannel}
+                    onClick={() => setChannelTab(channel.id)}
+                    className={`-mb-px rounded-t-lg border border-b-0 px-3 py-2 text-sm font-semibold ${channel.id === activeChannel ? "border-brand bg-brand/15 text-brand" : "border-line text-muted hover:text-white"}`}
+                  >
+                    {channel.name}
+                    <span className="ml-1 text-xs font-normal opacity-70">{own ? money(num(prices[channel.id])) : "sugerido"}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {channels
+              .filter((channel) => channel.id === activeChannel)
+              .map((channel) => {
+                const typed = num(prices[channel.id] ?? "");
+                const margin = levels.normal;
+                // Shipping is quoted with the channel's carriers for this weight and box (and price, when they charge by it).
+                const grams = draft.filaments.reduce((total, use) => total + use.grams, 0);
+                const shippingAt = (at: number) => shippingFor(channel, carriers, grams, box, at);
+                const suggestedShipped = suggestedPriceWithShipping(cost.total, channel, margin, shippingAt);
+                // Without a price of its own the product sells at the suggested one (with shipping).
+                const useSuggested = !custom.includes(channel.id);
+                const price = useSuggested ? suggestedShipped : typed;
+                const quotes = shippingQuotes(channel, carriers, grams, box, price);
+                const shipping = shippingAt(price);
+                const fees = channelFees(channel, price);
+                const profit = unitProfit(price, cost.total, channel, shipping);
+                const pct = channelPct(channel);
+                return (
+                  <div key={channel.id} role="tabpanel" className="grid gap-4 lg:grid-cols-2">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-line p-3">
+                        <span className="text-sm">
+                          <span className="font-semibold">Usar el precio sugerido</span>
+                          <span className="block text-xs text-muted">
+                            {useSuggested
+                              ? `Se vende a ${money(suggestedShipped)} y se ajusta solo si cambian tus costos.`
+                              : "Apágalo para poner tu propio precio; enciéndelo para volver al sugerido."}
+                          </span>
+                        </span>
+                        <Switch
+                          label={`Usar el precio sugerido en ${channel.name}`}
+                          checked={useSuggested}
+                          onChange={(on) => {
+                            setCustom(on ? custom.filter((id) => id !== channel.id) : [...custom, channel.id]);
+                            // Starts from the suggested price, to adjust it.
+                            if (!on && !(num(prices[channel.id] ?? "") > 0))
+                              setPrices({ ...prices, [channel.id]: (Math.ceil(suggestedShipped * 100) / 100).toFixed(2) });
+                          }}
+                        />
+                      </div>
+                      <label className="label">
+                        Precio en {channel.name} ($)
+                        <input
+                          className="input"
+                          type="number"
+                          min={0}
+                          step="any"
+                          disabled={useSuggested}
+                          value={useSuggested ? suggestedShipped.toFixed(2) : (prices[channel.id] ?? "")}
+                          onChange={(event) => setPrices({ ...prices, [channel.id]: event.target.value })}
+                          style={useSuggested ? { opacity: 0.6 } : undefined}
+                        />
+                        {!useSuggested && (
+                          <span className="font-normal">
+                            Sugerido: {money(suggestedShipped)} con envío · {money(suggestedPrice(cost.total, channel, margin))} sin envío · es precio{" "}
+                            {LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}
+                          </span>
+                        )}
+                      </label>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs font-semibold text-muted">Precios por nivel de ganancia</span>
+                        <LevelPricesInfo cost={cost.total} channel={channel} levels={levels} shippingAt={shippingAt} />
+                      </div>
+                      <label className="label">
+                        Enlace de tu publicación (opcional)
+                        <input
+                          className="input"
+                          type="url"
+                          inputMode="url"
+                          value={links[channel.id] ?? ""}
+                          onChange={(event) => setLinks({ ...links, [channel.id]: event.target.value })}
+                          placeholder={`https://… tu publicación en ${channel.name}`}
+                          maxLength={500}
+                        />
+                        <span className="font-normal">Tu catálogo público lo muestra como botón.</span>
+                      </label>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-1 rounded-lg bg-ink p-3">
+                        <p className="mb-1 text-sm font-semibold">Desglose de cada venta</p>
+                        <Line label={useSuggested ? "Precio sugerido" : "Tu precio"} value={money(price)} />
+                        <Line label={`Comisión e impuestos (${Math.round(pct * 100) / 100}%)`} value={`− ${money((price * pct) / 100)}`} />
+                        {channel.fixed_fee > 0 && <Line label="Cuota fija por venta" value={`− ${money(channel.fixed_fee)}`} />}
+                        {shipping > 0 && <Line label="Envío que pagas" value={`− ${money(shipping)}`} />}
+                        <Line label="Costo del producto" value={`− ${money(cost.total)}`} />
+                        <Line strong label="Ganancia" value={money(profit)} />
+                        <p className={`text-xs ${profit < 0 ? "text-bad" : "text-money"}`}>
+                          {price > 0 ? `${Math.round((profit / price) * 100)}% de la venta` : ""}
+                          {cost.total > 0 ? ` · ${Math.round((profit / cost.total) * 100)}% sobre el costo` : ""}
+                          {fees > 0 ? ` · ${channel.name} se queda con ${money(fees)}` : ""}
+                        </p>
+                        {profit < 0 && <p className="text-xs text-bad">Con este precio pierdes dinero en cada venta.</p>}
+                      </div>
+                      <div className="flex flex-col gap-1 rounded-lg border border-line p-3 text-xs text-muted">
+                        <p className="text-sm font-semibold text-white">Tu configuración de {channel.name}</p>
+                        <p>
+                          Comisión {Number(channel.commission_pct)}%{Number(channel.tax_pct ?? 0) ? ` · impuestos ${Number(channel.tax_pct)}%` : ""}
+                          {Number(channel.reseller_share ?? 0) ? ` · revendedores ${Number(channel.reseller_share)}%` : ""} · cuota fija {money(channel.fixed_fee)}
+                        </p>
+                        <p>
+                          Ganancia {ownLevels ? "de este producto" : "de Ajustes"}: normal {levels.normal}%, descuento {levels.discount}%, mayoreo {levels.wholesale}% desde{" "}
+                          {levels.wholesale_min} piezas.
+                        </p>
+                        {quotes.length > 0 ? (
+                          <p>
+                            {quotes.length === 1
+                              ? `Envío con ${quotes[0].carrier.name}: ${money(quotes[0].cost)}`
+                              : `Envío más barato: ${money(quotes[0].cost)} (${quotes[0].carrier.name}) · más caro: ${money(quotes[quotes.length - 1].cost)} (${quotes[quotes.length - 1].carrier.name})`}
+                            {` · cobra ${quotes[quotes.length - 1].kg.toFixed(2)} kg`}
+                            {box ? "" : " (sin caja asignada: solo el peso del producto)"}
+                          </p>
+                        ) : channel.carrier_ids?.length > 0 ? (
+                          <p className="text-warn">Ninguna paquetería de este canal tiene tarifa para este peso: se usa el envío fijo del canal.</p>
+                        ) : (
+                          <p>Envío fijo del canal: {money(Number(channel.shipping_cost ?? 0))}</p>
+                        )}
+                        <p>
+                          Se cambia en{" "}
+                          <Link href="/app/canales" className="text-brand hover:underline">
+                            Canales de venta
+                          </Link>{" "}
+                          y en{" "}
+                          <Link href="/app/ajustes" className="text-brand hover:underline">
+                            Ajustes
+                          </Link>
+                          .
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       <div className={part("general")}>

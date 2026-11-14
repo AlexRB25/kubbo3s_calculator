@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet } from "react-native";
+import { Pressable, StyleSheet, Switch, Text } from "react-native";
 
 import {
   Button,
@@ -22,6 +22,8 @@ import {
 } from "@/components/ui";
 import { Colors, Radius, Spacing, themed } from "@/constants/theme";
 import {
+  channelFees,
+  channelPct,
   costPerGram,
   filamentName,
   LEVEL_LABEL,
@@ -181,6 +183,14 @@ export default function ProductFormScreen() {
   const typedLevels = readLevels(levelsDraft);
   const levels =
     ownLevels && "levels" in typedLevels ? typedLevels.levels : workshopLevels;
+  // Store whose price is shown, and the stores with a price of their own (the rest sell at the suggested one).
+  const [channelTab, setChannelTab] = useState("");
+  const activeChannel = channels.some((channel) => channel.id === channelTab)
+    ? channelTab
+    : (channels[0]?.id ?? "");
+  const [custom, setCustom] = useState<string[]>(() =>
+    Object.keys(product?.prices ?? {}),
+  );
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(
       Object.entries(product?.prices ?? {}).map(([channel, price]) => [
@@ -409,7 +419,9 @@ export default function ProductFormScreen() {
         : {}),
       prices: Object.fromEntries(
         Object.entries(prices).flatMap(([channel, price]) =>
-          num(price) > 0 ? [[channel, num(price)]] : [],
+          custom.includes(channel) && num(price) > 0
+            ? [[channel, num(price)]]
+            : [],
         ),
       ),
       price_levels:
@@ -430,6 +442,17 @@ export default function ProductFormScreen() {
 
   function submit() {
     if (!name.trim()) return setError("Ponle nombre al producto.");
+    const noPrice = channels.find(
+      (channel) =>
+        custom.includes(channel.id) && !(num(prices[channel.id] ?? "") > 0),
+    );
+    if (noPrice) {
+      setSection("precios");
+      setChannelTab(noPrice.id);
+      return setError(
+        `Pon tu precio en ${noPrice.name} o enciende «Usar el precio sugerido».`,
+      );
+    }
     if (
       !plated &&
       recipe.some(
@@ -877,45 +900,125 @@ export default function ProductFormScreen() {
             Con envío suma el embalaje y el envío del canal; sin envío, el
             cliente recoge o paga el envío.
           </Muted>
-          {channels.map((channel) => {
-            const price = num(prices[channel.id] ?? "");
-            const margin = levels.normal;
-            // Quoted with the channel's carriers for this weight and box.
-            const grams = draft.filaments.reduce(
-              (total, use) => total + use.grams,
-              0,
-            );
-            const shippingAt = (at: number) =>
-              shippingFor(channel, carriers, grams, box, at);
-            const shipping = shippingAt(
-              price > 0
-                ? price
-                : suggestedPriceWithShipping(
-                    cost.total,
-                    channel,
-                    margin,
-                    shippingAt,
-                  ),
-            );
-            return (
-              <Field
-                key={channel.id}
-                label={channel.name}
-                unit="$"
-                numeric
-                value={prices[channel.id] ?? ""}
-                onChangeText={(text) =>
-                  setPrices({ ...prices, [channel.id]: text })
-                }
-                placeholder={`Sugerido ${suggestedPrice(cost.total, channel, margin).toFixed(2)}`}
-                hint={
-                  price > 0
-                    ? `Ganas ${money(unitProfit(price, cost.total, channel))} sin envío · ${money(unitProfit(price, cost.total, channel, shipping))} con envío · es precio ${LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
-                    : `Sugerido con envío: ${money(suggestedPriceWithShipping(cost.total, channel, margin, shippingAt))}\n${levelsLine(cost.total, channel, levels, shippingAt)}`
-                }
-              />
-            );
-          })}
+          {channels.length > 0 && (
+            <Chips
+              label="Tienda"
+              options={channels.map((channel) => ({
+                value: channel.id,
+                label: channel.name,
+              }))}
+              value={activeChannel}
+              onChange={setChannelTab}
+            />
+          )}
+          {channels
+            .filter((channel) => channel.id === activeChannel)
+            .map((channel) => {
+              const margin = levels.normal;
+              // Quoted with the channel's carriers for this weight and box.
+              const grams = draft.filaments.reduce(
+                (total, use) => total + use.grams,
+                0,
+              );
+              const shippingAt = (at: number) =>
+                shippingFor(channel, carriers, grams, box, at);
+              const suggestedShipped = suggestedPriceWithShipping(
+                cost.total,
+                channel,
+                margin,
+                shippingAt,
+              );
+              // Without a price of its own the product sells at the suggested one (with shipping).
+              const useSuggested = !custom.includes(channel.id);
+              const price = useSuggested
+                ? suggestedShipped
+                : num(prices[channel.id] ?? "");
+              const shipping = shippingAt(price);
+              const pct = channelPct(channel);
+              const profit = unitProfit(price, cost.total, channel, shipping);
+              return (
+                <Card key={channel.id}>
+                  <Row style={{ justifyContent: "space-between" }}>
+                    <Text style={{ color: Colors.text, flex: 1 }}>
+                      Usar el precio sugerido
+                    </Text>
+                    <Switch
+                      value={useSuggested}
+                      trackColor={{ true: Colors.accent }}
+                      onValueChange={(on) => {
+                        setCustom(
+                          on
+                            ? custom.filter((id) => id !== channel.id)
+                            : [...custom, channel.id],
+                        );
+                        if (!on && !(num(prices[channel.id] ?? "") > 0))
+                          setPrices({
+                            ...prices,
+                            [channel.id]: (
+                              Math.ceil(suggestedShipped * 100) / 100
+                            ).toFixed(2),
+                          });
+                      }}
+                    />
+                  </Row>
+                  <Field
+                    label={`Precio en ${channel.name}`}
+                    unit="$"
+                    numeric
+                    editable={!useSuggested}
+                    value={
+                      useSuggested
+                        ? suggestedShipped.toFixed(2)
+                        : (prices[channel.id] ?? "")
+                    }
+                    onChangeText={(text) =>
+                      setPrices({ ...prices, [channel.id]: text })
+                    }
+                    style={useSuggested ? { opacity: 0.6 } : undefined}
+                    hint={
+                      useSuggested
+                        ? "Se ajusta solo si cambian tus costos."
+                        : `Sugerido: ${money(suggestedShipped)} con envío · es precio ${LEVEL_LABEL[levelOf(price, levelPrices(cost.total, channel, levels, shippingAt), levels)]}`
+                    }
+                  />
+                  <Heading>Desglose de cada venta</Heading>
+                  <Line
+                    label={useSuggested ? "Precio sugerido" : "Tu precio"}
+                    value={money(price)}
+                  />
+                  <Line
+                    label={`Comisión e impuestos (${Math.round(pct * 100) / 100}%)`}
+                    value={`− ${money((price * pct) / 100)}`}
+                  />
+                  {channel.fixed_fee > 0 && (
+                    <Line
+                      label="Cuota fija por venta"
+                      value={`− ${money(channel.fixed_fee)}`}
+                    />
+                  )}
+                  {shipping > 0 && (
+                    <Line label="Envío que pagas" value={`− ${money(shipping)}`} />
+                  )}
+                  <Line
+                    label="Costo del producto"
+                    value={`− ${money(cost.total)}`}
+                  />
+                  <Line strong label="Ganancia" value={money(profit)} />
+                  <Muted>
+                    {`${price > 0 ? `${Math.round((profit / price) * 100)}% de la venta` : ""}${cost.total > 0 ? ` · ${Math.round((profit / cost.total) * 100)}% sobre el costo` : ""} · ${channel.name} se queda con ${money(channelFees(channel, price))}`}
+                  </Muted>
+                  {profit < 0 && (
+                    <ErrorText>Con este precio pierdes dinero en cada venta.</ErrorText>
+                  )}
+                  <Muted>
+                    {`Precios por nivel: ${levelsLine(cost.total, channel, levels, shippingAt)}`}
+                  </Muted>
+                  <Muted>
+                    {`Tu configuración: comisión ${Number(channel.commission_pct)}%${Number(channel.tax_pct ?? 0) ? ` · impuestos ${Number(channel.tax_pct)}%` : ""} · cuota fija ${money(channel.fixed_fee)}. Se cambia en Más → Canales de venta.`}
+                  </Muted>
+                </Card>
+              );
+            })}
         </>
       )}
 
