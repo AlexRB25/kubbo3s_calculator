@@ -41,6 +41,7 @@ export default function AppLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="producto/[id]" options={{ title: 'Producto' }} />
           <Stack.Screen name="producto/form" options={{ title: 'Producto' }} />
+          <Stack.Screen name="producto/importar" options={{ title: 'Carga rápida (Excel)' }} />
           <Stack.Screen name="filamento/form" options={{ title: 'Filamento' }} />
           <Stack.Screen name="filamento/compra" options={{ title: 'Comprar filamento' }} />
           <Stack.Screen name="filamento/catalogo" options={{ title: 'Catálogo de filamentos' }} />

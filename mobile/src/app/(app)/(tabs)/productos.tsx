@@ -41,6 +41,7 @@ export default function ProductsScreen() {
   return (
     <Screen>
       <Button icon="add" label="Nuevo producto" onPress={() => router.push('/producto/form')} />
+      <Button variant="secondary" icon="document-attach" label="Carga rápida (Excel)" onPress={() => router.push('/producto/importar')} />
       {products.length > 6 && <Field label="Buscar" value={query} onChangeText={setQuery} placeholder="Nombre o SKU" />}
       {products.length === 0 && (
         <Empty icon="cube-outline" text="Da de alta tus productos con su foto, el filamento que consumen y en qué máquinas salen." />

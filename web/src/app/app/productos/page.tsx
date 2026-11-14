@@ -7,6 +7,7 @@ import { BoxAdvisor, ParcelFacts, type SizeDraft } from "@/components/app/BoxAdv
 import { CategoryPicker } from "@/components/app/CategoryPicker";
 import { FilamentPicker } from "@/components/app/FilamentPicker";
 import { InfoTip, TipLine } from "@/components/app/InfoTip";
+import { ProductImport } from "@/components/app/ProductImport";
 import { SliceImport, type SliceImportResult } from "@/components/app/SliceImport";
 import { Swatch } from "@/components/app/Swatch";
 import { Empty, Line, Modal, PageHeader, Switch, TableCard } from "@/components/app/ui";
@@ -1176,6 +1177,7 @@ function CatalogSwitch({ product }: { product: Product }) {
 export default function ProductsPage() {
   const { products, filaments, printers, channels, profile, packaging, materials, carriers } = useData();
   const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const [importing, setImporting] = useState(false);
   // Only the products of one category; "" = all.
   const [category, setCategory] = useState("");
   const used = [...new Set(products.flatMap((product) => product.categories ?? []))].sort((a, b) => a.localeCompare(b, "es"));
@@ -1194,6 +1196,9 @@ export default function ProductsPage() {
             ))}
           </select>
         )}
+        <button className="btn" onClick={() => setImporting(true)}>
+          Carga rápida (Excel)
+        </button>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>
           Nuevo producto
         </button>
@@ -1402,6 +1407,7 @@ export default function ProductsPage() {
         </TableCard>
       )}
 
+      {importing && <ProductImport onClose={() => setImporting(false)} />}
       {editing && (
         <Modal wide="xl" title={editing === "new" ? "Nuevo producto" : editing.name} onClose={() => setEditing(null)}>
           <ProductForm product={editing === "new" ? undefined : editing} onDone={() => setEditing(null)} />
