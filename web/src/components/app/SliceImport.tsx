@@ -51,11 +51,20 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // True while a file is dragged over the box.
+  const [dropping, setDropping] = useState(false);
 
-  async function choose(event: ChangeEvent<HTMLInputElement>) {
+  function choose(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file) return;
+    if (file) read(file);
+  }
+
+  async function read(file: File) {
+    if (!/\.(3mf|gcode|gco|bgcode)$/i.test(file.name)) {
+      setError("Suelta un 3MF laminado o un G-code (.gcode, .gco, .bgcode).");
+      return;
+    }
     setError("");
     setBusy(true);
     try {
@@ -119,13 +128,30 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
     review && setReview({ ...review, pieces: review.pieces.map((piece, position) => (position === index ? { ...piece, ...change } : piece)) });
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-dashed border-brand/50 bg-brand/5 p-3">
+    <div
+      className={`flex flex-col gap-2 rounded-lg border border-dashed p-3 transition-colors ${dropping ? "border-2 border-brand bg-brand/15" : "border-brand/50 bg-brand/5"}`}
+      onDragOver={(event) => {
+        if (busy || !event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDropping(false);
+        const file = event.dataTransfer.files[0];
+        if (file && !busy) read(file);
+      }}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <label className="btn btn-primary cursor-pointer">
-          {busy ? "Leyendo…" : "Importar desde el laminador"}
+          {busy ? "Leyendo…" : dropping ? "Suelta aquí tu archivo" : "Importar desde el laminador"}
           <input type="file" accept=".3mf,.gcode,.gco,.bgcode" className="sr-only" onChange={choose} disabled={busy} />
         </label>
-        <span className="text-xs text-muted">3MF laminado de Bambu Studio u OrcaSlicer, o G-code de PrusaSlicer, Orca o Cura: llena tiempo, gramos, colores e impresora.</span>
+        <span className="text-xs text-muted">3MF laminado de Bambu Studio u OrcaSlicer, o G-code de PrusaSlicer, Orca o Cura: llena tiempo, gramos, colores e impresora. También puedes arrastrarlo aquí.</span>
         <button type="button" className="text-xs text-brand hover:underline" onClick={() => setHelp(!help)}>
           {help ? "Ocultar pasos" : "¿Cómo lo exporto?"}
         </button>

@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import {
   Button,
@@ -143,7 +143,14 @@ export default function ProductFormScreen() {
     num(jobMinutes[item.id] ?? "") > 0 ? [{ process_id: item.id, minutes: num(jobMinutes[item.id]) }] : [],
   );
   const [stock, setStock] = useState(String(product?.stock ?? 0));
-  const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  // The product's photos in order (the first is the cover): saved ones by path, new ones by uri.
+  const [photos, setPhotos] = useState<
+    { key: string; path?: string; uri: string; mimeType?: string }[]
+  >(() =>
+    [product?.image_path, ...(product?.image_paths ?? [])]
+      .filter((path): path is string => Boolean(path))
+      .map((path) => ({ key: path, path, uri: imageUrl(path)! })),
+  );
   const [recipe, setRecipe] = useState<RecipeRow[]>(
     product?.filaments.map((use) => ({
       filament_id: use.filament_id,
@@ -367,19 +374,31 @@ export default function ProductFormScreen() {
       ),
     );
 
-  async function pickPhoto() {
+  async function pickPhotos() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
+      allowsMultipleSelection: true,
+      orderedSelection: true,
       quality: 0.6,
     });
-    if (!result.canceled) setPhoto(result.assets[0]);
+    if (result.canceled) return;
+    setPhotos((current) => [
+      ...current,
+      ...result.assets.map((asset) => ({
+        key: `${asset.uri}-${Math.random()}`,
+        uri: asset.uri,
+        mimeType: asset.mimeType ?? undefined,
+      })),
+    ]);
   }
 
   async function write() {
-    let imagePath = product?.image_path ?? null;
-    if (photo) {
+    const paths: string[] = [];
+    for (const photo of photos) {
+      if (photo.path) {
+        paths.push(photo.path);
+        continue;
+      }
       const upload = await uploadProductImage(
         shop?.shop_id ?? session!.user.id,
         photo.uri,
@@ -388,10 +407,10 @@ export default function ProductFormScreen() {
       if (upload.error)
         return {
           error: {
-            message: `No se pudo subir la foto: ${upload.error.message}`,
+            message: `No se pudo subir una foto: ${upload.error.message}`,
           },
         };
-      imagePath = upload.path;
+      paths.push(upload.path);
     }
 
     if (ownLevels && "error" in typedLevels)
@@ -401,7 +420,8 @@ export default function ProductFormScreen() {
       sku: sku.trim(),
       description: description.trim(),
       categories,
-      image_path: imagePath,
+      image_path: paths[0] ?? null,
+      image_paths: paths.slice(1),
       ...draft,
       // Only once the post-processing catalog exists (before its SQL the column is missing too).
       ...(postProcesses.length || product?.processes?.length ? { processes: savedJobs } : {}),
@@ -434,9 +454,13 @@ export default function ProductFormScreen() {
     const result = product
       ? await supabase.from("products").update(row).eq("id", product.id)
       : await supabase.from("products").insert(row);
-    if (!result.error && photo && product?.image_path) {
-      await supabase.storage.from("products").remove([product.image_path]);
-    }
+    // Photos taken out of the product leave the storage too.
+    const before = [product?.image_path, ...(product?.image_paths ?? [])].filter(
+      (path): path is string => Boolean(path),
+    );
+    const dropped = before.filter((path) => !paths.includes(path));
+    if (!result.error && dropped.length)
+      await supabase.storage.from("products").remove(dropped);
     return result;
   }
 
@@ -479,10 +503,12 @@ export default function ProductFormScreen() {
               .from("products")
               .delete()
               .eq("id", product!.id);
-            if (!result.error && product!.image_path)
-              await supabase.storage
-                .from("products")
-                .remove([product!.image_path]);
+            const all = [
+              product!.image_path,
+              ...(product!.image_paths ?? []),
+            ].filter((path): path is string => Boolean(path));
+            if (!result.error && all.length)
+              await supabase.storage.from("products").remove(all);
             return result;
           },
           () => router.dismissTo("/productos"),
@@ -490,36 +516,67 @@ export default function ProductFormScreen() {
     );
   }
 
-  const preview = photo?.uri ?? imageUrl(product?.image_path ?? null);
-
   return (
     <Screen>
       <Chips options={[...SECTIONS]} value={section} onChange={setSection} />
       {section === "general" && (
         <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Elegir foto del producto"
-            onPress={pickPhoto}
-            style={styles.photo}
-          >
-            {preview ? (
-              <Image
-                source={preview}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-              />
-            ) : (
-              <>
-                <Ionicons
-                  name="camera"
-                  size={32}
-                  color={Colors.textSecondary}
-                />
-                <Muted>Agregar foto</Muted>
-              </>
-            )}
-          </Pressable>
+          <Muted>Fotos · la primera es la portada. Toca la estrella para cambiarla.</Muted>
+          <ScrollView horizontal contentContainerStyle={styles.photos}>
+            {photos.map((photo, index) => (
+              <View key={photo.key} style={styles.photoItem}>
+                <View
+                  style={[
+                    styles.photo,
+                    index === 0 && { borderColor: Colors.accent, borderWidth: 2 },
+                  ]}
+                >
+                  <Image
+                    source={photo.uri}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                  />
+                  {index === 0 && <Text style={styles.cover}>Portada</Text>}
+                </View>
+                <Row style={{ gap: Spacing.one }}>
+                  {index > 0 && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Usar como portada"
+                      onPress={() =>
+                        setPhotos([
+                          photo,
+                          ...photos.filter((_, position) => position !== index),
+                        ])
+                      }
+                      style={styles.photoButton}
+                    >
+                      <Ionicons name="star-outline" size={16} color={Colors.text} />
+                    </Pressable>
+                  )}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Quitar foto"
+                    onPress={() =>
+                      setPhotos(photos.filter((_, position) => position !== index))
+                    }
+                    style={styles.photoButton}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={Colors.text} />
+                  </Pressable>
+                </Row>
+              </View>
+            ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Agregar fotos del producto"
+              onPress={pickPhotos}
+              style={styles.photo}
+            >
+              <Ionicons name="camera" size={28} color={Colors.textSecondary} />
+              <Muted>Agregar fotos</Muted>
+            </Pressable>
+          </ScrollView>
 
           <Field
             label="Nombre"
@@ -1072,10 +1129,35 @@ export default function ProductFormScreen() {
 
 const styles = themed(() =>
   StyleSheet.create({
+    photos: {
+      gap: Spacing.two,
+      paddingVertical: Spacing.one,
+    },
+    photoItem: {
+      gap: Spacing.one,
+      alignItems: "center",
+    },
+    photoButton: {
+      padding: Spacing.one,
+      borderRadius: Radius.small,
+      borderColor: Colors.border,
+      borderWidth: 1,
+    },
+    cover: {
+      position: "absolute",
+      left: 4,
+      top: 4,
+      paddingHorizontal: 6,
+      borderRadius: 4,
+      overflow: "hidden",
+      fontSize: 10,
+      fontWeight: "600",
+      color: Colors.background,
+      backgroundColor: Colors.accent,
+    },
     photo: {
-      alignSelf: "center",
-      width: 160,
-      height: 160,
+      width: 110,
+      height: 110,
       alignItems: "center",
       justifyContent: "center",
       gap: Spacing.one,
