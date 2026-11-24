@@ -181,6 +181,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const [extraCost, setExtraCost] = useState(field(product?.extra_cost));
   const [stock, setStock] = useState(String(product?.stock ?? 0));
   // Photos in order (the first is the cover): saved ones by path, new ones as files to upload on save.
+  // True while image files are dragged over the photos field.
+  const [dropping, setDropping] = useState(false);
   const [photos, setPhotos] = useState<{ key: string; path?: string; file?: File; url: string }[]>(() =>
     [product?.image_path, ...(product?.image_paths ?? [])]
       .filter((path): path is string => Boolean(path))
@@ -348,6 +350,16 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     if (thumbnail && photos.length === 0) setPhotos([{ key: `placa-${newId()}`, file: thumbnail, url: URL.createObjectURL(thumbnail) }]);
   }
 
+  // Adds the images among the given files (from the picker or dropped), skipping anything else.
+  function addPhotoFiles(files: File[]) {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    setPhotos((current) => [
+      ...current,
+      ...images.map((file) => ({ key: `${file.name}-${file.size}-${Math.random()}`, file, url: URL.createObjectURL(file) })),
+    ]);
+  }
+
   function addModel(modelId: string) {
     setAdding(false);
     if (!modelId) return;
@@ -505,8 +517,24 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         {/* Only the button opens the files: a label around the whole field caught clicks meant for other fields. */}
         <div className="label sm:col-span-2">
           Fotos
-          <span className="font-normal">La primera es la portada. Usa «Portada» para cambiarla.</span>
-          <div className="flex flex-wrap items-start gap-3 font-normal">
+          <span className="font-normal">La primera es la portada. Usa «Portada» para cambiarla. También puedes arrastrar y soltar varias imágenes aquí.</span>
+          <div
+            className={`flex flex-wrap items-start gap-3 rounded-xl border-2 border-dashed p-2 font-normal transition-colors ${dropping ? "border-brand bg-brand/10" : "border-transparent"}`}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setDropping(true);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDropping(false);
+              addPhotoFiles([...event.dataTransfer.files]);
+            }}
+          >
             {photos.map((photo, index) => (
               <div key={photo.key} className="flex w-24 flex-col gap-1">
                 <div className={`relative size-24 overflow-hidden rounded-lg border ${index === 0 ? "border-brand" : "border-line"}`}>
@@ -542,13 +570,13 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
               multiple
               className="sr-only"
               onChange={(event) => {
-                const files = [...(event.target.files ?? [])];
-                setPhotos([...photos, ...files.map((file) => ({ key: `${file.name}-${file.size}-${Math.random()}`, file, url: URL.createObjectURL(file) }))]);
+                addPhotoFiles([...(event.target.files ?? [])]);
                 event.target.value = "";
               }}
             />
             <label htmlFor="product-photo" className="btn flex size-24 cursor-pointer flex-col items-center justify-center text-center text-xs">
-              + Agregar fotos
+              {dropping ? "Suelta aquí" : "+ Agregar fotos"}
+              {!dropping && <span className="mt-1 text-[10px] text-muted">o arrástralas</span>}
             </label>
           </div>
         </div>
