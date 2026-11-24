@@ -6,7 +6,7 @@ import { Modal } from "@/components/app/ui";
 import { filamentName } from "@/lib/costs";
 import { duration, weight } from "@/lib/format";
 import { filamentColors } from "@/lib/labels";
-import { fitsPrinter, matchFilament, matchPrinter, neededPerProduct, pieceGroups, readSlice, type SliceReport } from "@/lib/slice";
+import { fitsPrinter, matchFilament, matchPrinter, neededPerProduct, pieceGroups, productSizes, readSlice, type SliceReport } from "@/lib/slice";
 import { pieceThumbnails } from "@/lib/slice-thumbs";
 import type { Filament, Printer } from "@/lib/types";
 
@@ -18,8 +18,8 @@ export type SliceImportResult = {
   plates: ImportedPlate[];
   parts: { name: string; needed: number }[];
   thumbnail: File | null;
-  /** The biggest piece of the file (mm: length, width, height), to suggest the product's size. */
-  biggest?: [number, number, number] | null;
+  /** The product's size suggested by the pieces (mm: length, width, height): built, and disassembled in a box. */
+  sizes?: { assembled: [number, number, number] | null; packed: [number, number, number] | null };
 };
 
 /** A distinct piece of the file: `key` is how the slicer calls it, `name` and `needed` what the user typed. */
@@ -113,10 +113,12 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
     });
     const png = report.plates.find((plate) => plate.thumbnail)?.thumbnail;
     const thumbnail = png ? new File([png.slice()], "placa.png", { type: "image/png" }) : null;
-    // The biggest piece by its longest side (then its volume), to suggest the product's measures.
-    const biggest =
-      [...(report.sizes ?? [])].sort((a, b) => Math.max(...b.size) - Math.max(...a.size) || b.size[0] * b.size[1] * b.size[2] - a.size[0] * a.size[1] * a.size[2])[0]?.size ?? null;
-    onApply({ printerId, plates, parts, thumbnail, biggest });
+    // Built: the biggest piece; disassembled: the pieces one product takes, lying in a box.
+    const sizes = productSizes(
+      report.sizes ?? [],
+      review.pieces.map((piece) => ({ name: piece.key, needed: Math.max(1, Math.round(Number(piece.needed) || 1)) })),
+    );
+    onApply({ printerId, plates, parts, thumbnail, sizes });
     setReview(null);
   }
 

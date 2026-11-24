@@ -50,6 +50,7 @@ import {
   matchPrinter,
   neededPerProduct,
   pieceGroups,
+  productSizes,
   readSlice,
 } from "@/lib/slice";
 import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
@@ -179,6 +180,23 @@ export default function ProductFormScreen() {
     margin: String((product?.pack_margin_mm ?? 30) / 10),
   });
   const [sizeHint, setSizeHint] = useState<string | undefined>(undefined);
+  // Sizes the last sliced file suggests, to switch between the product built and disassembled.
+  const [sliceSizes, setSliceSizes] = useState<ReturnType<typeof productSizes> | null>(null);
+
+  function applySliceSize(size: [number, number, number], packed: boolean) {
+    const cmOf = (value: number) => String(Math.round(value) / 10);
+    setSizeDraft((draft) => ({
+      ...draft,
+      length: cmOf(size[0]),
+      width: cmOf(size[1]),
+      height: cmOf(size[2]),
+    }));
+    setSizeHint(
+      packed
+        ? "Calculadas con las piezas acostadas en capas dentro de la caja: es un estimado, ajústalas si las acomodas distinto."
+        : "Las tomamos de la pieza más grande del archivo. Si el producto armado es más grande, ajústalas.",
+    );
+  }
   // Profit levels: the workshop's, or ones of its own (only those that differ are saved).
   const workshopLevels = priceLevels(profile);
   const [ownLevels, setOwnLevels] = useState(
@@ -313,27 +331,17 @@ export default function ProductFormScreen() {
             );
         }
       }
-      // The biggest piece suggests the product's size while none was typed.
-      const biggest = [...(report.sizes ?? [])].sort(
-        (a, b) => Math.max(...b.size) - Math.max(...a.size),
-      )[0]?.size;
+      // Built: the biggest piece; disassembled: the pieces lying in a box. The built size fills the
+      // measures while none was typed; the other stays one tap away in Embalaje.
+      const sizes = productSizes(report.sizes ?? [], []);
+      setSliceSizes(sizes);
       if (
-        biggest &&
+        sizes.assembled &&
         !num(sizeDraft.length) &&
         !num(sizeDraft.width) &&
         !num(sizeDraft.height)
-      ) {
-        const cmOf = (value: number) => String(Math.round(value) / 10);
-        setSizeDraft({
-          ...sizeDraft,
-          length: cmOf(biggest[0]),
-          width: cmOf(biggest[1]),
-          height: cmOf(biggest[2]),
-        });
-        setSizeHint(
-          "Las tomamos de la pieza más grande del archivo. Si el producto se arma con varias piezas, ajústalas.",
-        );
-      }
+      )
+        applySliceSize(sizes.assembled, false);
       setRecipe(
         Object.entries(grams).map(([filament_id, value]) => ({
           filament_id,
@@ -841,6 +849,32 @@ export default function ProductFormScreen() {
       )}
       {section === "embalaje" && (
         <>
+          {withSizes && (sliceSizes?.assembled || sliceSizes?.packed) && (
+            <>
+              <Muted>Medidas del laminado:</Muted>
+              <Row style={{ gap: Spacing.two, flexWrap: "wrap" }}>
+                {(
+                  [
+                    ["Armado", sliceSizes.assembled, false],
+                    ["Desarmado en caja", sliceSizes.packed, true],
+                  ] as const
+                ).map(([label, size, packed]) =>
+                  size ? (
+                    <Pressable
+                      key={label}
+                      accessibilityRole="button"
+                      onPress={() => applySliceSize([...size], packed)}
+                      style={styles.photoButton}
+                    >
+                      <Text style={{ color: Colors.text, fontSize: 13 }}>
+                        {`${label} · ${size.map((value) => Math.round(value) / 10).join(" × ")} cm`}
+                      </Text>
+                    </Pressable>
+                  ) : null,
+                )}
+              </Row>
+            </>
+          )}
           {withSizes && (
             <BoxAdvisor
               draft={sizeDraft}

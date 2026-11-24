@@ -214,6 +214,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     margin: String((product?.pack_margin_mm ?? 30) / 10),
   });
   const [sizeHint, setSizeHint] = useState<string | undefined>(undefined);
+  // Sizes the last sliced file suggests, to switch between the product built and disassembled.
+  const [sliceSizes, setSliceSizes] = useState<SliceImportResult["sizes"]>(undefined);
   // Tab of the store whose price is shown (the first while none was picked).
   const [channelTab, setChannelTab] = useState("");
   const activeChannel = channels.some((channel) => channel.id === channelTab) ? channelTab : (channels[0]?.id ?? "");
@@ -300,13 +302,20 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   const setPart = (index: number, change: Partial<PartRow>) => setPartRows(partRows.map((row, position) => (position === index ? { ...row, ...change } : row)));
 
   /** Fills the plates of one printer from a sliced file; empty plates are replaced, filled ones kept. */
-  function applySlice({ printerId: slicedOn, plates: imported, parts: found, thumbnail, biggest }: SliceImportResult) {
-    // The biggest piece suggests the product's size while none was typed.
-    if (biggest && !num(sizeDraft.length) && !num(sizeDraft.width) && !num(sizeDraft.height)) {
-      const cmOf = (value: number) => String(Math.round(value) / 10);
-      setSizeDraft({ ...sizeDraft, length: cmOf(biggest[0]), width: cmOf(biggest[1]), height: cmOf(biggest[2]) });
-      setSizeHint("Las tomamos de la pieza más grande del archivo. Si el producto se arma con varias piezas, ajústalas.");
-    }
+  function applySliceSize(size: [number, number, number], packed: boolean) {
+    const cmOf = (value: number) => String(Math.round(value) / 10);
+    setSizeDraft((draft) => ({ ...draft, length: cmOf(size[0]), width: cmOf(size[1]), height: cmOf(size[2]) }));
+    setSizeHint(
+      packed
+        ? "Calculadas con las piezas acostadas en capas dentro de la caja: es un estimado, ajústalas si las acomodas distinto."
+        : "Las tomamos de la pieza más grande del archivo. Si el producto armado es más grande, ajústalas.",
+    );
+  }
+
+  function applySlice({ printerId: slicedOn, plates: imported, parts: found, thumbnail, sizes }: SliceImportResult) {
+    // The file suggests the product's size while none was typed; the other option stays one tap away.
+    setSliceSizes(sizes);
+    if (sizes?.assembled && !num(sizeDraft.length) && !num(sizeDraft.width) && !num(sizeDraft.height)) applySliceSize(sizes.assembled, false);
     // The pieces found become the product's: same name → same piece; the single unnamed one takes the first.
     let pieceRows = partRows;
     const idOf: Record<string, string> = {};
@@ -1147,6 +1156,23 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       </div>
 
       <div className={part("embalaje")}>
+        {withSizes && (sliceSizes?.assembled || sliceSizes?.packed) && (
+          <div className="flex flex-wrap items-center gap-2 text-sm sm:col-span-2">
+            <span className="text-muted">Medidas del laminado:</span>
+            {(
+              [
+                ["Armado", sliceSizes.assembled, false],
+                ["Desarmado en caja", sliceSizes.packed, true],
+              ] as const
+            ).map(([label, size, packed]) =>
+              size ? (
+                <button key={label} type="button" className="btn px-3 py-1 text-xs" onClick={() => applySliceSize(size, packed)}>
+                  {label} · {size.map((value) => Math.round(value) / 10).join(" × ")} cm
+                </button>
+              ) : null,
+            )}
+          </div>
+        )}
         {withSizes && (
           <BoxAdvisor draft={sizeDraft} onChange={setSizeDraft} packaging={packaging} chosen={packagingId} onPick={setPackagingId} hint={sizeHint} />
         )}

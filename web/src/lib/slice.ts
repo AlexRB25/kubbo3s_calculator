@@ -110,7 +110,13 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
   if (name.endsWith('.gcode') || name.endsWith('.gco') || name.endsWith('.g')) {
     const read = readGcode(gcodeText(bytes), warnings);
     if (!read.minutes && !read.filaments.length) throw new Error('Este G-code no trae el tiempo ni el filamento. ¿Es de un laminador?');
-    return { slicer: read.slicer, printerModel: read.printerModel, plates: [{ index: 1, minutes: read.minutes, filaments: read.filaments, objects: [], thumbnail: null }], warnings };
+    let sizes: PieceSize[] = [];
+    try {
+      sizes = gcodeSizes(bytes);
+    } catch {
+      sizes = [];
+    }
+    return { slicer: read.slicer, printerModel: read.printerModel, plates: [{ index: 1, minutes: read.minutes, filaments: read.filaments, objects: [], thumbnail: null }], warnings, sizes };
   }
   if (!name.endsWith('.3mf')) throw new Error('Sube un archivo .3mf o .gcode.');
 
@@ -297,6 +303,159 @@ export function pieceSizes(files: Record<string, Uint8Array>): PieceSize[] {
     if (length > 0 && width > 0 && height > 0) sizes.push({ name: objects.get(key)?.name ?? '', size: [round(length), round(width), round(height)] });
   }
   return sizes;
+}
+
+// ── Size of the pieces, from the moves of a G-code ──
+
+/** The object a G-code line starts printing (null: it stops printing one), or undefined when it says neither. */
+function objectMarker(line: string): string | null | undefined {
+  // PrusaSlicer / OrcaSlicer: "; printing object box.stl id:0 copy 0" … "; stop printing object …".
+  if (line.startsWith('; printing object ')) return line.slice(18).replace(/\s+id:\d+\s+copy\s+\d+\s*$/i, '').trim();
+  if (line.startsWith('; stop printing object')) return null;
+  // Bambu Studio: "; start printing object, unique label id: 12" … "; stop printing object, unique label id: 12".
+  if (line.startsWith('; start printing object')) return `Pieza ${line.match(/id:\s*(\d+)/)?.[1] ?? ''}`.trim();
+  // Bambu Studio (other versions): "; OBJECT_ID: 12" before each object's part of a layer.
+  if (line.startsWith('; OBJECT_ID:')) return `Pieza ${line.slice(12).trim()}`;
+  // Cura: ";MESH:Cuerpo.stl" (";MESH:NONMESH" is the skirt and travel between pieces).
+  if (line.startsWith(';MESH:')) return line.slice(6) === 'NONMESH' ? null : line.slice(6).trim();
+  return undefined;
+}
+
+/**
+ * Size of each piece a plain G-code prints, from its extruding moves: X/Y/Z where filament comes out, per object
+ * when the slicer labels them (PrusaSlicer, OrcaSlicer, Bambu, Cura). Without labels, one piece from the second
+ * layer up (the first carries the purge line and the brim). Reads the whole file in chunks.
+ */
+export function gcodeSizes(bytes: Uint8Array): PieceSize[] {
+  const boxes = new Map<string, Bounds>();
+  let labelled = false;
+  let current: string | null = null;
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  let e = 0;
+  let relativeE = false;
+  let firstZ = Infinity;
+  // Inside a prime tower, skirt or brim: extrusion that is not the piece.
+  let aside = false;
+  const CHUNK = 4_000_000;
+  const readLine = (raw: string) => {
+    const line = raw.trim();
+    if (!line) return;
+    if (line[0] === ';') {
+      const marker = objectMarker(line);
+      if (marker !== undefined) {
+        labelled = true;
+        current = marker;
+      }
+      // "; FEATURE: Prime tower" (Bambu/Orca), ";TYPE:Wipe tower" (Prusa), ";TYPE:SKIRT" (Cura): not the piece.
+      const feature = /^;\s*(?:FEATURE|TYPE)\s*:\s*(.+)$/i.exec(line)?.[1];
+      if (feature) aside = /prime tower|wipe tower|skirt|brim|purge/i.test(feature);
+      return;
+    }
+    const code = line.split(';', 1)[0];
+    if (code.startsWith('M82')) relativeE = false;
+    else if (code.startsWith('M83')) relativeE = true;
+    else if (code.startsWith('G92')) {
+      const value = /E(-?[\d.]+)/.exec(code);
+      if (value) e = Number(value[1]);
+    } else if (code[0] === 'G' && (code[1] === '0' || code[1] === '1') && (code.length === 2 || code[2] === ' ')) {
+      let extrudes = false;
+      for (const word of code.split(/\s+/)) {
+        const value = Number(word.slice(1));
+        if (!Number.isFinite(value)) continue;
+        if (word[0] === 'X') x = value;
+        else if (word[0] === 'Y') y = value;
+        else if (word[0] === 'Z') z = value;
+        else if (word[0] === 'E') {
+          extrudes = relativeE ? value > 0 : value > e;
+          if (!relativeE) e = value;
+        }
+      }
+      if (!extrudes || aside || code[1] !== '1') return;
+      if (firstZ === Infinity) firstZ = z;
+      const key = labelled ? current : '';
+      if (key === null || (!labelled && z <= firstZ + 1e-6)) return;
+      boxes.set(key, grow(boxes.get(key) ?? null, [x, y, z]));
+    }
+  };
+  // In chunks cut at a line break (never inside a line or a character), so no huge string is built.
+  for (let start = 0; start < bytes.length; ) {
+    let end = Math.min(bytes.length, start + CHUNK);
+    if (end < bytes.length) {
+      const cut = bytes.lastIndexOf(10, end - 1);
+      if (cut > start) end = cut + 1;
+    }
+    for (const line of strFromU8(bytes.subarray(start, end)).split('\n')) readLine(line);
+    start = end;
+  }
+  // Moves before the first label (purge, priming) are no piece.
+  if (labelled) boxes.delete('');
+  const round = (value: number) => Math.round(value * 10) / 10;
+  const sizes: PieceSize[] = [];
+  for (const [name, box] of boxes) {
+    // Moves run along the middle of each line: the outer edge is half a line (~0.2 mm) further out.
+    const [length, width] = [box[3] - box[0] + 0.4, box[4] - box[1] + 0.4].sort((p, q) => q - p);
+    // The piece starts on the bed: its height is the top of its last layer.
+    const height = box[5];
+    if (length > 0 && width > 0 && height > 0) sizes.push({ name: name || 'Pieza', size: [round(length), round(width), round(height)] });
+  }
+  return sizes;
+}
+
+/**
+ * The product's size suggested by its pieces (mm: length, width, height): `assembled` is the biggest piece (by its
+ * longest side, then volume); `packed` is every piece the product takes lying flat in layers, for a product that
+ * ships disassembled (only when it has more than one piece). An estimate: the user can correct it.
+ */
+export function productSizes(sizes: PieceSize[], pieces: { name: string; needed: number }[]) {
+  const volume = (size: number[]) => size[0] * size[1] * size[2];
+  const assembled = [...sizes].sort((a, b) => Math.max(...b.size) - Math.max(...a.size) || volume(b.size) - volume(a.size))[0]?.size ?? null;
+  const stack: number[][] = [];
+  for (const piece of pieces) {
+    const same = sizes.filter((item) => pieceName(item.name).toLowerCase() === piece.name.toLowerCase());
+    if (!same.length) continue;
+    const size = [...same.sort((a, b) => volume(b.size) - volume(a.size))[0].size].sort((p, q) => q - p);
+    for (let copy = 0; copy < Math.max(1, piece.needed); copy++) stack.push(size);
+  }
+  if (!stack.length && sizes.length > 1) {
+    // Pieces without names: copies are alike in size, and how many of each the plate prints tells how many one
+    // product takes (10 shells and 10 eyes → one of each).
+    const groups: { size: number[]; count: number }[] = [];
+    for (const item of sizes) {
+      const size = [...item.size].sort((p, q) => q - p);
+      const group = groups.find((other) => other.size.every((value, axis) => Math.abs(value - size[axis]) < 1));
+      if (group) group.count += 1;
+      else groups.push({ size, count: 1 });
+    }
+    const needed = neededPerProduct(groups.map((group) => group.count));
+    groups.forEach((group, index) => {
+      for (let copy = 0; copy < needed[index]; copy++) stack.push(group.size);
+    });
+  }
+  const round = (value: number) => Math.round(value * 10) / 10;
+  if (stack.length < 2) return { assembled, packed: null };
+  // Lying flat in layers on the footprint of the widest piece: the small ones side by side (filling up to 80 % of
+  // the floor, room lost between them), a new layer when they no longer fit; each layer as tall as its tallest.
+  const length = Math.max(...stack.map((size) => size[0]));
+  const width = Math.max(...stack.map((size) => size[1]));
+  const floor = length * width * 0.8;
+  let height = 0;
+  let used = Infinity;
+  let layer = 0;
+  for (const size of [...stack].sort((a, b) => b[0] * b[1] - a[0] * a[1])) {
+    const area = size[0] * size[1];
+    if (used + area > floor) {
+      height += layer;
+      used = 0;
+      layer = 0;
+    }
+    used += area;
+    layer = Math.max(layer, size[2]);
+  }
+  height += layer;
+  const packed: [number, number, number] = [round(length), round(width), round(height)];
+  return { assembled, packed };
 }
 
 // ── Matching what the slicer says with the user's own filaments and printers ──
