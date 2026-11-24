@@ -25,6 +25,12 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
             <Link href="/entrar" className="hover:text-white">
               Entrar a mi taller
             </Link>
+            <a href={`${process.env.PB_LANDING_URL}/terminos`} className="hover:text-white">
+              Términos
+            </a>
+            <a href={`${process.env.PB_LANDING_URL}/privacidad`} className="hover:text-white">
+              Privacidad
+            </a>
           </nav>
         </div>
       </footer>

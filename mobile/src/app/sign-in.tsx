@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button, ErrorText, Muted } from '@/components/ui';
 import { Colors, Radius, Spacing, themed } from '@/constants/theme';
+import { openLegal, PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { authErrorMessage, supabase, supabaseConfigured } from '@/lib/supabase';
 
 export default function SignInScreen() {
@@ -110,6 +111,17 @@ export default function SignInScreen() {
               setError('');
             }}
           />
+          <Muted style={{ textAlign: 'center', fontSize: 12 }}>
+            Al continuar aceptas los{' '}
+            <Text style={styles.legal} onPress={() => openLegal(TERMS_URL)}>
+              Términos y condiciones
+            </Text>{' '}
+            y el{' '}
+            <Text style={styles.legal} onPress={() => openLegal(PRIVACY_URL)}>
+              Aviso de privacidad
+            </Text>
+            .
+          </Muted>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -237,5 +249,6 @@ const styles = themed(() =>
     fontSize: 14,
     overflow: 'hidden',
   },
+  legal: { color: Colors.textSecondary, textDecorationLine: 'underline' },
   }),
 );

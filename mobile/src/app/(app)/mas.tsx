@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, type Href } from "expo-router";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 
 import { ThemePicker } from "@/components/theme-picker";
 import {
@@ -13,10 +13,13 @@ import {
   type IconName,
 } from "@/components/ui";
 import { Colors } from "@/constants/theme";
+import { openLegal, PRIVACY_URL, TERMS_URL } from "@/lib/legal";
 import { supabase } from "@/lib/supabase";
 import type { ShopRole } from "@/lib/types";
 import { useData } from "@/store/data";
 import { useSession } from "@/store/session";
+
+const legal = { color: Colors.textSecondary, fontSize: 13, textDecorationLine: "underline" } as const;
 
 /** Sections of the menu, like the web's sidebar. */
 const GROUPS = [
@@ -228,6 +231,14 @@ export default function MoreScreen() {
         label="Eliminar mi cuenta"
         onPress={() => router.push("/eliminar-cuenta")}
       />
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: 20 }}>
+        <Text accessibilityRole="link" onPress={() => openLegal(TERMS_URL)} style={legal}>
+          Términos y condiciones
+        </Text>
+        <Text accessibilityRole="link" onPress={() => openLegal(PRIVACY_URL)} style={legal}>
+          Aviso de privacidad
+        </Text>
+      </View>
     </Screen>
   );
 }

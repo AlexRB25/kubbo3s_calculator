@@ -12,6 +12,21 @@ import { FieldsForm, PageHeader, type FieldDef } from "@/components/app/ui";
 import { useData } from "@/lib/data";
 import { supabase } from "@/lib/supabase";
 
+/** The legal pages live on the landing; every settings view links them. */
+function LegalLinks() {
+  const base = process.env.PB_LANDING_URL;
+  return (
+    <p className="mt-6 flex flex-wrap gap-4 text-sm text-muted">
+      <a href={`${base}/terminos`} target="_blank" rel="noreferrer" className="underline hover:text-fg">
+        Términos y condiciones
+      </a>
+      <a href={`${base}/privacidad`} target="_blank" rel="noreferrer" className="underline hover:text-fg">
+        Aviso de privacidad
+      </a>
+    </p>
+  );
+}
+
 const FIELDS: FieldDef[] = [
   { name: "name", label: "Tu nombre" },
   { name: "business_name", label: "Nombre del negocio" },
@@ -32,6 +47,7 @@ export default function SettingsPage() {
         <PageHeader title="Ajustes" />
         <p className="text-muted">Los ajustes de la tienda (luz, ganancia, gastos fijos, merma) solo los cambia el dueño.</p>
         <DeleteAccount />
+        <LegalLinks />
       </>
     );
   }
@@ -56,6 +72,7 @@ export default function SettingsPage() {
       <WasteRules />
       <QuoteSettings />
       <DeleteAccount />
+      <LegalLinks />
     </>
   );
 }
