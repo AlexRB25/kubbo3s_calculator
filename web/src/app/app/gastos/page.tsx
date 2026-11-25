@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 import type { Expense } from "@/lib/types";
 
 export default function ExpensesPage() {
-  const { expenses, suppliers, printers } = useData();
+  const { expenses, suppliers, printers, filaments } = useData();
   const { error, save } = useSave();
   const [adding, setAdding] = useState(false);
 
@@ -30,7 +30,8 @@ export default function ExpensesPage() {
       }
       return;
     }
-    const warning = expense.grams ? `Se descontarán ${weight(expense.grams)} de ese filamento. ¿Eliminar?` : "¿Eliminar este gasto?";
+    const resin = filaments.find((filament) => filament.id === expense.filament_id)?.kind === "resin";
+    const warning = expense.grams ? `Se descontarán ${weight(expense.grams, resin)} de ${resin ? "esa resina" : "ese filamento"}. ¿Eliminar?` : "¿Eliminar este gasto?";
     if (window.confirm(warning)) save(() => supabase().from("expenses").delete().eq("id", expense.id));
   }
 

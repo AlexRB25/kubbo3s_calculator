@@ -100,19 +100,19 @@ export default function QuickCalculatorPage() {
             {uses.map((use, index) => (
               <div key={index} className="grid gap-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
                 <label className="label">
-                  {index === 0 ? "Filamento" : `Filamento ${index + 1}`}
+                  {index === 0 ? "Filamento o resina" : `Material ${index + 1}`}
                   <select className="input" value={use.filament} onChange={(event) => setUse(index, { filament: event.target.value })}>
                     {filaments.map((filament) => (
                       <option key={filament.id} value={filament.id}>
                         {filamentName(filament)}
                       </option>
                     ))}
-                    <option value={OTHER}>Otro (escribo el precio por kg)</option>
+                    <option value={OTHER}>Otro (escribo el precio por kg o por litro)</option>
                   </select>
                 </label>
                 {use.filament === OTHER ? (
                   <label className="label">
-                    Precio por kg
+                    Precio por kg o litro
                     {input(use.perKg, (value) => setUse(index, { perKg: value }), "350", "$")}
                   </label>
                 ) : (
@@ -120,8 +120,8 @@ export default function QuickCalculatorPage() {
                 )}
                 <div className="flex items-end gap-2">
                   <label className="label flex-1">
-                    Gramos
-                    {input(use.grams, (value) => setUse(index, { grams: value }), "0", "g")}
+                    {filaments.find((filament) => filament.id === use.filament)?.kind === "resin" ? "Mililitros" : "Gramos"}
+                    {input(use.grams, (value) => setUse(index, { grams: value }), "0", filaments.find((filament) => filament.id === use.filament)?.kind === "resin" ? "ml" : "g")}
                   </label>
                   {uses.length > 1 && (
                     <button type="button" className="btn" aria-label="Quitar filamento" onClick={() => setUses((list) => list.filter((_, at) => at !== index))}>

@@ -104,9 +104,9 @@ export default function SummaryPage() {
           {lowFilaments.map((filament) => (
             <p key={filament.id} className="flex justify-between gap-3 text-sm">
               <span>
-                <span className="text-bad">Filamento bajo</span> · {filamentName(filament)}
+                <span className="text-bad">{filament.kind === "resin" ? "Resina baja" : "Filamento bajo"}</span> · {filamentName(filament)}
               </span>
-              <span className="tabular-nums text-muted">{weight(filament.stock_g)}</span>
+              <span className="tabular-nums text-muted">{weight(filament.stock_g, filament.kind === "resin")}</span>
             </p>
           ))}
           {dueMaintenance.map(({ printer, record }) => (

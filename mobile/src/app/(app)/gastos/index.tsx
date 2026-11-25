@@ -8,7 +8,7 @@ import type { Expense } from '@/lib/types';
 import { useData, useSave } from '@/store/data';
 
 export default function ExpensesScreen() {
-  const { expenses, suppliers } = useData();
+  const { expenses, suppliers, filaments } = useData();
   const { error, save } = useSave();
 
   function remove(expense: Expense) {
@@ -18,7 +18,8 @@ export default function ExpensesScreen() {
         save(() => supabase.from('maintenance').delete().eq('id', expense.maintenance_id!), () => {}),
       );
     }
-    confirmDelete(expense.grams ? `Se descontarán ${weight(expense.grams)} de ese filamento.` : 'Se eliminará este gasto.', () =>
+    const resin = filaments.find((filament) => filament.id === expense.filament_id)?.kind === 'resin';
+    confirmDelete(expense.grams ? `Se descontarán ${weight(expense.grams, resin)} de ${resin ? 'esa resina' : 'ese filamento'}.` : 'Se eliminará este gasto.', () =>
       save(() => supabase.from('expenses').delete().eq('id', expense.id), () => {}),
     );
   }

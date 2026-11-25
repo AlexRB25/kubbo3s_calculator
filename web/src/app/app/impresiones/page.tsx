@@ -221,13 +221,13 @@ function PrintForm({ job, onDone }: { job?: PrintJob; onDone: () => void }) {
                 <option value="">Elegir…</option>
                 {filaments.map((filament) => (
                   <option key={filament.id} value={filament.id}>
-                    {filamentName(filament)} · quedan {weight(filament.stock_g)}
+                    {filamentName(filament)} · quedan {weight(filament.stock_g, filament.kind === "resin")}
                   </option>
                 ))}
               </select>
             </label>
             <label className="label w-28">
-              Gramos
+              {filaments.find((filament) => filament.id === row.filament_id)?.kind === "resin" ? "ml" : "Gramos"}
               <input
                 className="input"
                 type="number"
@@ -318,7 +318,12 @@ export default function PrintsPage() {
                     {job.quantity} × {job.plate ? `${job.plate.name} de ${job.product_name}` : job.product_name}
                   </td>
                   <td className="text-muted">{printers.find((printer) => printer.id === job.printer_id)?.name ?? "—"}</td>
-                  <td className="num">{weight(job.print_job_filaments.reduce((total, use) => total + use.grams, 0))}</td>
+                  <td className="num">
+                    {weight(
+                      job.print_job_filaments.reduce((total, use) => total + use.grams, 0),
+                      printers.find((printer) => printer.id === job.printer_id)?.technology === "resin",
+                    )}
+                  </td>
                   <td className="num text-muted">{duration(job.minutes)}</td>
                   <td className={STATUS[job.status].tone}>
                     {STATUS[job.status].label}

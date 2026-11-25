@@ -3527,3 +3527,97 @@ create trigger guard_shop_role before delete on public.post_processes
 alter table public.products add column if not exists processes jsonb not null default '[]'::jsonb;
 alter table public.products drop constraint if exists products_processes_check;
 alter table public.products add constraint products_processes_check check (jsonb_typeof(processes) = 'array');
+
+
+-- ───────────────────────── Impresión en resina ─────────────────────────
+-- Un "filamento" puede ser resina (kind = 'resin'): sus cantidades van en ml en vez de gramos
+-- (stock_g, low_stock_g, grams de placas e impresiones) y cost_per_kg es el precio por litro, así que
+-- todas las cuentas (cantidad × costo por unidad) siguen igual.
+-- Las impresoras tienen tecnología (fdm o resin) y un costo de consumibles por hora de impresión
+-- (alcohol isopropílico, guantes, FEP, pantalla LCD), que se suma al costo de máquina de cada pieza.
+-- Se puede correr varias veces.
+
+alter table public.filaments add column if not exists kind text not null default 'filament';
+alter table public.filaments drop constraint if exists filaments_kind_check;
+alter table public.filaments add constraint filaments_kind_check check (kind in ('filament', 'resin'));
+
+alter table public.printers add column if not exists technology text not null default 'fdm';
+alter table public.printers drop constraint if exists printers_technology_check;
+alter table public.printers add constraint printers_technology_check check (technology in ('fdm', 'resin'));
+alter table public.printers add column if not exists consumables_per_hour numeric(10,2) not null default 0;
+alter table public.printers drop constraint if exists printers_consumables_per_hour_check;
+alter table public.printers add constraint printers_consumables_per_hour_check check (consumables_per_hour >= 0);
+
+-- El cambio de moneda también convierte los consumibles por hora.
+create or replace function public.change_currency(p_from text, p_to text, p_factor numeric) returns void
+language plpgsql set search_path = '' as $$
+declare
+  v_shop uuid := auth.uid();
+  f numeric := p_factor;
+begin
+  if v_shop is null or public.current_shop() is distinct from v_shop then
+    raise exception using errcode = 'P0001', message = 'Solo el dueño del taller cambia su moneda, desde su propio taller.';
+  end if;
+  if p_to !~ '^[A-Z]{3}$' then
+    raise exception using errcode = 'P0001', message = 'Moneda no válida.';
+  end if;
+  if not exists (select 1 from public.profiles where id = v_shop and currency = p_from) then
+    raise exception using errcode = 'P0001', message = 'Tu moneda ya cambió. Recarga la página e inténtalo de nuevo.';
+  end if;
+  if f is null then
+    update public.profiles set currency = p_to where id = v_shop;
+    return;
+  end if;
+  if not (f > 0) then
+    raise exception using errcode = 'P0001', message = 'Tipo de cambio no válido.';
+  end if;
+
+  update public.profiles set
+    currency = p_to,
+    kwh_price = round(kwh_price * f, 4),
+    overheads = coalesce((
+      select jsonb_agg(case when jsonb_typeof(o -> 'amount') = 'number'
+                            then jsonb_set(o, '{amount}', to_jsonb(round((o ->> 'amount')::numeric * f, 2))) else o end
+                       order by i)
+      from jsonb_array_elements(overheads) with ordinality as x (o, i)), '[]'::jsonb)
+  where id = v_shop;
+
+  update public.printers set
+    hourly_cost = round(hourly_cost * f, 2),
+    purchase_price = round(purchase_price * f, 2),
+    consumables_per_hour = round(consumables_per_hour * f, 2)
+  where user_id = v_shop;
+  update public.filaments set cost_per_kg = round(cost_per_kg * f, 2) where user_id = v_shop;
+  update public.materials set cost_per_unit = round(cost_per_unit * f, 4) where user_id = v_shop;
+  update public.channels set fixed_fee = round(fixed_fee * f, 2), shipping_cost = round(shipping_cost * f, 2) where user_id = v_shop;
+  update public.packaging set cost = round(cost * f, 2) where user_id = v_shop;
+  update public.carriers set
+    prices = coalesce(array(select round(p * f, 2) from unnest(prices) with ordinality as x (p, i) order by i), '{}'),
+    rates = coalesce((
+      select jsonb_agg(coalesce((
+               select jsonb_agg(case when jsonb_typeof(c) = 'number' then to_jsonb(round((c #>> '{}')::numeric * f, 2)) else c end order by j)
+               from jsonb_array_elements(r) with ordinality as y (c, j)), '[]'::jsonb) order by i)
+      from jsonb_array_elements(rates) with ordinality as x (r, i)), '[]'::jsonb)
+  where user_id = v_shop;
+  update public.products set
+    extra_cost = round(extra_cost * f, 2),
+    prices = coalesce((
+      select jsonb_object_agg(k, case when jsonb_typeof(v) = 'number' then to_jsonb(round((v #>> '{}')::numeric * f, 2)) else v end)
+      from jsonb_each(prices) as x (k, v)), '{}'::jsonb)
+  where user_id = v_shop;
+  update public.sales set
+    unit_price = round(unit_price * f, 2),
+    fees = round(fees * f, 2),
+    shipping_cost = round(shipping_cost * f, 2),
+    unit_cost = round(unit_cost * f, 2),
+    packaging_cost = round(packaging_cost * f, 2),
+    list_price = round(list_price * f, 2)
+  where user_id = v_shop;
+  update public.maintenance set cost = round(cost * f, 2) where user_id = v_shop;
+  update public.printer_wear set amount = round(amount * f, 2) where user_id = v_shop;
+  update public.print_job_filaments set cost = round(cost * f, 2) where user_id = v_shop;
+  -- Sus triggers recalculan el costo real por gramo / unidad con los montos nuevos.
+  update public.expenses set amount = round(amount * f, 2) where user_id = v_shop;
+end $$;
+revoke all on function public.change_currency(text, text, numeric) from public, anon;
+grant execute on function public.change_currency(text, text, numeric) to authenticated;

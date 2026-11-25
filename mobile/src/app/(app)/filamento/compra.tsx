@@ -14,6 +14,7 @@ export default function FilamentPurchaseScreen() {
 
   const [filamentId, setFilamentId] = useState<string | null>(id ?? null);
   const filament = filaments.find((item) => item.id === filamentId);
+  const resin = filament?.kind === 'resin';
   const [grams, setGrams] = useState('1000');
   const [amount, setAmount] = useState('');
   // Undefined until the user picks one: by default the purchase goes to the filament's usual supplier.
@@ -49,13 +50,13 @@ export default function FilamentPurchaseScreen() {
   return (
     <Screen>
       <Select
-        label="Filamento"
+        label="Filamento o resina"
         value={filamentId}
         onChange={setFilamentId}
-        options={filaments.map((item) => ({ value: item.id, label: filamentName(item), hint: `Quedan ${weight(item.stock_g)}` }))}
+        options={filaments.map((item) => ({ value: item.id, label: filamentName(item), hint: `Quedan ${weight(item.stock_g, item.kind === 'resin')}` }))}
       />
       <Row>
-        <Field style={{ flex: 1 }} label="Cantidad" unit="g" numeric value={grams} onChangeText={setGrams} />
+        <Field style={{ flex: 1 }} label="Cantidad" unit={resin ? 'ml' : 'g'} numeric value={grams} onChangeText={setGrams} />
         <Field style={{ flex: 1 }} label="Total pagado" unit="$" numeric value={amount} onChangeText={setAmount} placeholder="0" />
       </Row>
       <Select
@@ -69,10 +70,10 @@ export default function FilamentPurchaseScreen() {
 
       {filament && (
         <Card>
-          <Line label="Existencia después de la compra" value={weight(filament.stock_g + num(grams))} />
-          <Line label="Esta compra" value={`${money(thisCost)} por kg`} />
+          <Line label="Existencia después de la compra" value={weight(filament.stock_g + num(grams), resin)} />
+          <Line label="Esta compra" value={`${money(thisCost)} por ${resin ? 'litro' : 'kg'}`} />
           <Line
-            label="Costo real por kg (tus compras)"
+            label={`Costo real por ${resin ? 'litro' : 'kg'} (tus compras)`}
             value={`${before.grams > 0 ? money((before.paid / before.grams) * 1000) : 'sin compras'} → ${money(newCost)}`}
           />
         </Card>

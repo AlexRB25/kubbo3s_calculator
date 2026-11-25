@@ -47,7 +47,7 @@ export default function ProductScreen() {
           return (
             <Line
               key={use.filament_id}
-              label={`${filament ? filamentName(filament) : 'Filamento eliminado'} · ${weight(use.grams)}`}
+              label={`${filament ? filamentName(filament) : 'Filamento eliminado'} · ${weight(use.grams, filament?.kind === 'resin')}`}
               value={money(use.grams * (filament ? costPerGram(filament) : 0))}
             />
           );

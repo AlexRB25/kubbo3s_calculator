@@ -1,13 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 
-import { Button, confirmDelete, ErrorText, Field, Muted, Row, Screen, Select } from '@/components/ui';
+import { Button, Card, Chips, confirmDelete, ErrorText, Field, Muted, Row, Screen, Select } from '@/components/ui';
 import { field, num } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import type { CatalogPrinter } from '@/lib/types';
 import { useData, useSave } from '@/store/data';
 
 const OTHER = '__otra';
+
+/** Models that print in resin, to propose it when one is picked. */
+const RESIN_MODEL = /mars|saturn|jupiter|photon|halot|sonic|sl1|form ?[234]|uniformation|gktwo|proxima|nova3d|elfin/i;
 
 /** "Bambu Lab A1 · 605": model (or brand) plus the end of the device id, to tell equal printers apart. */
 function printerName(brand: string, model: string, deviceId: string) {
@@ -40,6 +43,14 @@ export default function PrinterFormScreen() {
       : field(printer?.hourly_cost),
   );
   const [notes, setNotes] = useState(printer?.notes ?? '');
+  const [technology, setTechnology] = useState<'fdm' | 'resin'>(printer?.technology === 'resin' ? 'resin' : 'fdm');
+  const resin = technology === 'resin';
+  const [consumables, setConsumables] = useState(field(printer?.consumables_per_hour));
+  // Helper for the consumables: what each one costs and how many hours it lasts (not saved).
+  const [helper, setHelper] = useState(false);
+  const [parts, setParts] = useState({ fepPrice: '', fepHours: '200', lcdPrice: '', lcdHours: '2000', alcoholHour: '' });
+  const perHour = (cost: string, hoursOf: string) => (num(cost) > 0 && num(hoursOf) > 0 ? num(cost) / num(hoursOf) : 0);
+  const helperTotal = Math.round((perHour(parts.fepPrice, parts.fepHours) + perHour(parts.lcdPrice, parts.lcdHours) + num(parts.alcoholHour)) * 100) / 100;
   const autoWear = num(price) > 0 && num(lifeHours) > 0 ? Math.round((num(price) / num(lifeHours)) * 100) / 100 : 0;
 
   useEffect(() => {
@@ -79,6 +90,7 @@ export default function PrinterFormScreen() {
     setModel(value && value !== OTHER ? value : '');
     const row = models.find((item) => item.model === value);
     if (row && row.power_watts > 0 && !num(watts)) setWatts(field(row.power_watts));
+    if (!printer && value && RESIN_MODEL.test(`${brand} ${value}`)) setTechnology('resin');
   }
 
   function submit() {
@@ -95,6 +107,8 @@ export default function PrinterFormScreen() {
       purchase_price: num(price),
       life_hours: Math.round(num(lifeHours)),
       hourly_cost: hourlyCost === '' ? autoWear : num(hourlyCost),
+      // Only once resin is in play, so it saves on databases that do not have the columns yet.
+      ...(resin || printer?.technology ? { technology, consumables_per_hour: resin ? num(consumables) : 0 } : {}),
       notes: notes.trim(),
     };
     save(() => (printer ? supabase.from('printers').update(row).eq('id', printer.id) : supabase.from('printers').insert(row)));
@@ -102,6 +116,15 @@ export default function PrinterFormScreen() {
 
   return (
     <Screen>
+      <Chips
+        label="Tipo"
+        options={[
+          { value: 'fdm', label: 'Filamento (FDM)' },
+          { value: 'resin', label: 'Resina (SLA / MSLA)' },
+        ]}
+        value={technology}
+        onChange={setTechnology}
+      />
       <Select
         label="Marca"
         value={otherBrand ? OTHER : brand || null}
@@ -157,6 +180,41 @@ export default function PrinterFormScreen() {
           hint={autoWear ? `Vacío usa ${autoWear.toFixed(2)}: lo que costó ÷ su vida útil.` : 'Lo que costó ÷ horas de vida útil.'}
         />
       </Row>
+      {resin && (
+        <>
+          <Field
+            label="Consumibles de resina por hora"
+            unit="$"
+            numeric
+            value={consumables}
+            onChangeText={setConsumables}
+            placeholder="0"
+            hint="Alcohol isopropílico, guantes, FEP y pantalla LCD que se gastan por hora de impresión. Se suma al desgaste en el costo de cada pieza."
+          />
+          <Button variant="secondary" label={helper ? 'Ocultar cálculo' : 'Calcularlo'} onPress={() => setHelper(!helper)} />
+          {helper && (
+            <Card>
+              <Row style={{ alignItems: 'flex-start' }}>
+                <Field style={{ flex: 1 }} label="Precio del FEP" unit="$" numeric value={parts.fepPrice} onChangeText={(text) => setParts({ ...parts, fepPrice: text })} />
+                <Field style={{ flex: 1 }} label="Le dura" unit="horas" numeric value={parts.fepHours} onChangeText={(text) => setParts({ ...parts, fepHours: text })} />
+              </Row>
+              <Row style={{ alignItems: 'flex-start' }}>
+                <Field style={{ flex: 1 }} label="Pantalla LCD" unit="$" numeric value={parts.lcdPrice} onChangeText={(text) => setParts({ ...parts, lcdPrice: text })} />
+                <Field style={{ flex: 1 }} label="Le dura" unit="horas" numeric value={parts.lcdHours} onChangeText={(text) => setParts({ ...parts, lcdHours: text })} />
+              </Row>
+              <Field
+                label="Alcohol y guantes por hora"
+                unit="$"
+                numeric
+                value={parts.alcoholHour}
+                onChangeText={(text) => setParts({ ...parts, alcoholHour: text })}
+              />
+              <Muted>Total: {helperTotal.toFixed(2)} por hora</Muted>
+              <Button label="Usar este valor" disabled={!helperTotal} onPress={() => setConsumables(String(helperTotal))} />
+            </Card>
+          )}
+        </>
+      )}
       <Field label="Notas" value={notes} onChangeText={setNotes} multiline maxLength={300} />
       <Muted>Se mostrará como {printerName(brand.trim(), model.trim(), deviceId)}</Muted>
 

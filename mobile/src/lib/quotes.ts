@@ -30,7 +30,7 @@ export type QuickInput = {
   filaments: { grams: number; costPerGram: number }[];
   minutes: number;
   /** The printer it is printed on (its power and wear per hour); none = no electricity nor wear. */
-  printer?: Pick<Printer, 'power_watts' | 'hourly_cost'> | null;
+  printer?: Pick<Printer, 'power_watts' | 'hourly_cost' | 'consumables_per_hour'> | null;
   kwhPrice: number;
   /** Extra filament for failed pieces and purges, in %. */
   wastePct: number;
@@ -48,7 +48,8 @@ export function quickCost(input: QuickInput): QuickCost {
   const filament = input.filaments.reduce((total, use) => total + (Number(use.grams) || 0) * (Number(use.costPerGram) || 0), 0) * (1 + (Number(input.wastePct) || 0) / 100);
   const hours = (Number(input.minutes) || 0) / 60;
   const electricity = input.printer ? hours * ((Number(input.printer.power_watts) || 0) / 1000) * (Number(input.kwhPrice) || 0) : 0;
-  const machine = input.printer ? hours * (Number(input.printer.hourly_cost) || 0) : 0;
+  // Wear, plus the consumables of a resin printer.
+  const machine = input.printer ? hours * ((Number(input.printer.hourly_cost) || 0) + (Number(input.printer.consumables_per_hour) || 0)) : 0;
   const post = Number(input.post) || 0;
   const packaging = Number(input.packaging) || 0;
   const overhead = Number(input.overhead) || 0;

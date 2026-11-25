@@ -41,7 +41,8 @@ function breakdown(uses: Product['filaments'], minutes: number, machines: Printe
     machines.length ? machines.reduce((total, printer) => total + pick(printer), 0) / machines.length : 0;
   const hours = minutes / 60;
   const electricity = hours * (average((printer) => printer.power_watts) / 1000) * kwhPrice;
-  const machine = hours * average((printer) => printer.hourly_cost);
+  // Wear, plus the consumables of a resin printer (alcohol, FEP, screen).
+  const machine = hours * average((printer) => (Number(printer.hourly_cost) || 0) + (Number(printer.consumables_per_hour) || 0));
   return { filament, electricity, machine, extra, total: filament + electricity + machine + extra };
 }
 
@@ -368,6 +369,15 @@ export function packagingName(packaging: Packaging) {
 export function costPerGram(filament: Pick<Filament, 'avg_cost_per_g' | 'cost_per_kg'>) {
   return filament.avg_cost_per_g > 0 ? Number(filament.avg_cost_per_g) : filament.cost_per_kg / 1000;
 }
+
+/** A resin: its amounts are ml and its price is per litre. */
+export const isResin = (filament: Pick<Filament, 'kind'> | null | undefined) => filament?.kind === 'resin';
+
+/** A resin printer (SLA/MSLA). */
+export const isResinPrinter = (printer: Pick<Printer, 'technology'> | null | undefined) => printer?.technology === 'resin';
+
+/** "g" or "ml": the unit of a filament's amounts. */
+export const unitOf = (filament: Pick<Filament, 'kind'> | null | undefined) => (isResin(filament) ? 'ml' : 'g');
 
 export function filamentName(filament: Filament) {
   return [filament.material, filament.color, filament.brand].filter(Boolean).join(' ');

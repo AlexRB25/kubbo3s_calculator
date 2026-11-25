@@ -35,7 +35,9 @@ export default function PrinterScreen() {
         {printer.purchase_price > 0 ? <Line label="Te costó" value={money(printer.purchase_price)} /> : null}
         <Line label="Impresiones" value={`${printerJobs.length}${failed ? ` (${failed} fallidas)` : ''}`} />
         <Line label="Consumo" value={`${printer.power_watts} W`} />
+        <Line label="Tipo" value={printer.technology === 'resin' ? 'Resina' : 'Filamento (FDM)'} />
         <Line label="Desgaste por hora" value={money(printer.hourly_cost)} />
+        {printer.technology === 'resin' && <Line label="Consumibles por hora" value={money(printer.consumables_per_hour ?? 0)} />}
         <Line label="Gastado en mantenimiento" value={money(spent)} />
         {(() => {
           // Wear fund: payments minus the wear of each print.

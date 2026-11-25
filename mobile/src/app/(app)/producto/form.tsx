@@ -37,6 +37,7 @@ import {
   suggestedPrice,
   suggestedPriceWithShipping,
   unitProfit,
+  isResin,
 } from "@/lib/costs";
 import { draftOf, levelsLine, ownLevelsOnly, readLevels } from "@/lib/levels";
 import { field, money, num, weight } from "@/lib/format";
@@ -50,6 +51,7 @@ import {
   matchPrinter,
   neededPerProduct,
   pieceGroups,
+  printersFor,
   productSizes,
   readSlice,
 } from "@/lib/slice";
@@ -278,9 +280,19 @@ export default function ProductFormScreen() {
         new Uint8Array(await file.arrayBuffer()),
         file.name,
       );
-      // The G-code is made for one model: without a printer of it, the file cannot be printed here.
-      const printer = matchPrinter(report.printerModel, printers);
-      if (report.printerModel && !printer) {
+      // The G-code is made for one model: without a printer of it, the file cannot be printed here. A resin
+      // file goes to a resin printer.
+      const candidates = printersFor(report, printers);
+      const printer =
+        matchPrinter(report.printerModel, candidates) ??
+        (report.resin && candidates.length === 1 ? candidates[0] : null);
+      if (report.resin && !candidates.length) {
+        setSliceNote([
+          "No tienes impresoras de resina. Da de alta la tuya en Impresoras y marca «Resina».",
+        ]);
+        return;
+      }
+      if (!report.resin && report.printerModel && !printer) {
         setSliceNote([
           `No tienes impresoras compatibles para este archivo (se laminó para ${report.printerModel}). Lamínalo para una de tus impresoras o da de alta esa impresora.`,
         ]);
@@ -311,7 +323,7 @@ export default function ProductFormScreen() {
           ? `${objects} objetos, ${groups.length} piezas distintas (${groups.map((group, index) => `${group.name} ×${group.count}${needed[index] > 1 ? `, ${needed[index]} por producto` : ""}`).join("; ")}) → ${pieces} ${pieces === 1 ? "producto" : "productos"}`
           : `${pieces} ${pieces === 1 ? "pieza" : "piezas"}`;
       const notes = [
-        `${report.slicer}: ${found}; tiempo y gramos divididos entre ${pieces === 1 ? "él" : "ellos"}.`,
+        `${report.slicer}: ${found}; tiempo y ${report.resin ? "ml" : "gramos"} divididos entre ${pieces === 1 ? "él" : "ellos"}.`,
         ...report.warnings,
       ];
       for (const plate of report.plates) {
@@ -319,7 +331,9 @@ export default function ProductFormScreen() {
           const { filament, close } = matchFilament(sliced, filaments);
           if (!filament) {
             notes.push(
-              `No tienes filamentos para ${sliced.type} ${sliced.color}: da de alta uno.`,
+              sliced.resin
+                ? "No tienes resina dada de alta: agrégala en Filamento con el tipo «Resina»."
+                : `No tienes filamentos para ${sliced.type} ${sliced.color}: da de alta uno.`,
             );
             continue;
           }
@@ -327,7 +341,9 @@ export default function ProductFormScreen() {
             (grams[filament.id] ?? 0) + sliced.grams / pieces;
           if (!close)
             notes.push(
-              `${sliced.type} ${sliced.color} → ${filamentName(filament)}: color o material distinto, revísalo.`,
+              sliced.resin
+                ? `Resina → ${filamentName(filament)}: revisa que sea la que usas.`
+                : `${sliced.type} ${sliced.color} → ${filamentName(filament)}: color o material distinto, revísalo.`,
             );
         }
       }
@@ -685,12 +701,12 @@ export default function ProductFormScreen() {
                   options={filaments.map((filament) => ({
                     value: filament.id,
                     label: filamentName(filament),
-                    hint: `${weight(filament.stock_g)} · ${money(costPerGram(filament) * 1000)}/kg`,
+                    hint: `${weight(filament.stock_g, isResin(filament))} · ${money(costPerGram(filament) * 1000)}/${isResin(filament) ? "L" : "kg"}`,
                   }))}
                 />
                 <Field
                   style={{ flex: 1 }}
-                  label="Gramos"
+                  label={isResin(filaments.find((filament) => filament.id === row.filament_id)) ? "ml" : "Gramos"}
                   numeric
                   value={row.grams}
                   onChangeText={(grams) => setRow(index, { grams })}

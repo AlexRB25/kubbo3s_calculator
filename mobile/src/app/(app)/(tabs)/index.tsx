@@ -127,8 +127,8 @@ export default function HomeScreen() {
               key={filament.id}
               left={<Swatch colors={filamentColors(filament)} glow={filament.glow} />}
               title={filamentName(filament)}
-              subtitle={`Aviso al bajar de ${weight(filament.low_stock_g)}`}
-              value={weight(filament.stock_g)}
+              subtitle={`Aviso al bajar de ${weight(filament.low_stock_g, filament.kind === 'resin')}`}
+              value={weight(filament.stock_g, filament.kind === 'resin')}
               tone="bad"
               onPress={() => router.push({ pathname: '/filamento/compra', params: { id: filament.id } })}
             />

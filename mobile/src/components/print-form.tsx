@@ -127,16 +127,16 @@ export function PrintForm({ job, productId: initialProduct }: { job?: PrintJob; 
               label="Filamento"
               value={row.filament_id}
               onChange={(filament_id) => setRow(index, { filament_id })}
-              options={filaments.map((item) => ({ value: item.id, label: filamentName(item), hint: `Quedan ${weight(item.stock_g)}` }))}
+              options={filaments.map((item) => ({ value: item.id, label: filamentName(item), hint: `Quedan ${weight(item.stock_g, item.kind === 'resin')}` }))}
             />
             <Field
               style={{ flex: 1 }}
-              label="Gramos"
+              label={filament?.kind === 'resin' ? 'ml' : 'Gramos'}
               numeric
               value={row.grams}
               onChangeText={(grams) => setRow(index, { grams })}
               placeholder={String(recipeGrams(row.filament_id))}
-              hint={filament ? `Quedan ${weight(filament.stock_g)}` : undefined}
+              hint={filament ? `Quedan ${weight(filament.stock_g, filament.kind === 'resin')}` : undefined}
             />
             <Pressable
               accessibilityRole="button"

@@ -87,7 +87,9 @@ export default function PrintersPage() {
                 />
                 {printer.purchase_price > 0 && <Line label="Te costó" value={money(printer.purchase_price)} />}
                 <Line label="Impresiones" value={`${printerJobs.length}${failed ? ` (${failed} fallidas)` : ""}`} />
+                <Line label="Tipo" value={printer.technology === "resin" ? "Resina" : "Filamento (FDM)"} />
                 <Line label="Consumo / desgaste por hora" value={`${printer.power_watts} W / ${money(printer.hourly_cost)}`} />
+                {printer.technology === "resin" && <Line label="Consumibles por hora" value={money(printer.consumables_per_hour ?? 0)} />}
                 <Line label="Gastado en mantenimiento" value={money(history.reduce((total, record) => total + record.cost, 0))} />
                 {history[0]?.next_due && <Line strong label="Próximo mantenimiento" value={day(history[0].next_due)} />}
               </div>

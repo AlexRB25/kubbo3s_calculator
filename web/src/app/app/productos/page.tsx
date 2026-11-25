@@ -463,7 +463,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         setTab(model);
       if (!Object.values(plate.parts ?? {}).some((count) => count > 0)) return fail("impresion", `Indica qué piezas salen en ${where}.`);
       if (plate.minutes <= 0) return fail("impresion", `Indica el tiempo de ${where}.`);
-      if (!Object.values(plate.grams).some((grams) => grams > 0)) return fail("impresion", `Indica los gramos de filamento de ${where}.`);
+      if (!Object.values(plate.grams).some((grams) => grams > 0)) return fail("impresion", `Indica los gramos de filamento (o los ml de resina) de ${where}.`);
     }
     if (combos.missing.length) return fail("impresion", `Ninguna placa imprime: ${combos.missing.map((part) => part.name).join(", ")}.`);
     if (!dearest) return fail("impresion", "Con estas placas no se completa un producto.");
@@ -893,7 +893,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                                   className="inline-block size-3 shrink-0 rounded-full border border-line"
                                 />
                                 <span className="truncate">
-                                  {filament ? filament.color || filamentName(filament) : <span className="text-bad">⚠ Filamento borrado</span>} (g)
+                                  {filament ? filament.color || filamentName(filament) : <span className="text-bad">⚠ Filamento borrado</span>} (
+                                  {filament?.kind === "resin" ? "ml" : "g"})
                                 </span>
                               </span>
                               <input

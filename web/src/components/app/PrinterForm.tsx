@@ -8,6 +8,9 @@ import type { CatalogPrinter, Printer } from "@/lib/types";
 
 const OTHER = "__otra";
 
+/** Models that print in resin, to propose it when one is picked. */
+const RESIN_MODEL = /mars|saturn|jupiter|photon|halot|sonic|sl1|form ?[234]|uniformation|gktwo|proxima|nova3d|elfin/i;
+
 /** "Bambu Lab A1 · 605": model (or brand) plus the end of the device id, to tell equal printers apart. */
 export function printerName(brand: string, model: string, deviceId: string) {
   const base = [brand, model].filter(Boolean).join(" ") || "Impresora";
@@ -41,6 +44,13 @@ export function PrinterForm({ printer, onDone }: { printer?: Printer; onDone: ()
   // Price ÷ life, used when the wear per hour is left empty.
   const autoWear = num(price) > 0 && num(lifeHours) > 0 ? Math.round((num(price) / num(lifeHours)) * 100) / 100 : 0;
   const [notes, setNotes] = useState(printer?.notes ?? "");
+  const [resin, setResin] = useState(printer?.technology === "resin");
+  const [consumables, setConsumables] = useState(field(printer?.consumables_per_hour));
+  // Helper for the consumables: what each one costs and how many hours it lasts (not saved).
+  const [helper, setHelper] = useState(false);
+  const [parts, setParts] = useState({ fepPrice: "", fepHours: "200", lcdPrice: "", lcdHours: "2000", alcoholHour: "" });
+  const perHour = (price: string, hoursOf: string) => (num(price) > 0 && num(hoursOf) > 0 ? num(price) / num(hoursOf) : 0);
+  const helperTotal = Math.round((perHour(parts.fepPrice, parts.fepHours) + perHour(parts.lcdPrice, parts.lcdHours) + num(parts.alcoholHour)) * 100) / 100;
 
   useEffect(() => {
     let current = true;
@@ -79,6 +89,7 @@ export function PrinterForm({ printer, onDone }: { printer?: Printer; onDone: ()
     setModel(value === OTHER ? "" : value);
     const row = models.find((item) => item.model === value);
     if (row && row.power_watts > 0 && !num(watts)) setWatts(field(row.power_watts));
+    if (!printer && RESIN_MODEL.test(`${brand} ${value}`)) setResin(true);
   }
 
   function submit(event: FormEvent) {
@@ -96,6 +107,8 @@ export function PrinterForm({ printer, onDone }: { printer?: Printer; onDone: ()
       purchase_price: num(price),
       life_hours: Math.round(num(lifeHours)),
       hourly_cost: hourlyCost === "" ? autoWear : num(hourlyCost),
+      // Only once resin is in play, so it saves on databases that do not have the columns yet.
+      ...(resin || printer?.technology ? { technology: resin ? "resin" : "fdm", consumables_per_hour: resin ? num(consumables) : 0 } : {}),
       notes: notes.trim(),
     };
     save(() => (printer ? supabase().from("printers").update(row).eq("id", printer.id) : supabase().from("printers").insert(row)), onDone);
@@ -103,6 +116,25 @@ export function PrinterForm({ printer, onDone }: { printer?: Printer; onDone: ()
 
   return (
     <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+      <div className="flex flex-wrap items-center gap-2 sm:col-span-2" role="radiogroup" aria-label="Tipo de impresora">
+        {(
+          [
+            [false, "Filamento (FDM)"],
+            [true, "Resina (SLA / MSLA)"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={label}
+            type="button"
+            role="radio"
+            aria-checked={resin === value}
+            className={`btn px-3 py-1 text-sm ${resin === value ? "btn-primary" : ""}`}
+            onClick={() => setResin(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <label className="label">
         Marca
         <select className="input" value={otherBrand ? OTHER : brand} onChange={(event) => chooseBrand(event.target.value)}>
@@ -172,6 +204,62 @@ export function PrinterForm({ printer, onDone }: { printer?: Printer; onDone: ()
         />
         <span className="font-normal">{autoWear ? `Vacío usa ${autoWear.toFixed(2)}: lo que costó ÷ su vida útil.` : "Lo que costó ÷ horas de vida útil."}</span>
       </label>
+      {resin && (
+        <div className="label sm:col-span-2">
+          Consumibles de resina por hora ($)
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="input w-40"
+              type="number"
+              min={0}
+              step="any"
+              value={consumables}
+              onChange={(event) => setConsumables(event.target.value)}
+              placeholder="0"
+            />
+            <button type="button" className="btn px-3 py-1 text-xs" onClick={() => setHelper(!helper)}>
+              {helper ? "Ocultar cálculo" : "Calcularlo"}
+            </button>
+          </div>
+          <span className="font-normal">
+            Alcohol isopropílico, guantes, FEP y pantalla LCD que se gastan por cada hora de impresión. Se suma al desgaste en el costo de cada pieza.
+          </span>
+          {helper && (
+            <div className="mt-1 grid gap-2 rounded-lg border border-line p-3 font-normal sm:grid-cols-2">
+              {(
+                [
+                  ["fepPrice", "Precio del FEP ($)"],
+                  ["fepHours", "Horas que te dura el FEP"],
+                  ["lcdPrice", "Precio de la pantalla LCD ($)"],
+                  ["lcdHours", "Horas que dura la pantalla"],
+                  ["alcoholHour", "Alcohol y guantes por hora ($)"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="flex flex-col gap-1 text-sm">
+                  {label}
+                  <input
+                    className="input"
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={parts[key]}
+                    onChange={(event) => setParts({ ...parts, [key]: event.target.value })}
+                    placeholder="0"
+                  />
+                </label>
+              ))}
+              <div className="flex flex-col justify-end gap-1 text-sm">
+                <span>
+                  Total: <strong>{helperTotal.toFixed(2)}</strong> por hora
+                </span>
+                <button type="button" className="btn btn-primary px-3 py-1 text-xs" disabled={!helperTotal} onClick={() => setConsumables(String(helperTotal))}>
+                  Usar este valor
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <label className="label sm:col-span-2">
         Notas
         <textarea className="input" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={300} />

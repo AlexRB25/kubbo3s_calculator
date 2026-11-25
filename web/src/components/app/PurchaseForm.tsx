@@ -23,6 +23,8 @@ export function PurchaseForm({ items, initial, onDone }: { items: Item[]; initia
   const [date, setDate] = useState(isoDay());
 
   const isFilament = item?.type === "filament";
+  // A resin is bought in litres or ml.
+  const [big, small] = item?.unit === "ml" ? ["L", "ml"] : ["kg", "g"];
   const units = item ? num(quantity) * (isFilament && inKilos ? 1000 : 1) : 0;
   const paid = num(total);
   const thisCost = units > 0 ? paid / units : 0;
@@ -46,7 +48,7 @@ export function PurchaseForm({ items, initial, onDone }: { items: Item[]; initia
   }
 
   const groups = [
-    { label: "Filamento", list: items.filter((candidate) => candidate.type === "filament") },
+    { label: "Filamento y resina", list: items.filter((candidate) => candidate.type === "filament") },
     { label: "Otros materiales", list: items.filter((candidate) => candidate.type === "material") },
   ];
   return (
@@ -72,9 +74,9 @@ export function PurchaseForm({ items, initial, onDone }: { items: Item[]; initia
         <div className="flex gap-2">
           <input className="input min-w-0 flex-1" inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value)} required />
           {isFilament ? (
-            <select className="input w-20" value={inKilos ? "kg" : "g"} onChange={(event) => setInKilos(event.target.value === "kg")} aria-label="Unidad">
-              <option value="kg">kg</option>
-              <option value="g">g</option>
+            <select className="input w-20" value={inKilos ? "big" : "small"} onChange={(event) => setInKilos(event.target.value === "big")} aria-label="Unidad">
+              <option value="big">{big}</option>
+              <option value="small">{small}</option>
             </select>
           ) : (
             <span className="self-center text-sm text-muted">{item ? UNIT_LABELS[item.unit] : ""}</span>
@@ -105,7 +107,7 @@ export function PurchaseForm({ items, initial, onDone }: { items: Item[]; initia
         <div className="flex flex-col gap-1 rounded-lg border border-line p-3 text-sm sm:col-span-2">
           <p>
             Esta compra sale a <strong>{unitCostLabel(item, thisCost)}</strong>
-            {isFilament && <span className="text-muted"> ({money(thisCost * 1000)} por kg)</span>}.
+            {isFilament && <span className="text-muted"> ({money(thisCost * 1000)} por {big === "L" ? "litro" : "kg"})</span>}.
           </p>
           <p className="text-muted">
             Costo actual con tus compras: {before.bought > 0 ? unitCostLabel(item, before.paid / before.bought) : "sin compras todavía"} →{" "}

@@ -9,7 +9,8 @@ import { brandOptions } from '@/lib/labels';
 import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
 
-const MATERIALS = ['PLA', 'PLA Basic', 'PLA+', 'Silk PLA+', 'PETG', 'Rapid PETG', 'ABS', 'ASA', 'TPU', 'Shoe3D', 'Resina'];
+const MATERIALS = ['PLA', 'PLA Basic', 'PLA+', 'Silk PLA+', 'PETG', 'Rapid PETG', 'ABS', 'ASA', 'TPU', 'Shoe3D'];
+const RESINS = ['Resina estándar', 'Resina ABS-Like', 'Resina lavable con agua', 'Resina 8K', 'Resina Tough', 'Resina flexible', 'Resina calcinable', 'Resina dental'];
 
 const SWATCHES = [
   '#FFFFFF', '#111111', '#9AA7AD', '#E53935', '#FF6B2C', '#F5B83D', '#FFEB3B',
@@ -22,6 +23,9 @@ export default function FilamentFormScreen() {
   const { busy, error, setError, save } = useSave();
   const filament = filaments.find((item) => item.id === id);
 
+  const [kind, setKind] = useState<'filament' | 'resin'>(filament?.kind === 'resin' ? 'resin' : 'filament');
+  const resin = kind === 'resin';
+  const unit = resin ? 'ml' : 'g';
   const [material, setMaterial] = useState(filament?.material ?? 'PLA');
   const [brand, setBrand] = useState(filament?.brand ?? '');
   const [color, setColor] = useState(filament?.color ?? '');
@@ -35,6 +39,8 @@ export default function FilamentFormScreen() {
   function submit() {
     if (!material.trim()) return setError('Indica el material.');
     const row = {
+      // Only once resin is in play, so it saves on databases that do not have the column yet.
+      ...(resin || filament?.kind ? { kind } : {}),
       material: material.trim(),
       brand: brand.trim(),
       color: color.trim(),
@@ -60,8 +66,22 @@ export default function FilamentFormScreen() {
         />
       )}
 
-      <Field label="Material" value={material} onChangeText={setMaterial} autoCapitalize="characters" maxLength={30} />
-      <Chips options={MATERIALS.map((item) => ({ value: item, label: item }))} value={material} onChange={setMaterial} />
+      <Chips
+        label="Tipo"
+        options={[
+          { value: 'filament', label: 'Filamento (FDM)' },
+          { value: 'resin', label: 'Resina' },
+        ]}
+        value={kind}
+        onChange={(next) => {
+          if (next === kind) return;
+          setKind(next);
+          setMaterial(next === 'resin' ? RESINS[0] : 'PLA');
+        }}
+      />
+      {resin && <Muted>Se mide en ml y su precio es por litro.</Muted>}
+      <Field label="Material" value={material} onChangeText={setMaterial} autoCapitalize={resin ? 'sentences' : 'characters'} maxLength={30} />
+      <Chips options={(resin ? RESINS : MATERIALS).map((item) => ({ value: item, label: item }))} value={material} onChange={setMaterial} />
       <Field label="Color" value={color} onChangeText={setColor} placeholder="Negro mate" maxLength={40} />
       <Field label="Marca" value={brand} onChangeText={setBrand} placeholder="Elige abajo o escribe otra" maxLength={40} />
       <Chips
@@ -92,7 +112,7 @@ export default function FilamentFormScreen() {
 
       {filament ? (
         <Card>
-          <Line label="En existencia" value={weight(filament.stock_g)} strong />
+          <Line label="En existencia" value={weight(filament.stock_g, resin)} strong />
           <Muted>Sube con las compras y baja con las impresiones. Para corregirla, arquéala.</Muted>
           <Button
             label="Arquear"
@@ -101,20 +121,24 @@ export default function FilamentFormScreen() {
           />
         </Card>
       ) : (
-        <Field label="Existencia inicial" unit="g" numeric value={stock} onChangeText={setStock} placeholder="1000" hint="Lo que ya tienes; queda en el historial." />
+        <Field label="Existencia inicial" unit={unit} numeric value={stock} onChangeText={setStock} placeholder="1000" hint="Lo que ya tienes; queda en el historial." />
       )}
       <Field
-        label="Costo de referencia por kg"
+        label={resin ? 'Costo de referencia por litro' : 'Costo de referencia por kg'}
         unit="$"
         numeric
         value={costPerKg}
         onChangeText={setCostPerKg}
         placeholder="0"
-        hint="Lo que normalmente cuesta. El costo real por gramo sale de tus compras."
+        hint={
+          resin
+            ? 'Lo que cuesta un litro (una botella de 500 ml: el doble de su precio). El costo real por ml sale de tus compras.'
+            : 'Lo que normalmente cuesta. El costo real por gramo sale de tus compras.'
+        }
       />
       <Field
         label="Avisarme al bajar de"
-        unit="g"
+        unit={unit}
         numeric
         value={lowStock}
         onChangeText={setLowStock}
@@ -127,7 +151,7 @@ export default function FilamentFormScreen() {
         none="Sin proveedor"
         options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
       />
-      <Field label="Notas" value={notes} onChangeText={setNotes} multiline maxLength={300} placeholder="Temperaturas, secado…" />
+      <Field label="Notas" value={notes} onChangeText={setNotes} multiline maxLength={300} placeholder={resin ? 'Exposición, lavado y curado…' : 'Temperaturas, secado…'} />
 
       <ErrorText>{error}</ErrorText>
       <Button label="Guardar" onPress={submit} loading={busy} />
@@ -135,7 +159,7 @@ export default function FilamentFormScreen() {
         <Button
           variant="danger"
           icon="trash"
-          label="Eliminar filamento"
+          label={resin ? 'Eliminar resina' : 'Eliminar filamento'}
           disabled={busy}
           onPress={() =>
             confirmDelete('El historial de impresiones y compras se conserva, pero los productos que lo usan dejarán de sumar su costo.', () =>

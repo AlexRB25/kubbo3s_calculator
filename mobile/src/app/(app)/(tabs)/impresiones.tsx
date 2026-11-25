@@ -22,12 +22,13 @@ export default function PrintsScreen() {
       )}
       {jobs.map((job) => {
         const grams = job.print_job_filaments.reduce((total, use) => total + use.grams, 0);
-        const printer = printers.find((item) => item.id === job.printer_id)?.name ?? 'Sin impresora';
+        const machine = printers.find((item) => item.id === job.printer_id);
+        const printer = machine?.name ?? 'Sin impresora';
         return (
           <ListItem
             key={job.id}
             title={`${job.quantity} × ${job.product_name}`}
-            subtitle={`${printer} · ${weight(grams)} · ${day(job.created_at)}`}
+            subtitle={`${printer} · ${weight(grams, machine?.technology === 'resin')} · ${day(job.created_at)}`}
             value={STATUS[job.status].label}
             valueHint={job.status === 'done' && job.good_quantity < job.quantity ? `${job.good_quantity} buenas` : undefined}
             tone={STATUS[job.status].tone}

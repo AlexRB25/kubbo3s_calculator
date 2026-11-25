@@ -3,10 +3,10 @@
 import { useState, type ChangeEvent } from "react";
 import { Swatch } from "@/components/app/Swatch";
 import { Modal } from "@/components/app/ui";
-import { filamentName } from "@/lib/costs";
+import { filamentName, isResin } from "@/lib/costs";
 import { duration, weight } from "@/lib/format";
 import { filamentColors } from "@/lib/labels";
-import { fitsPrinter, matchFilament, matchPrinter, neededPerProduct, pieceGroups, productSizes, readSlice, type SliceReport } from "@/lib/slice";
+import { isResinFile, matchFilament, matchPrinter, neededPerProduct, pieceGroups, printersFor, productSizes, readSlice, type SliceReport } from "@/lib/slice";
 import { pieceThumbnails } from "@/lib/slice-thumbs";
 import type { Filament, Printer } from "@/lib/types";
 
@@ -34,10 +34,14 @@ type Review = {
   pieces: PieceRow[];
 };
 
+/** Files the picker offers: sliced 3MF and G-code, and the files of resin slicers. */
+const ACCEPT = ".3mf,.gcode,.gco,.bgcode,.ctb,.cbddlp,.photon,.goo,.pwmx,.pwma,.pwmo,.pwms,.pwmb,.pws,.pw0,.pwx,.dlp,.sl1,.sl1s";
+
 const STEPS = [
   ["Carga y lamina", "Abre tu modelo en Bambu Studio u OrcaSlicer con tu impresora y filamentos, y dale a «Laminar placa»."],
   ["Revisa", "Que el tiempo, los soportes y los colores (AMS) sean los que vas a imprimir."],
   ["Exporta la placa", "Arriba a la derecha, en el menú de «Imprimir placa», elige «Exportar la placa de impresión actual» (o «todas las placas»). Ese 3MF trae el tiempo y los gramos."],
+  ["Resina", "Sube el archivo que mandas a la impresora: .ctb o .cbddlp (Chitubox), .goo (Elegoo), .pwmx y familia (Anycubic) o .sl1 (PrusaSlicer). Trae el tiempo y los ml."],
 ];
 
 /**
@@ -61,8 +65,8 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
   }
 
   async function read(file: File) {
-    if (!/\.(3mf|gcode|gco|bgcode)$/i.test(file.name)) {
-      setError("Suelta un 3MF laminado o un G-code (.gcode, .gco, .bgcode).");
+    if (!/\.(3mf|gcode|gco|bgcode)$/i.test(file.name) && !isResinFile(file.name)) {
+      setError("Suelta un 3MF laminado, un G-code (.gcode, .gco, .bgcode) o un archivo de resina (.ctb, .goo, .pwmx, .sl1).");
       return;
     }
     setError("");
@@ -77,7 +81,9 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
       const totals = pieceGroups(report.plates.flatMap((plate) => plate.objects));
       const needed = neededPerProduct(totals.map((group) => group.count));
       const pieces = totals.map((group, index) => ({ key: group.name, name: group.name, needed: String(needed[index]) }));
-      setReview({ report, fileName: file.name, printerId: matchPrinter(report.printerModel, printers)?.id ?? "", choices, pieces });
+      const candidates = printersFor(report, printers);
+      const printerId = (matchPrinter(report.printerModel, candidates) ?? (report.resin && candidates.length === 1 ? candidates[0] : null))?.id ?? "";
+      setReview({ report, fileName: file.name, printerId, choices, pieces });
       setThumbs({});
       pieceThumbnails(report).then(setThumbs);
     } catch (reason) {
@@ -124,7 +130,7 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
 
   const missing = review ? Object.values(review.choices).some((id) => !id) : false;
   // The G-code is made for one model: other printers cannot print it.
-  const fits = review ? printers.filter((printer) => fitsPrinter(review.report.printerModel, printer)) : [];
+  const fits = review ? printersFor(review.report, printers) : [];
   const objectCount = review ? review.report.plates.reduce((total, plate) => total + plate.objects.length, 0) : 0;
   const setPiece = (index: number, change: Partial<PieceRow>) =>
     review && setReview({ ...review, pieces: review.pieces.map((piece, position) => (position === index ? { ...piece, ...change } : piece)) });
@@ -151,9 +157,9 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
       <div className="flex flex-wrap items-center gap-2">
         <label className="btn btn-primary cursor-pointer">
           {busy ? "Leyendo…" : dropping ? "Suelta aquí tu archivo" : "Importar desde el laminador"}
-          <input type="file" accept=".3mf,.gcode,.gco,.bgcode" className="sr-only" onChange={choose} disabled={busy} />
+          <input type="file" accept={ACCEPT} className="sr-only" onChange={choose} disabled={busy} />
         </label>
-        <span className="text-xs text-muted">3MF laminado de Bambu Studio u OrcaSlicer, o G-code de PrusaSlicer, Orca o Cura: llena tiempo, gramos, colores e impresora. También puedes arrastrarlo aquí.</span>
+        <span className="text-xs text-muted">3MF laminado de Bambu Studio u OrcaSlicer, G-code de PrusaSlicer, Orca o Cura, o el archivo de tu impresora de resina (.ctb, .goo, .pwmx, .sl1): llena tiempo, gramos o ml, colores e impresora. También puedes arrastrarlo aquí.</span>
         <button type="button" className="text-xs text-brand hover:underline" onClick={() => setHelp(!help)}>
           {help ? "Ocultar pasos" : "¿Cómo lo exporto?"}
         </button>
@@ -210,8 +216,9 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
               </select>
               {fits.length === 0 ? (
                 <span role="alert" className="font-normal text-bad">
-                  No tienes impresoras compatibles para este archivo{review.report.printerModel && ` (se laminó para ${review.report.printerModel})`}. Lamínalo para una
-                  de tus impresoras o da de alta esa impresora en Impresoras.
+                  {review.report.resin
+                    ? "No tienes impresoras de resina. Da de alta la tuya en Impresoras y marca «Resina»."
+                    : `No tienes impresoras compatibles para este archivo${review.report.printerModel ? ` (se laminó para ${review.report.printerModel})` : ""}. Lamínalo para una de tus impresoras o da de alta esa impresora en Impresoras.`}
                 </span>
               ) : (
                 !review.printerId && <span className="font-normal text-warn">Elige en qué impresora sale.</span>
@@ -232,24 +239,26 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
                     <div key={key} className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="size-5 shrink-0 rounded-full border border-line" style={{ background: sliced.color || "transparent" }} title={`En el laminador: ${sliced.color}`} />
                       <span className="w-40">
-                        {sliced.type || "Filamento"} {sliced.slot > 1 || plate.filaments.length > 1 ? `#${sliced.slot}` : ""} · {weight(sliced.grams)}
+                        {sliced.type || "Filamento"} {sliced.slot > 1 || plate.filaments.length > 1 ? `#${sliced.slot}` : ""} · {weight(sliced.grams, sliced.resin)}
                       </span>
                       <span className="text-muted">→</span>
                       <Swatch colors={chosen ? filamentColors(chosen) : []} glow={chosen?.glow} className="size-5 shrink-0 rounded-full border border-line" />
                       <select
                         className="input min-w-48 flex-1"
                         value={review.choices[key] ?? ""}
-                        aria-label={`Tu filamento para ${sliced.type} ${sliced.color}`}
+                        aria-label={`Tu ${sliced.resin ? "resina" : "filamento"} para ${sliced.type} ${sliced.color}`}
                         onChange={(event) => setReview({ ...review, choices: { ...review.choices, [key]: event.target.value } })}
                       >
                         <option value="">Elegir…</option>
-                        {filaments.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {filamentName(item)}
-                          </option>
-                        ))}
+                        {filaments
+                          .filter((item) => isResin(item) === !!sliced.resin)
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {filamentName(item)}
+                            </option>
+                          ))}
                       </select>
-                      {chosen && !close && <span className="text-xs text-warn">Color o material distinto: revísalo</span>}
+                      {chosen && !close && <span className="text-xs text-warn">{sliced.resin ? "Revisa que sea la resina que usas" : "Color o material distinto: revísalo"}</span>}
                     </div>
                   );
                 })}
@@ -298,10 +307,13 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
             )}
 
             <p className="text-xs text-muted">
-              Los gramos del laminador ya traen la purga y la torre de los cambios de color. Tu merma de Ajustes (las piezas que salen mal) se sigue sumando
-              aparte en el costo.
+              {review.report.resin
+                ? "Los ml del laminador son los de las piezas y sus soportes. Tu merma de Ajustes (piezas que salen mal, resina que se queda en la tina) se sigue sumando aparte en el costo."
+                : "Los gramos del laminador ya traen la purga y la torre de los cambios de color. Tu merma de Ajustes (las piezas que salen mal) se sigue sumando aparte en el costo."}
             </p>
-            {filaments.length === 0 && <p className="text-sm text-warn">Primero da de alta tus filamentos en Filamento.</p>}
+            {review.report.resin
+              ? !filaments.some(isResin) && <p className="text-sm text-warn">Primero da de alta tu resina en Filamento y resina (botón «Es resina»).</p>
+              : filaments.length === 0 && <p className="text-sm text-warn">Primero da de alta tus filamentos en Filamento.</p>}
             <div className="flex flex-wrap justify-end gap-2">
               <button type="button" className="btn" onClick={() => setReview(null)}>
                 Cancelar

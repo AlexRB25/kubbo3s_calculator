@@ -20,7 +20,7 @@ export default function CountScreen() {
   const filament = type === 'filament' ? filaments.find((item) => item.id === id) : undefined;
   const product = type === 'product' ? products.find((item) => item.id === id) : undefined;
   const stock = filament?.stock_g ?? product?.stock ?? 0;
-  const show = (value: number) => (filament ? weight(value) : `${value} pzas`);
+  const show = (value: number) => (filament ? weight(value, filament.kind === 'resin') : `${value} pzas`);
 
   const [counted, setCounted] = useState(String(Math.max(0, Math.round(stock * 1000) / 1000)));
   const [reason, setReason] = useState('');

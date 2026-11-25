@@ -7,7 +7,7 @@ import { FilamentCatalog } from "@/components/app/FilamentCatalog";
 import { FilamentForm } from "@/components/app/FilamentForm";
 import { Swatch } from "@/components/app/Swatch";
 import { Empty, Modal, PageHeader, Stat, TableCard } from "@/components/app/ui";
-import { costPerGram, filamentName } from "@/lib/costs";
+import { costPerGram, filamentName, isResin, unitOf } from "@/lib/costs";
 import { useData } from "@/lib/data";
 import { money, weight } from "@/lib/format";
 import { filamentItem, preciseMoney } from "@/lib/inventory";
@@ -22,13 +22,14 @@ export default function FilamentsPage() {
   const [history, setHistory] = useState<Filament | null>(null);
   const [importing, setImporting] = useState(false);
 
-  const totalGrams = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0);
+  const totalGrams = filaments.filter((filament) => !isResin(filament)).reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0);
+  const totalMl = filaments.filter(isResin).reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0);
   const totalValue = filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0) * costPerGram(filament), 0);
   const current = editing === "new" ? undefined : (editing ?? undefined);
 
   return (
     <>
-      <PageHeader title="Filamento">
+      <PageHeader title="Filamento y resina">
         {filaments.length > 0 && (
           <button className="btn" onClick={() => setBuying("any")}>
             Registrar compra
@@ -38,16 +39,17 @@ export default function FilamentsPage() {
           Importar del catálogo
         </button>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>
-          Nuevo filamento
+          Nuevo filamento o resina
         </button>
       </PageHeader>
 
       {filaments.length === 0 ? (
-        <Empty>Registra tus filamentos para llevar cuántos gramos te quedan y cuánto cuesta cada pieza.</Empty>
+        <Empty>Registra tus filamentos y resinas para llevar cuántos gramos o ml te quedan y cuánto cuesta cada pieza.</Empty>
       ) : (
         <>
           <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat label="En existencia" value={weight(totalGrams)} />
+            <Stat label={totalMl ? "Filamento en existencia" : "En existencia"} value={weight(totalGrams)} />
+            {totalMl > 0 && <Stat label="Resina en existencia" value={weight(totalMl, true)} />}
             <Stat label="Valor del inventario" value={money(totalValue)} />
           </section>
           <TableCard>
@@ -56,8 +58,8 @@ export default function FilamentsPage() {
                 <tr>
                   <th>Filamento</th>
                   <th>Proveedor</th>
-                  <th className="num">Referencia por kg</th>
-                  <th className="num">Costo por g actual</th>
+                  <th className="num">Referencia por kg / L</th>
+                  <th className="num">Costo por g / ml actual</th>
                   <th className="num">Existencia</th>
                   <th />
                 </tr>
@@ -78,23 +80,26 @@ export default function FilamentsPage() {
                           <span className="flex items-center gap-1 text-xs text-muted">
                             <Swatch colors={filamentColors(filament)} glow={filament.glow} className="inline-block size-3 shrink-0 rounded-full border border-line" />
                             {filament.color || "Sin nombre de color"}
+                            {isResin(filament) && <span className="rounded bg-brand/15 px-1.5 text-brand">Resina</span>}
                           </span>
                         </span>
                       </span>
                     </td>
                     <td className="text-muted">{suppliers.find((supplier) => supplier.id === filament.supplier_id)?.name ?? "—"}</td>
-                    <td className="num text-muted">{filament.cost_per_kg > 0 ? money(filament.cost_per_kg) : "—"}</td>
+                    <td className="num text-muted">{filament.cost_per_kg > 0 ? `${money(filament.cost_per_kg)} / ${isResin(filament) ? "L" : "kg"}` : "—"}</td>
                     <td className="num">
                       {filament.avg_cost_per_g > 0 ? (
                         <>
-                          {preciseMoney(filament.avg_cost_per_g)}
-                          <span className="block text-xs text-muted">{money(filament.avg_cost_per_g * 1000)} / kg · de tus compras</span>
+                          {preciseMoney(filament.avg_cost_per_g)} / {unitOf(filament)}
+                          <span className="block text-xs text-muted">
+                            {money(filament.avg_cost_per_g * 1000)} / {isResin(filament) ? "L" : "kg"} · de tus compras
+                          </span>
                         </>
                       ) : (
                         <span className="text-muted">Sin compras</span>
                       )}
                     </td>
-                    <td className={`num font-semibold ${filament.stock_g <= filament.low_stock_g ? "text-bad" : ""}`}>{weight(filament.stock_g)}</td>
+                    <td className={`num font-semibold ${filament.stock_g <= filament.low_stock_g ? "text-bad" : ""}`}>{weight(filament.stock_g, isResin(filament))}</td>
                     <td className="num">
                       <div className="flex justify-end gap-2">
                         <button className="btn" onClick={() => setBuying(filament)}>

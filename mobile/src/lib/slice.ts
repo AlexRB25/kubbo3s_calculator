@@ -1,11 +1,14 @@
 // Reads what a slicer says about a print: time, grams per filament (with type and colour), printer model and
 // pieces per plate. Bambu Studio / OrcaSlicer 3MF exported with "Exportar la placa de impresión actual"
-// (or .gcode.3mf), and plain G-code from PrusaSlicer, OrcaSlicer or Cura. Same file in web and mobile.
+// (or .gcode.3mf), and plain G-code from PrusaSlicer, OrcaSlicer or Cura. Resin: time and ml of Chitubox
+// (.ctb, .cbddlp, .photon), Elegoo (.goo), Anycubic Photon Workshop (.pwmx, .pwma…) and Prusa (.sl1, .sl1s).
+// Same file in web and mobile.
 import { strFromU8, unzipSync } from 'fflate';
 
 import type { Filament, Printer } from './types';
 
-export type SlicedFilament = { slot: number; type: string; color: string; grams: number };
+/** `grams` are ml when `resin`. */
+export type SlicedFilament = { slot: number; type: string; color: string; grams: number; resin?: boolean };
 export type SlicedPlate = {
   index: number;
   minutes: number;
@@ -25,6 +28,8 @@ export type SliceReport = {
   warnings: string[];
   /** Size of each object on the build plate (when the 3MF carries its meshes). */
   sizes?: PieceSize[];
+  /** A resin print: its amounts are ml. */
+  resin?: boolean;
 };
 
 /** How big a printed piece is: the box that wraps it as it sits on the plate, in mm (length ≥ width, then height). */
@@ -106,6 +111,7 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
   const name = fileName.toLowerCase();
   const warnings: string[] = [];
 
+  if (isResinFile(name)) return readResin(bytes, name);
   if (name.endsWith('.bgcode')) throw new Error('El G-code binario (.bgcode) no se puede leer: en PrusaSlicer exporta en G-code de texto (.gcode).');
   if (name.endsWith('.gcode') || name.endsWith('.gco') || name.endsWith('.g')) {
     const read = readGcode(gcodeText(bytes), warnings);
@@ -118,7 +124,7 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
     }
     return { slicer: read.slicer, printerModel: read.printerModel, plates: [{ index: 1, minutes: read.minutes, filaments: read.filaments, objects: [], thumbnail: null }], warnings, sizes };
   }
-  if (!name.endsWith('.3mf')) throw new Error('Sube un archivo .3mf o .gcode.');
+  if (!name.endsWith('.3mf')) throw new Error('Sube un archivo .3mf o .gcode, o uno de resina (.ctb, .goo, .pwmx, .sl1).');
 
   let files: Record<string, Uint8Array>;
   try {
@@ -202,6 +208,147 @@ export function readSlice(bytes: Uint8Array, fileName: string): SliceReport {
     sizes = [];
   }
   return { slicer, printerModel, plates: plates.sort((a, b) => a.index - b.index), warnings, sizes };
+}
+
+// ── Resin: time and ml from the files of resin slicers ──
+
+/** Files of resin slicers this reads. */
+export const RESIN_FILE = /\.(ctb|cbddlp|photon|goo|pwm[a-z0-9]{0,2}|pw0|pwx|pws|dlp|sl1s?)$/i;
+export const isResinFile = (name: string) => RESIN_FILE.test(name);
+
+const MAX_SECONDS = 30 * 24 * 3600;
+const sane = (value: number, max: number) => Number.isFinite(value) && value > 0 && value < max;
+
+/** A zero-terminated text of a binary header, when it reads as one (else ''). */
+function textAt(bytes: Uint8Array, start: number, length: number) {
+  if (start < 0 || length <= 0 || length > 256 || start + length > bytes.length) return '';
+  let text = '';
+  for (let index = start; index < start + length; index++) {
+    const code = bytes[index];
+    if (code === 0) break;
+    if (code < 32 || code > 126) return '';
+    text += String.fromCharCode(code);
+  }
+  return text.trim();
+}
+
+/** Where an ASCII tag first appears after `from`, or -1. */
+function findTag(bytes: Uint8Array, tag: string, from = 0, to = bytes.length) {
+  const codes = [...tag].map((char) => char.charCodeAt(0));
+  const end = Math.min(to, bytes.length - codes.length);
+  outer: for (let index = from; index <= end; index++) {
+    for (let at = 0; at < codes.length; at++) if (bytes[index + at] !== codes[at]) continue outer;
+    return index;
+  }
+  return -1;
+}
+
+/** Chitubox .ctb / .cbddlp / .photon (little endian): print time and ml in its header. */
+function readChitubox(bytes: Uint8Array, view: DataView) {
+  const magic = view.getUint32(0, true);
+  if (magic === 0x12fd0107) {
+    throw new Error('Este .ctb viene cifrado (Chitubox 2 o más nuevo) y no se puede leer. Escribe el tiempo y los ml que te da el laminador en la placa, o exporta en .ctb versión 3.');
+  }
+  if ((magic !== 0x12fd0086 && magic !== 0x12fd0019) || bytes.length < 112) throw new Error('No reconozco este archivo de Chitubox: ¿está completo?');
+  const seconds = view.getUint32(76, true);
+  const paramsAt = view.getUint32(84, true);
+  const paramsSize = view.getUint32(88, true);
+  const ml = paramsAt > 0 && paramsSize >= 24 && paramsAt + 24 <= bytes.length ? view.getFloat32(paramsAt + 20, true) : 0;
+  // Version 3 and up name the printer in the slicer section.
+  let model = '';
+  const slicerAt = view.getUint32(104, true);
+  if (view.getUint32(4, true) >= 3 && slicerAt > 0 && slicerAt + 36 <= bytes.length) {
+    model = textAt(bytes, view.getUint32(slicerAt + 28, true), view.getUint32(slicerAt + 32, true));
+  }
+  return { slicer: 'Chitubox', model, seconds, ml };
+}
+
+/** Anycubic Photon Workshop .pwmx, .pwma, .pws… (little endian): a HEADER section with ml and time. */
+function readAnycubic(bytes: Uint8Array, view: DataView) {
+  const at = findTag(bytes, 'HEADER\0', 12, 4096);
+  if (at < 0 || at + 88 > bytes.length) throw new Error('No reconozco este archivo de Anycubic: ¿está completo?');
+  const length = view.getUint32(at + 12, true);
+  const ml = view.getFloat32(at + 52, true);
+  const seconds = length >= 72 ? view.getUint32(at + 84, true) : 0;
+  const machine = findTag(bytes, 'MACHINE\0', 12);
+  const model = machine > 0 ? textAt(bytes, machine + 16, 96) : '';
+  return { slicer: 'Photon Workshop', model, seconds, ml };
+}
+
+/**
+ * Elegoo .goo (big endian). After the two previews come the print settings, which end with the print time (s),
+ * the volume (mm³) and the grams; they are found as the three values whose density is the one of a resin.
+ */
+function readGoo(bytes: Uint8Array, view: DataView) {
+  const model = textAt(bytes, 92, 32);
+  const start = 195_310;
+  let seconds = 0;
+  let ml = 0;
+  for (let at = start; at + 12 <= Math.min(bytes.length, start + 600); at++) {
+    const time = view.getUint32(at, false);
+    const volume = view.getFloat32(at + 4, false);
+    const grams = view.getFloat32(at + 8, false);
+    if (!sane(time, MAX_SECONDS) || time < 60 || !sane(volume, 1e9) || !sane(grams, 1e6)) continue;
+    const density = grams / (volume / 1000);
+    if (density >= 0.8 && density <= 1.6) {
+      seconds = time;
+      ml = volume / 1000;
+      break;
+    }
+  }
+  return { slicer: 'Elegoo', model, seconds, ml };
+}
+
+/** Prusa .sl1 / .sl1s: a zip whose config.ini says the time and the ml. */
+function readPrusaResin(bytes: Uint8Array) {
+  let files: Record<string, Uint8Array>;
+  try {
+    files = unzipSync(bytes, { filter: (file) => /^(config\.ini|thumbnail\/[^/]+\.png)$/i.test(file.name) });
+  } catch {
+    throw new Error('No se pudo abrir el archivo de PrusaSlicer: ¿está completo?');
+  }
+  const ini = files['config.ini'] ? strFromU8(files['config.ini']) : '';
+  const value = (key: string) => ini.match(new RegExp(`^\\s*${key}\\s*=\\s*(.+)$`, 'mi'))?.[1].trim() ?? '';
+  // The biggest preview.
+  const thumbnail =
+    Object.entries(files)
+      .filter(([path]) => path.startsWith('thumbnail/'))
+      .sort((a, b) => b[1].length - a[1].length)[0]?.[1] ?? null;
+  const model = value('printerModel');
+  return { slicer: 'PrusaSlicer', model: model && !/^prusa/i.test(model) ? `Prusa ${model}` : model, seconds: Number(value('printTime')) || 0, ml: Number(value('usedMaterial')) || 0, thumbnail };
+}
+
+function readResin(bytes: Uint8Array, name: string): SliceReport {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const read: { slicer: string; model: string; seconds: number; ml: number; thumbnail?: Uint8Array | null } = /\.sl1s?$/.test(name)
+    ? readPrusaResin(bytes)
+    : name.endsWith('.goo')
+      ? readGoo(bytes, view)
+      : textAt(bytes, 0, 8) === 'ANYCUBIC'
+        ? readAnycubic(bytes, view)
+        : readChitubox(bytes, view);
+  const minutes = sane(read.seconds, MAX_SECONDS) ? read.seconds / 60 : 0;
+  const ml = sane(read.ml, 100_000) ? Math.round(read.ml * 100) / 100 : 0;
+  if (!minutes && !ml) throw new Error('Este archivo no trae el tiempo ni los ml de resina. Escríbelos a mano en la placa.');
+  const warnings: string[] = [];
+  if (!ml) warnings.push('El archivo no trae los ml de resina: escríbelos a mano en la placa.');
+  if (!minutes) warnings.push('El archivo no trae el tiempo de impresión: escríbelo a mano en la placa.');
+  return {
+    slicer: read.slicer,
+    printerModel: read.model,
+    resin: true,
+    warnings,
+    sizes: [],
+    plates: [
+      {
+        index: 1,
+        minutes,
+        filaments: ml ? [{ slot: 1, type: 'Resina', color: '', grams: ml, resin: true }] : [],
+        objects: [],
+        thumbnail: read.thumbnail ?? null,
+      },
+    ],
+  };
 }
 
 // ── Size of the pieces, from the meshes of a 3MF ──
@@ -485,6 +632,13 @@ export function colourDistance(a: string, b: string) {
  * `close` is false when it had to settle for another material or a quite different colour.
  */
 export function matchFilament(sliced: SlicedFilament, filaments: Filament[]): { filament: Filament | null; close: boolean } {
+  // Resin goes to a resin (the one with most stock); a filament never to a resin.
+  const resins = filaments.filter((filament) => filament.kind === 'resin');
+  if (sliced.resin) {
+    const best = [...resins].sort((a, b) => b.stock_g - a.stock_g)[0] ?? null;
+    return { filament: best, close: resins.length === 1 };
+  }
+  if (resins.length < filaments.length) filaments = filaments.filter((filament) => filament.kind !== 'resin');
   let best: Filament | null = null;
   let bestScore = Infinity;
   for (const filament of filaments) {
@@ -512,6 +666,16 @@ export function fitsPrinter(model: string, printer: Printer) {
   if (own) return plain(`${printer.brand}${printer.model}`) === wanted || (wanted.endsWith(own) && wanted.includes(plain(printer.brand))) || wanted === own;
   // Printers without a model: their name without the device id ("Bambu Lab A1 · 605").
   return plain(printer.name.split('·')[0]) === wanted;
+}
+
+/**
+ * Printers a file can go to: FDM files to FDM printers of the model it was sliced for; resin files to resin printers
+ * (of that model when one is, else any of them, since resin slicers name the models their own way).
+ */
+export function printersFor(report: Pick<SliceReport, 'printerModel' | 'resin'>, printers: Printer[]) {
+  const sameKind = printers.filter((printer) => (printer.technology === 'resin') === !!report.resin);
+  const fitting = sameKind.filter((printer) => fitsPrinter(report.printerModel, printer));
+  return report.resin && !fitting.length ? sameKind : fitting;
 }
 
 /** The user's first printer of the model the file was sliced for. */

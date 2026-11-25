@@ -87,14 +87,19 @@ export default function QuickCalculatorScreen() {
               label={index === 0 ? 'Filamento' : `Filamento ${index + 1}`}
               value={use.filament}
               onChange={(value) => setUse(index, { filament: value })}
-              none="Otro (escribo el precio por kg)"
+              none="Otro (escribo el precio por kg o litro)"
               options={filamentOptions}
             />
             <Row>
               {!use.filament && (
-                <Field style={{ flex: 1 }} label="Precio por kg" unit="$" numeric value={use.perKg} onChangeText={(value) => setUse(index, { perKg: value })} placeholder="350" />
+                <Field style={{ flex: 1 }} label="Precio por kg o litro" unit="$" numeric value={use.perKg} onChangeText={(value) => setUse(index, { perKg: value })} placeholder="350" />
               )}
-              <Field style={{ flex: 1 }} label="Gramos" unit="g" numeric value={use.grams} onChangeText={(value) => setUse(index, { grams: value })} placeholder="0" />
+              <Field
+                style={{ flex: 1 }}
+                label={filaments.find((filament) => filament.id === use.filament)?.kind === 'resin' ? 'Mililitros' : 'Gramos'}
+                unit={filaments.find((filament) => filament.id === use.filament)?.kind === 'resin' ? 'ml' : 'g'}
+                numeric
+                value={use.grams} onChangeText={(value) => setUse(index, { grams: value })} placeholder="0" />
             </Row>
             {uses.length > 1 && (
               <Pressable accessibilityRole="button" onPress={() => setUses((list) => list.filter((_, at) => at !== index))}>

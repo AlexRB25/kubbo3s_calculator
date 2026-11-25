@@ -66,7 +66,9 @@ export function FilamentPicker({
         {current ? (
           <>
             <span className="min-w-0 flex-1 truncate">{filamentName(current)}</span>
-            <span className="shrink-0 text-xs text-muted">{money(costPerGram(current) * 1000)}/kg</span>
+            <span className="shrink-0 text-xs text-muted">
+              {money(costPerGram(current) * 1000)}/{current.kind === "resin" ? "L" : "kg"}
+            </span>
           </>
         ) : (
           <span className="flex-1">⚠ Falta elegir el filamento</span>
@@ -106,7 +108,7 @@ export function FilamentPicker({
                   >
                     <Swatch colors={filamentColors(item)} glow={item.glow} className="size-4 shrink-0 rounded-full border border-line" />
                     <span className="min-w-0 flex-1 truncate">{filamentName(item)}</span>
-                    <span className="shrink-0 text-xs text-muted">{busy ? "ya está arriba" : `${money(costPerGram(item) * 1000)}/kg`}</span>
+                    <span className="shrink-0 text-xs text-muted">{busy ? "ya está arriba" : `${money(costPerGram(item) * 1000)}/${item.kind === "resin" ? "L" : "kg"}`}</span>
                   </button>
                 </li>
               );

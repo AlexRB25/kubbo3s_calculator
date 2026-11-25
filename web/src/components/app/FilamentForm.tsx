@@ -11,9 +11,10 @@ import type { CatalogFilament, Filament } from "@/lib/types";
 import { ColorsField, Swatch } from "./Swatch";
 
 const MATERIALS = ["PLA", "PLA Basic", "PLA+", "PLA Silk", "Silk PLA+", "PLA Matte", "PETG", "Rapid PETG", "ABS", "ASA", "TPU", "Shoe3D", "PC", "Nylon"];
+const RESINS = ["Resina estándar", "Resina ABS-Like", "Resina lavable con agua", "Resina 8K", "Resina Tough", "Resina flexible", "Resina calcinable", "Resina dental"];
 
 /** Picks a filament from the Kubbo catalog: search by brand, material or colour. */
-function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilament) => void; onCancel: () => void }) {
+function CatalogPicker({ onPick, onCancel, onResin }: { onPick: (filament: CatalogFilament) => void; onCancel: () => void; onResin: () => void }) {
   const [catalog, setCatalog] = useState<CatalogFilament[] | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -48,6 +49,9 @@ function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilamen
         <input className="input flex-1" placeholder="Busca: elegoo gris, petg negro…" value={query} onChange={(event) => setQuery(event.target.value)} autoFocus />
         <button type="button" className="btn" onClick={onCancel}>
           Escribirlo yo
+        </button>
+        <button type="button" className="btn" onClick={onResin}>
+          Es resina
         </button>
       </div>
       {error && <p className="error">No se pudo leer el catálogo: {error}</p>}
@@ -92,6 +96,8 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
   const { busy, error, setError, save } = useSave();
   const [picking, setPicking] = useState(!filament);
   const [catalogId, setCatalogId] = useState(filament?.catalog_id ?? null);
+  const [resin, setResin] = useState(filament?.kind === "resin");
+  const unit = resin ? "ml" : "g";
   const [material, setMaterial] = useState(filament?.material ?? "PLA");
   const [brand, setBrand] = useState(filament?.brand ?? "");
   const [color, setColor] = useState(filament?.color ?? "");
@@ -107,6 +113,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
 
   function pick(item: CatalogFilament) {
     setCatalogId(item.id);
+    setResin(false);
     setMaterial(item.material);
     setBrand(item.brand);
     setColor(item.color_name);
@@ -134,6 +141,8 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
     if (!material.trim()) return setError("Indica el material.");
     if (!color.trim()) return setError("Escribe el nombre del color (por ejemplo «Verde bosque»): así lo distingues en las listas.");
     const row = {
+      // Only once resin is in play, so it saves on databases that do not have the column yet.
+      ...(resin || filament?.kind ? { kind: resin ? "resin" : "filament" } : {}),
       material: material.trim(),
       brand: brand.trim(),
       color: color.trim(),
@@ -152,10 +161,47 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
     save(() => (filament ? supabase().from("filaments").update(row).eq("id", filament.id) : supabase().from("filaments").insert(row)), onDone);
   }
 
-  if (picking) return <CatalogPicker onPick={pick} onCancel={() => setPicking(false)} />;
+  function chooseKind(toResin: boolean) {
+    if (toResin === resin) return;
+    setResin(toResin);
+    setCatalogId(null);
+    setMaterial(toResin ? RESINS[0] : "PLA");
+  }
+
+  if (picking)
+    return (
+      <CatalogPicker
+        onPick={pick}
+        onCancel={() => setPicking(false)}
+        onResin={() => {
+          chooseKind(true);
+          setPicking(false);
+        }}
+      />
+    );
 
   return (
     <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+      <div className="flex flex-wrap items-center gap-2 sm:col-span-2" role="radiogroup" aria-label="Tipo de material">
+        {(
+          [
+            [false, "Filamento (FDM)"],
+            [true, "Resina"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={label}
+            type="button"
+            role="radio"
+            aria-checked={resin === value}
+            className={`btn px-3 py-1 text-sm ${resin === value ? "btn-primary" : ""}`}
+            onClick={() => chooseKind(value)}
+          >
+            {label}
+          </button>
+        ))}
+        {resin && <span className="text-xs text-muted">Se mide en ml y su precio es por litro.</span>}
+      </div>
       <div className="flex items-center gap-3 sm:col-span-2">
         <Swatch colors={colors} glow={glow} className="relative size-20 shrink-0 overflow-hidden rounded-lg border border-line">
           {photo && (
@@ -164,7 +210,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
           )}
         </Swatch>
         <div className="flex flex-col gap-1">
-          <p className="font-semibold">{[material, color, brand].filter(Boolean).join(" ") || "Filamento"}</p>
+          <p className="font-semibold">{[material, color, brand].filter(Boolean).join(" ") || (resin ? "Resina" : "Filamento")}</p>
           {catalogId && <p className="text-xs text-brand">Del catálogo Kubbo</p>}
           <div className="flex flex-wrap gap-2">
             <label className="btn cursor-pointer px-3 py-1 text-xs">
@@ -176,9 +222,11 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
                 Quitar foto
               </button>
             )}
-            <button type="button" className="btn px-3 py-1 text-xs" onClick={() => setPicking(true)}>
-              Elegir del catálogo
-            </button>
+            {!resin && (
+              <button type="button" className="btn px-3 py-1 text-xs" onClick={() => setPicking(true)}>
+                Elegir del catálogo
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -187,7 +235,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
         Material
         <input className="input" value={material} onChange={(event) => setMaterial(event.target.value)} list="filament-materials" required />
         <datalist id="filament-materials">
-          {MATERIALS.map((value) => (
+          {(resin ? RESINS : MATERIALS).map((value) => (
             <option key={value} value={value} />
           ))}
         </datalist>
@@ -223,18 +271,22 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
       </div>
       {!filament && (
         <label className="label">
-          Existencia inicial (g)
+          Existencia inicial ({unit})
           <input className="input" inputMode="decimal" value={stock} onChange={(event) => setStock(event.target.value)} placeholder="0" />
           <span className="font-normal">Lo que ya tienes; queda en el historial. Después suben las compras y bajan las impresiones.</span>
         </label>
       )}
       <label className="label">
-        Costo de referencia por kg ($)
+        Costo de referencia por {resin ? "litro" : "kg"} ($)
         <input className="input" inputMode="decimal" value={costPerKg} onChange={(event) => setCostPerKg(event.target.value)} placeholder="0" />
-        <span className="font-normal">Lo que normalmente cuesta. El costo real por gramo sale de tus compras.</span>
+        <span className="font-normal">
+          {resin
+            ? "Lo que normalmente cuesta un litro (una botella de 500 ml: el doble de su precio). El costo real por ml sale de tus compras."
+            : "Lo que normalmente cuesta. El costo real por gramo sale de tus compras."}
+        </span>
       </label>
       <label className="label">
-        Avisarme al bajar de (g)
+        Avisarme al bajar de ({unit})
         <input className="input" inputMode="decimal" value={lowStock} onChange={(event) => setLowStock(event.target.value)} />
       </label>
       <label className="label">
@@ -250,7 +302,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
       </label>
       <label className="label sm:col-span-2">
         Notas
-        <textarea className="input" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Temperaturas, secado…" />
+        <textarea className="input" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={resin ? "Exposición, tiempo de lavado y curado…" : "Temperaturas, secado…"} />
       </label>
       {error && (
         <p role="alert" className="error sm:col-span-2">
@@ -267,7 +319,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
             className="btn text-bad"
             disabled={busy}
             onClick={() => {
-              if (!window.confirm("El historial se conserva, pero los productos que usan este filamento dejarán de sumar su costo. ¿Eliminar?")) return;
+              if (!window.confirm(`El historial se conserva, pero los productos que usan ${resin ? "esta resina" : "este filamento"} dejarán de sumar su costo. ¿Eliminar?`)) return;
               save(() => supabase().from("filaments").delete().eq("id", filament.id), onDone);
             }}
           >

@@ -52,10 +52,11 @@ export const money = (amount: number) => withCode(formatter(workshopCurrency).fo
 export const moneyIn = (amount: number, currency: Currency, maxDigits?: number) =>
   withCode(formatter(currency, maxDigits).format(Number(amount) || 0), currency);
 
-/** 1250 -> "1.25 kg", 250 -> "250 g" */
-export function weight(grams: number) {
+/** 1250 -> "1.25 kg", 250 -> "250 g"; for a resin (amounts in ml) 1250 -> "1.25 L", 250 -> "250 ml". */
+export function weight(grams: number, resin = false) {
   const value = Number(grams) || 0;
-  return Math.abs(value) >= 1000 ? `${(value / 1000).toFixed(2)} kg` : `${Math.round(value * 10) / 10} g`;
+  const [big, small] = resin ? ['L', 'ml'] : ['kg', 'g'];
+  return Math.abs(value) >= 1000 ? `${(value / 1000).toFixed(2)} ${big}` : `${Math.round(value * 10) / 10} ${small}`;
 }
 
 /** 150 -> "2 h 30 min" */

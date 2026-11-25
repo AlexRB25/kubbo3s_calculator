@@ -153,11 +153,20 @@ export type Printer = {
   /** What the printer cost and the hours it is expected to last: they give the wear per hour. */
   purchase_price: number;
   life_hours: number;
+  /** FDM (filament) or resin (SLA/MSLA); missing on older schemas = FDM. */
+  technology?: 'fdm' | 'resin';
+  /** Resin printers: alcohol, gloves, FEP and LCD screen per hour of printing; adds to the machine cost. */
+  consumables_per_hour?: number;
   notes: string;
 };
 
 export type Filament = {
   id: string;
+  /**
+   * Filament, or resin: a resin's amounts (stock_g, low_stock_g, the grams of plates and prints) are ml and
+   * cost_per_kg is its price per litre, so every cost (amount × cost per unit) works the same. Missing = filament.
+   */
+  kind?: 'filament' | 'resin';
   brand: string;
   material: string;
   color: string;

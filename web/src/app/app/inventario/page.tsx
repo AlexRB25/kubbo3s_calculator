@@ -10,7 +10,7 @@ import { Empty, FieldsForm, Modal, PageHeader, Stat, TableCard } from "@/compone
 import { productCost } from "@/lib/costs";
 import { useData } from "@/lib/data";
 import { money, weight } from "@/lib/format";
-import { amount, filamentItem, materialItem, unitCostLabel, type Item } from "@/lib/inventory";
+import { amount, filamentItem, materialItem, perThousand, unitCostLabel, type Item } from "@/lib/inventory";
 import { supabase } from "@/lib/supabase";
 import type { Material } from "@/lib/types";
 
@@ -78,7 +78,19 @@ export default function InventoryPage() {
         {tab === "raw" ? (
           <>
             <Stat label="Valor de la materia prima" value={money(value(raw))} />
-            <Stat label="Filamento en existencia" value={weight(filaments.reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0))} />
+            <Stat
+              label="Filamento en existencia"
+              value={weight(filaments.filter((filament) => filament.kind !== "resin").reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0))}
+            />
+            {filaments.some((filament) => filament.kind === "resin") && (
+              <Stat
+                label="Resina en existencia"
+                value={weight(
+                  filaments.filter((filament) => filament.kind === "resin").reduce((total, filament) => total + Math.max(filament.stock_g, 0), 0),
+                  true,
+                )}
+              />
+            )}
             <Stat label="Por reponer" value={String(raw.filter((item) => item.low).length)} tone={raw.some((item) => item.low) ? "bad" : undefined} />
           </>
         ) : (
@@ -120,11 +132,11 @@ export default function InventoryPage() {
                   <td className={`num font-semibold ${item.low ? "text-bad" : ""}`}>{amount(item, item.stock)}</td>
                   <td className="num">
                     {item.type === "product" || item.fromPurchases ? unitCostLabel(item, item.unitCost) : <span className="text-muted">Sin compras</span>}
-                    {item.type === "filament" && item.fromPurchases && <span className="block text-xs text-muted">{money(item.unitCost * 1000)} / kg</span>}
+                    {item.type === "filament" && item.fromPurchases && <span className="block text-xs text-muted">{perThousand(item, item.unitCost)}</span>}
                   </td>
                   {tab === "raw" && (
                     <td className="num text-muted">
-                      {item.referenceCost > 0 ? (item.type === "filament" ? `${money(item.referenceCost * 1000)} / kg` : unitCostLabel(item, item.referenceCost)) : "—"}
+                      {item.referenceCost > 0 ? (item.type === "filament" ? perThousand(item, item.referenceCost) : unitCostLabel(item, item.referenceCost)) : "—"}
                     </td>
                   )}
                   <td className="num">{money(Math.max(item.stock, 0) * item.unitCost)}</td>

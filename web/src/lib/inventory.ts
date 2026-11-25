@@ -29,12 +29,16 @@ export const UNIT_LABELS: Record<Item["unit"], string> = { g: "gramos", ml: "mil
 /** Money with up to four decimals, for the cost of a gram. */
 export const preciseMoney = (value: number) => moneyIn(value, getWorkshopCurrency(), 4);
 
-/** "1.25 kg", "30 ml", "12 pzas". */
+/** "1.25 kg", "30 ml", "1.5 L", "12 pzas". */
 export function amount(item: Pick<Item, "unit">, value: number) {
   if (item.unit === "g") return weight(value);
+  if (item.unit === "ml" && Math.abs(value) >= 1000) return weight(value, true);
   const rounded = Math.round(value * 1000) / 1000;
   return item.unit === "ml" ? `${rounded} ml` : `${rounded} ${Math.abs(rounded) === 1 ? "pza" : "pzas"}`;
 }
+
+/** "$1.50 / kg" or, for a resin, "$1.50 / L": the cost of a thousand units of a filament. */
+export const perThousand = (item: Pick<Item, "unit">, cost: number) => `${money(cost * 1000)} / ${item.unit === "ml" ? "L" : "kg"}`;
 
 /** "$0.3091 / g", "$5.00 / pza". */
 export function unitCostLabel(item: Pick<Item, "unit">, cost: number) {
@@ -45,10 +49,10 @@ export const filamentItem = (filament: Filament): Item => ({
   type: "filament",
   id: filament.id,
   name: filamentName(filament),
-  detail: "Filamento",
+  detail: filament.kind === "resin" ? "Resina" : "Filamento",
   colors: filamentColors(filament),
   glow: filament.glow,
-  unit: "g",
+  unit: filament.kind === "resin" ? "ml" : "g",
   stock: filament.stock_g,
   unitCost: costPerGram(filament),
   referenceCost: filament.cost_per_kg / 1000,
