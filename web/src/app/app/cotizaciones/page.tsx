@@ -287,7 +287,7 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
           En el PDF: {[fiscal.client_legal_name, fiscal.client_tax_id && `${fiscal.client_tax_label}: ${fiscal.client_tax_id}`, ...fiscal.client_extra.map((item) => `${item.label}: ${item.value}`)].filter(Boolean).join(" · ")}
         </p>
       ) : null}
-      <section className="grid gap-3 sm:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="label">
           Cliente
           {text(client.client_name, (value) => setClient({ ...client, client_name: value }), { placeholder: "Nombre o empresa" })}
@@ -333,7 +333,7 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
           )}
         </div>
         {items.map((item, index) => (
-          <div key={index} className="grid gap-2 rounded-xl border border-line p-3 sm:grid-cols-[1fr_90px_130px_auto] sm:items-end">
+          <div key={index} className="grid grid-cols-1 gap-2 rounded-xl border border-line p-3 sm:grid-cols-[1fr_90px_130px_auto] sm:items-end">
             <div className="flex flex-col gap-2">
               <input className="input" value={item.name} placeholder="Concepto" onChange={(event) => setItem(index, { name: event.target.value })} />
               <input className="input text-sm" value={item.detail} placeholder="Detalle: material, color, medidas…" onChange={(event) => setItem(index, { detail: event.target.value })} />
@@ -362,7 +362,7 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
         </button>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-4">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <label className="label">
           Descuento (%)
           {text(numbers.discount_pct, (value) => setNumbers({ ...numbers, discount_pct: value }), { inputMode: "decimal", placeholder: "0" })}
@@ -381,7 +381,7 @@ function QuoteForm({ quote, draft, onDone, onPdf }: { quote: Quote | null; draft
         </label>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="label">
           Condiciones de pago
           <textarea className="input" rows={2} value={texts.payment_terms} onChange={(event) => setTexts({ ...texts, payment_terms: event.target.value })} />

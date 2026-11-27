@@ -181,7 +181,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
     );
 
   return (
-    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="flex flex-wrap items-center gap-2 sm:col-span-2" role="radiogroup" aria-label="Tipo de material">
         {(
           [

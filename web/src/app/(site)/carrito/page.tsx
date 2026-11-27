@@ -119,7 +119,7 @@ export default function CartPage() {
       {products === null ? (
         <p className="mt-6 text-muted">Cargando…</p>
       ) : (
-        <div className="mt-6 grid items-start gap-8 lg:grid-cols-[1fr_22rem]">
+        <div className="mt-6 grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_22rem]">
           <div className="flex flex-col gap-6">
             <ul className="flex flex-col gap-3">
               {rows.map(({ product, quantity }) => (
@@ -153,7 +153,7 @@ export default function CartPage() {
             </ul>
 
             {rows.length > 0 && (
-              <form id="checkout" onSubmit={submit} className="card grid gap-4 sm:grid-cols-2">
+              <form id="checkout" onSubmit={submit} className="card grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <h2 className="sm:col-span-2">Datos de entrega</h2>
                 <label className="label">
                   Nombre completo

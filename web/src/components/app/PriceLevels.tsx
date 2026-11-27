@@ -38,7 +38,7 @@ export function LevelsFields({ draft, onChange, base }: { draft: LevelsDraft; on
     </label>
   );
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       {box("normal", "Ganancia normal", "%", "Tu precio de siempre.")}
       {box("discount", "Con descuento", "%", "Lo más que bajas en una oferta.")}
       {box("wholesale", "Mayoreo", "%", "Lo más que bajas por volumen.")}

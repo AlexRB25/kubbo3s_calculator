@@ -73,7 +73,7 @@ export default async function LandingPage() {
 
       <section id="funciones" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16">
         <h2 className="text-center text-3xl font-bold">Todo lo que pasa en tu taller, en un solo lugar</h2>
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((feature) => (
             <article key={feature.title} className="card flex flex-col gap-2">
               <h3 className="font-semibold text-brand">{feature.title}</h3>
@@ -84,7 +84,7 @@ export default async function LandingPage() {
       </section>
 
       <section className="border-y border-line bg-panel">
-        <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-16 md:grid-cols-2">
+        <div className="mx-auto grid grid-cols-1 max-w-6xl items-center gap-8 px-4 py-16 md:grid-cols-2">
           <div className="flex flex-col gap-4">
             <h2 className="text-3xl font-bold">App y web, siempre sincronizadas</h2>
             <p className="text-muted">

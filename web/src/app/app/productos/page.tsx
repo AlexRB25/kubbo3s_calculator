@@ -489,7 +489,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div role="tablist" className="flex flex-wrap gap-1 border-b border-line sm:col-span-2">
         {SECTIONS.map(([id, label]) => (
           <button
@@ -1121,7 +1121,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
             <p className="text-sm text-warn">Ninguna placa imprime todavía: {combos.missing.map((part) => part.name).join(", ")}.</p>
           )}
           {dearest && (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <ComboCard
                 title="Combinación más cara"
                 hint="Cada pieza desde la placa donde sale más cara. Es el costo que usa el producto, para que tus precios siempre alcancen."
@@ -1259,7 +1259,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                 const profit = unitProfit(price, cost.total, channel, shipping);
                 const pct = channelPct(channel);
                 return (
-                  <div key={channel.id} role="tabpanel" className="grid gap-4 lg:grid-cols-2">
+                  <div key={channel.id} role="tabpanel" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between gap-3 rounded-lg border border-line p-3">
                         <span className="text-sm">

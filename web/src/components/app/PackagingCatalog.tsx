@@ -225,7 +225,7 @@ function CatalogBox({
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-[260px_1fr]">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-[260px_1fr]">
       <BoxPreview length_mm={item.length_mm} width_mm={item.width_mm} height_mm={item.height_mm} style={item.style} material={item.material} size={260} />
       <div className="flex flex-col gap-4">
         <button className="self-start text-sm text-muted hover:text-white" onClick={onBack}>

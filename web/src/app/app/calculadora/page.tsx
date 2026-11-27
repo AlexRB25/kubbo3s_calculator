@@ -89,7 +89,7 @@ export default function QuickCalculatorPage() {
       <PageHeader title="Cálculo rápido" />
       <p className="text-sm text-muted">Calcula el precio de una pieza sin crear un producto. Si te lo encargan, conviértelo en cotización.</p>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
         <div className="flex flex-col gap-4">
           <section className="card flex flex-col gap-4">
             <h2>La pieza</h2>
@@ -98,7 +98,7 @@ export default function QuickCalculatorPage() {
               <input className="input" value={name} placeholder="Llavero personalizado" onChange={(event) => setName(event.target.value)} />
             </label>
             {uses.map((use, index) => (
-              <div key={index} className="grid gap-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+              <div key={index} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
                 <label className="label">
                   {index === 0 ? "Filamento o resina" : `Material ${index + 1}`}
                   <select className="input" value={use.filament} onChange={(event) => setUse(index, { filament: event.target.value })}>
@@ -134,7 +134,7 @@ export default function QuickCalculatorPage() {
             <button type="button" className="btn self-start" onClick={() => setUses((list) => [...list, { filament: filaments[0]?.id ?? OTHER, perKg: "", grams: "" }])}>
               + Otro color o material
             </button>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="label">
                 Horas de impresión
                 {input(hours, setHours, "0", "h")}
@@ -155,7 +155,7 @@ export default function QuickCalculatorPage() {
 
           <section className="card flex flex-col gap-4">
             <h2>Ajustes</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="label">
                 Posprocesado (lijar, pintar, armar)
                 {input(post, setPost, "0", "$")}

@@ -45,7 +45,7 @@ export default async function ListingPage({ params }: PageProps<"/equipos/[id]">
       <Link href="/equipos" className="text-sm text-muted hover:text-white">
         ← Equipos en venta
       </Link>
-      <div className="mt-4 grid gap-8 md:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2">
         <Gallery images={listing.images.map((path) => equipmentImage(path)!)} name={listing.title} />
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">

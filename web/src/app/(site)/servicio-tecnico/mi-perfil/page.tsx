@@ -147,7 +147,7 @@ function TechProfile({ userId }: { userId: string }) {
           placeholder="Experiencia, qué reparas, tiempos de entrega, garantía, precios de referencia…"
         />
       </label>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <label className="label">
           Ciudad
           <input className="input" maxLength={80} value={draft.city} onChange={(event) => set({ city: event.target.value })} />

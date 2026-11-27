@@ -58,7 +58,7 @@ export function Modal({ title, onClose, wide, children }: PropsWithChildren<{ ti
         role="dialog"
         aria-modal
         aria-label={title}
-        className={`card my-8 flex w-full flex-col gap-4 ${wide === "xl" ? "max-w-6xl" : wide ? "max-w-3xl" : "max-w-lg"}`}
+        className={`card my-8 flex w-full min-w-0 flex-col gap-4 ${wide === "xl" ? "max-w-6xl" : wide ? "max-w-3xl" : "max-w-lg"}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3">
@@ -145,7 +145,7 @@ export function FieldsForm({ fields, initial, submitLabel = "Guardar", onSubmit,
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {fields.map((field) => {
         const value = initial?.[field.name];
         const common = {

@@ -115,7 +115,7 @@ export function PrinterForm({ printer, onDone }: { printer?: Printer; onDone: ()
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="flex flex-wrap items-center gap-2 sm:col-span-2" role="radiogroup" aria-label="Tipo de impresora">
         {(
           [
@@ -225,7 +225,7 @@ export function PrinterForm({ printer, onDone }: { printer?: Printer; onDone: ()
             Alcohol isopropílico, guantes, FEP y pantalla LCD que se gastan por cada hora de impresión. Se suma al desgaste en el costo de cada pieza.
           </span>
           {helper && (
-            <div className="mt-1 grid gap-2 rounded-lg border border-line p-3 font-normal sm:grid-cols-2">
+            <div className="mt-1 grid grid-cols-1 gap-2 rounded-lg border border-line p-3 font-normal sm:grid-cols-2">
               {(
                 [
                   ["fepPrice", "Precio del FEP ($)"],

@@ -165,7 +165,7 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
         </button>
       </div>
       {help && (
-        <ol className="grid gap-2 sm:grid-cols-3">
+        <ol className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {STEPS.map(([title, text], index) => (
             <li key={title} className="rounded-md bg-ink p-2 text-xs">
               <p className="font-semibold">

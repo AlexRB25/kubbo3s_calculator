@@ -63,7 +63,7 @@ function Sales({ userId }: { userId: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <Tile label="Disponible para retirar" value=<Price mxn={balance.available} /> strong />
         <Tile label={`Esperando ${balance.hold_days} días`} value=<Price mxn={balance.held} /> hint="Por reembolsos y contracargos" />
         <Tile label="En retiro" value=<Price mxn={balance.requested} /> />
@@ -216,7 +216,7 @@ function PayoutForm({ userId, info, onSaved }: { userId: string; info: PayoutInf
         ))}
       </div>
       <p className="text-xs text-muted">{chosen.hint}</p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="label">
           {method === "clabe" ? "CLABE" : "Correo de la cuenta"}
           <input className="input" required value={account} onChange={(event) => setAccount(event.target.value)} placeholder={chosen.placeholder} />

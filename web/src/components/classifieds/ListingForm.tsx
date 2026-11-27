@@ -93,7 +93,7 @@ export function ListingForm({ userId, listing, onDone }: { userId: string; listi
   }
 
   return (
-    <form onSubmit={submit} className="card grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="card grid grid-cols-1 gap-4 sm:grid-cols-2">
       <label className="label sm:col-span-2">
         ¿Qué vendes?
         <input className="input" maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Bambu Lab A1 mini con AMS lite" required />

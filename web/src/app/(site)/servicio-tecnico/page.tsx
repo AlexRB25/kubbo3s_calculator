@@ -81,7 +81,7 @@ export default async function TechniciansPage({ searchParams }: PageProps<"/serv
         <p className="card text-muted">{query || service ? "No hay técnicos con esos filtros." : "Todavía no hay técnicos dados de alta. ¡Sé el primero!"}</p>
       )}
 
-      <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {providers.map((provider) => {
           const photo = equipmentImage(provider.photo_path);
           return (

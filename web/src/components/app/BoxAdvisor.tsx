@@ -157,7 +157,7 @@ export function ParcelFacts({ productGrams, box }: { productGrams: number; box: 
         <p className="text-sm font-semibold">Para tu tienda en línea</p>
         <p className="text-xs text-muted">Lo que piden Mercado Libre, TikTok Shop y las paqueterías, sin pesar nada. Toca un dato para copiarlo.</p>
       </div>
-      <div className="grid gap-1.5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
         {rows.map((row) => (
           <button
             key={row.label}

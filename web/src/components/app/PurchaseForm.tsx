@@ -52,7 +52,7 @@ export function PurchaseForm({ items, initial, onDone }: { items: Item[]; initia
     { label: "Otros materiales", list: items.filter((candidate) => candidate.type === "material") },
   ];
   return (
-    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <label className="label sm:col-span-2">
         Qué compraste
         <select className="input" value={key} onChange={(event) => setKey(event.target.value)} required>

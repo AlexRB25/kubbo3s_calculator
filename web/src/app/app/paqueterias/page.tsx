@@ -94,7 +94,7 @@ function CarrierForm({ carrier, onDone }: { carrier?: Carrier; onDone: () => voi
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="label">
           Nombre
           <input className="input" value={draft.name} onChange={(event) => set({ name: event.target.value })} placeholder="Mercado Libre, DHL, Estafeta…" maxLength={80} />

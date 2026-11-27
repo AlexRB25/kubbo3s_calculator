@@ -47,7 +47,7 @@ export default async function ModelPage({ params }: PageProps<"/modelos/[id]">) 
       <Link href="/modelos" className="text-sm text-muted hover:text-white">
         ← Modelos 3D
       </Link>
-      <div className="mt-4 grid gap-8 md:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2">
         <Gallery images={model.images.map(mediaUrl)} name={model.title} />
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">

@@ -182,7 +182,7 @@ function Editor({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="grid max-w-5xl gap-6 lg:grid-cols-[1fr_20rem]">
+    <div className="grid grid-cols-1 max-w-5xl gap-6 lg:grid-cols-[1fr_20rem]">
       <div className="flex flex-col gap-4">
         <label className="label">
           Nombre
@@ -192,7 +192,7 @@ function Editor({ userId }: { userId: string }) {
           Descripción
           <textarea className="input" rows={5} maxLength={5000} value={draft.description} onChange={(event) => set({ description: event.target.value })} placeholder="Qué es, medidas, qué incluye…" />
         </label>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="label">
             Categoría
             <select className="input" value={draft.category} onChange={(event) => set({ category: event.target.value })}>

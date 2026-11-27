@@ -52,7 +52,7 @@ export function ClientForm({ client, onDone }: { client: Client | null; onDone: 
 
   return (
     <div className="flex flex-col gap-5">
-      <section className="grid gap-3 sm:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {input("name", "Nombre o empresa *", { autoFocus: true })}
         {input("phone", "WhatsApp o teléfono", { inputMode: "tel" })}
         {input("email", "Correo", { type: "email" })}
@@ -61,7 +61,7 @@ export function ClientForm({ client, onDone }: { client: Client | null; onDone: 
       </section>
       <section className="flex flex-col gap-3">
         <h3 className="font-semibold">Facturación</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {input("legal_name", "Nombre fiscal o razón social")}
           {input("tax_id", taxLabel(settings, profile?.currency ?? "MXN"))}
           {fields.map((field) => (

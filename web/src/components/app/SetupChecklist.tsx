@@ -52,7 +52,7 @@ export function SetupChecklist() {
       <div className="h-2 overflow-hidden rounded-full bg-raised">
         <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${(done / steps.length) * 100}%` }} />
       </div>
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {steps.map((step) => (
           <li key={step.key}>
             <Link

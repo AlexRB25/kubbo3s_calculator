@@ -161,7 +161,7 @@ function CatalogSettings({ catalog, onSaved }: { catalog: Catalog | null; onSave
   }
 
   return (
-    <form onSubmit={submit} className="card grid max-w-3xl gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="card grid grid-cols-1 max-w-3xl gap-4 sm:grid-cols-2">
       <label className="label">
         Dirección
         <input className="input" value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/\s+/g, "-"))} required maxLength={40} />

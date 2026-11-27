@@ -73,7 +73,7 @@ export default function SummaryPage() {
         <Stat label="Flujo de caja" value={money(cashFlow)} tone={cashFlow >= 0 ? "good" : "bad"} />
       </section>
 
-      <section className="grid gap-3 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <div className="card flex flex-col gap-2">
           <h2>De la venta a la ganancia</h2>
           <Line label="Ventas" value={money(income)} />

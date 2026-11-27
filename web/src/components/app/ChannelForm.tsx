@@ -66,7 +66,7 @@ export function ChannelForm({ channel, count, onDone }: { channel?: Channel; cou
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <label className="label sm:col-span-2">
         Nombre
         <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Mercado Libre" maxLength={60} required />

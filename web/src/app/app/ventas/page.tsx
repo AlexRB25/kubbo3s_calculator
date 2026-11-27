@@ -92,7 +92,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <label className="label sm:col-span-2">
         Producto
         <select className="input" value={productId} onChange={(event) => setProductId(event.target.value)}>

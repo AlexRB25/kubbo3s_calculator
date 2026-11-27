@@ -44,7 +44,7 @@ export default function PrintersPage() {
         <Empty>Da de alta tus impresoras para llevar sus horas, mantenimientos y ajustes, y sumar luz y desgaste al costo.</Empty>
       )}
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         {printers.map((printer) => {
           const history = maintenance.filter((record) => record.printer_id === printer.id);
           const fund = wear.filter((entry) => entry.printer_id === printer.id);

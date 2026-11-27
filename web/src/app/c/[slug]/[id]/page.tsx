@@ -37,7 +37,7 @@ export default async function CatalogProductPage({ params }: PageProps<"/c/[slug
       <Link href={base || "/"} className="text-sm text-muted hover:text-white">
         ← Todo el catálogo
       </Link>
-      <div className="mt-4 grid gap-8 md:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2">
         {photos.length ? (
           <Gallery images={photos} name={product.name} />
         ) : (

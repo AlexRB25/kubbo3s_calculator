@@ -76,7 +76,7 @@ export function CopyrightClaimForm({ modelId, title }: { modelId: string; title:
   }
 
   return (
-    <form onSubmit={submit} className="card grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="card grid grid-cols-1 gap-4 sm:grid-cols-2">
       {/* Hidden from people: bots fill it. */}
       <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden />
 

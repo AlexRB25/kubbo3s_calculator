@@ -74,7 +74,7 @@ export function ResellerSettings() {
           </span>
         </label>
       ) : channels.length ? (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {channels.map((channel) => (
             <label key={channel.id} className="label">
               {channel.name}

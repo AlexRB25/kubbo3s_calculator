@@ -38,33 +38,36 @@ body {
   text-shadow: 0 0 28px rgb(53 197 214 / 0.55);
 }
 
-.btn {
-  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-raised px-3.5 py-2 text-sm font-semibold text-white transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50;
-}
-/* The chosen option of a group of .btn (format, filters, tabs): teal tint and outline. */
-.btn-on {
-  @apply bg-brand/15 text-brand ring-1 ring-brand ring-inset;
-}
-.btn-primary {
-  @apply bg-brand text-ink;
-}
-.btn-danger {
-  @apply bg-bad/15 text-bad;
-}
-.btn-lg {
-  @apply px-5 py-3 text-base;
-}
-.card {
-  @apply rounded-xl border border-line bg-panel p-5;
-}
-.input {
-  @apply w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-white outline-none placeholder:text-muted/60 focus:border-brand;
-}
-.label {
-  @apply flex flex-col gap-1 text-xs font-medium text-muted;
-}
-.error {
-  @apply rounded-lg bg-bad/15 px-3 py-2 text-sm text-bad;
+/* In the components layer, so utilities next to them (w-20, p-0…) win. */
+@layer components {
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-raised px-3.5 py-2 text-sm font-semibold text-white transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  /* The chosen option of a group of .btn (format, filters, tabs): teal tint and outline. */
+  .btn-on {
+    @apply bg-brand/15 text-brand ring-1 ring-brand ring-inset;
+  }
+  .btn-primary {
+    @apply bg-brand text-ink;
+  }
+  .btn-danger {
+    @apply bg-bad/15 text-bad;
+  }
+  .btn-lg {
+    @apply px-5 py-3 text-base;
+  }
+  .card {
+    @apply rounded-xl border border-line bg-panel p-5;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-white outline-none placeholder:text-muted/60 focus:border-brand;
+  }
+  .label {
+    @apply flex flex-col gap-1 text-xs font-medium text-muted;
+  }
+  .error {
+    @apply rounded-lg bg-bad/15 px-3 py-2 text-sm text-bad;
+  }
 }
 
 .table {
