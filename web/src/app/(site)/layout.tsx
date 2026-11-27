@@ -31,6 +31,9 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
             <a href={`${process.env.PB_LANDING_URL}/privacidad`} className="hover:text-white">
               Privacidad
             </a>
+            <Link href="/eliminar-cuenta" className="hover:text-white">
+              Eliminar cuenta
+            </Link>
           </nav>
         </div>
       </footer>
