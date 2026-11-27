@@ -76,7 +76,20 @@ export function piecesOnPlate(plate: Plate, parts: Part[]) {
   return Object.values(plateParts(plate, parts)).reduce((total, count) => total + (Number(count) || 0), 0);
 }
 
-type Option = { plate: Plate; printer: Printer; pieces: Record<string, number>; count: number; detail: CostBreakdown };
+/**
+ * Part of the plate's cost that falls on ONE piece of each kind it prints: by the volume of the pieces when every piece on
+ * the plate has one (a big piece takes more than a small one), else the same for every piece.
+ */
+export function pieceShares(plate: Plate, parts: Part[]): { shares: Record<string, number>; byVolume: boolean } {
+  const pieces = plateParts(plate, parts);
+  const on = parts.filter((part) => (Number(pieces[part.id]) || 0) > 0);
+  const byVolume = on.length > 0 && on.every((part) => (Number(part.volume) || 0) > 0);
+  const weight = (part: Part) => (byVolume ? Number(part.volume) : 1);
+  const total = on.reduce((sum, part) => sum + weight(part) * (Number(pieces[part.id]) || 0), 0);
+  return { shares: Object.fromEntries(on.map((part) => [part.id, total > 0 ? weight(part) / total : 0])), byVolume };
+}
+
+type Option = { plate: Plate; printer: Printer; pieces: Record<string, number>; count: number; detail: CostBreakdown; shares: Record<string, number> };
 
 function optionsOf(product: Recipe, filaments: Filament[], printers: Printer[], kwhPrice: number, waste: WasteRule[] = []): Option[] {
   const parts = partsOf(product);
@@ -85,13 +98,13 @@ function optionsOf(product: Recipe, filaments: Filament[], printers: Printer[], 
     const pieces = plateParts(plate, parts);
     const count = piecesOnPlate(plate, parts);
     if (!printer || count <= 0) return [];
-    return [{ plate, printer, pieces, count, detail: plateCost(plate, printer, filaments, kwhPrice, wastePct(waste, count)) }];
+    return [{ plate, printer, pieces, count, detail: plateCost(plate, printer, filaments, kwhPrice, wastePct(waste, count)), shares: pieceShares(plate, parts).shares }];
   });
 }
 
 /**
- * One product built from the plate each piece costs most (or least) on. A plate's cost is shared
- * among the pieces it prints: a plate of $40 with 10 bases makes each base $4.
+ * One product built from the plate each piece costs most (or least) on. A plate's cost is shared among the pieces it
+ * prints by their volume (a plate of $40 with 10 equal bases makes each base $4; a big piece takes more than a small one).
  */
 function choose(options: Option[], parts: Part[], extra: number, dearer: boolean): Combo | null {
   const choices: Combo["choices"] = [];
@@ -101,18 +114,19 @@ function choose(options: Option[], parts: Part[], extra: number, dearer: boolean
   for (const part of parts) {
     const candidates = options.filter((option) => (option.pieces[part.id] ?? 0) > 0);
     if (!candidates.length) return null;
+    const one = (option: Option) => option.detail.total * (option.shares[part.id] ?? 0);
     const best = candidates.reduce((pick, option) => {
-      const better = dearer ? option.detail.total / option.count > pick.detail.total / pick.count : option.detail.total / option.count < pick.detail.total / pick.count;
+      const better = dearer ? one(option) > one(pick) : one(option) < one(pick);
       return better ? option : pick;
     });
     // Share of the plate that falls on the pieces of this kind one product takes.
-    const share = part.needed / best.count;
+    const share = part.needed * (best.shares[part.id] ?? 0);
     sum.filament += best.detail.filament * share;
     sum.electricity += best.detail.electricity * share;
     sum.machine += best.detail.machine * share;
     for (const [id, amount] of Object.entries(best.plate.grams)) grams.set(id, (grams.get(id) ?? 0) + (Number(amount) || 0) * share);
     minutes += best.plate.minutes * share;
-    choices.push({ part, plate: best.plate, printer: best.printer, perPiece: best.detail.total / best.count });
+    choices.push({ part, plate: best.plate, printer: best.printer, perPiece: one(best) });
   }
   return {
     choices,

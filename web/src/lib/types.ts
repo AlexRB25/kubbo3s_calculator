@@ -302,7 +302,8 @@ export type ProcessUse = { process_id: string; minutes: number };
 export type PostProcess = { id: string; name: string; cost_per_hour: number; notes: string };
 
 /** A piece the product is made of, and how many of it one product takes. */
-export type Part = { id: string; name: string; needed: number };
+/** `volume`: mm³ of one piece, read from the sliced file; a plate's cost is shared among its pieces by it. */
+export type Part = { id: string; name: string; needed: number; volume?: number };
 
 /**
  * One build plate on one printer: its time, the grams of each filament the product uses (0 if it

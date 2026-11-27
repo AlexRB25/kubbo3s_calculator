@@ -33,7 +33,8 @@ export type SliceReport = {
 };
 
 /** How big a printed piece is: the box that wraps it as it sits on the plate, in mm (length ≥ width, then height). */
-export type PieceSize = { name: string; size: [number, number, number] };
+/** `volume`: mm³ of the piece (its mesh in a 3MF; in a G-code, the filament that goes into it), to share a plate's cost. */
+export type PieceSize = { name: string; size: [number, number, number]; volume?: number };
 
 /** Bambu's internal printer codes, for files that do not name the model. */
 const BAMBU_MODELS: Record<string, string> = {
@@ -384,7 +385,10 @@ function combine(inner: Matrix, outer: Matrix): Matrix {
 }
 
 type Bounds = [number, number, number, number, number, number];
-type ModelObject = { name: string; bounds: Bounds | null; components: { key: string; transform: Matrix }[] };
+type ModelObject = { name: string; bounds: Bounds | null; volume: number; components: { key: string; transform: Matrix }[] };
+
+/** How much a transform scales volumes: the determinant of its 3×3 part. */
+const scaleOf = (m: Matrix) => Math.abs(m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]));
 
 function grow(total: Bounds | null, [x, y, z]: number[]): Bounds {
   return total ? [Math.min(total[0], x), Math.min(total[1], y), Math.min(total[2], z), Math.max(total[3], x), Math.max(total[4], y), Math.max(total[5], z)] : [x, y, z, x, y, z];
@@ -403,10 +407,22 @@ export function pieceSizes(files: Record<string, Uint8Array>): PieceSize[] {
       const head = attributes(match[1]);
       const body = match[2];
       let bounds: Bounds | null = null;
+      const points: number[][] = [];
       for (const vertex of body.matchAll(/<vertex\b([^>]*?)\/?>/g)) {
         const point = attributes(vertex[1]);
         const coords = [Number(point.x), Number(point.y), Number(point.z)];
+        points.push(coords);
         if (coords.every(Number.isFinite)) bounds = grow(bounds, coords);
+      }
+      // Volume of a closed mesh: the signed tetrahedra from the origin to each triangle.
+      let volume = 0;
+      for (const triangle of body.matchAll(/<triangle\b([^>]*?)\/?>/g)) {
+        const ids = attributes(triangle[1]);
+        const a = points[Number(ids.v1)];
+        const b = points[Number(ids.v2)];
+        const c = points[Number(ids.v3)];
+        if (!a || !b || !c) continue;
+        volume += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6;
       }
       const components = [...body.matchAll(/<component\b([^>]*?)\/?>/g)].map((component) => {
         const item = attributes(component[1]);
@@ -414,7 +430,7 @@ export function pieceSizes(files: Record<string, Uint8Array>): PieceSize[] {
         const other = /p:path="([^"]*)"/.exec(component[1])?.[1]?.replace(/^\//, '');
         return { key: `${other || path}#${item.objectid ?? ''}`, transform: readMatrix(item.transform) };
       });
-      objects.set(`${path}#${head.id}`, { name: head.name ?? '', bounds, components });
+      objects.set(`${path}#${head.id}`, { name: head.name ?? '', bounds, volume: Math.abs(volume), components });
     }
   }
 
@@ -434,6 +450,16 @@ export function pieceSizes(files: Record<string, Uint8Array>): PieceSize[] {
     return total;
   };
 
+  /** Volume of an object and its components (mm³) after `transform`. */
+  const volumeOf = (key: string, transform: Matrix, depth = 0): number => {
+    const object = objects.get(key);
+    if (!object || depth > 8) return 0;
+    return (
+      object.volume * scaleOf(transform) +
+      object.components.reduce((sum, component) => sum + volumeOf(component.key, combine(component.transform, transform), depth + 1), 0)
+    );
+  };
+
   const main = Object.keys(files).find((path) => /^3D\/3dmodel\.model$/i.test(path));
   if (!main) return [];
   const build = /<build\b[^>]*>([\s\S]*?)<\/build>/.exec(strFromU8(files[main]))?.[1] ?? '';
@@ -443,11 +469,13 @@ export function pieceSizes(files: Record<string, Uint8Array>): PieceSize[] {
     if (item.printable === '0') continue;
     const key = `${main}#${item.objectid}`;
     const box = boundsOf(key, readMatrix(item.transform));
+    const volume = volumeOf(key, readMatrix(item.transform));
     if (!box) continue;
     const [length, width] = [box[3] - box[0], box[4] - box[1]].sort((p, q) => q - p);
     const height = box[5] - box[2];
     const round = (value: number) => Math.round(value * 10) / 10;
-    if (length > 0 && width > 0 && height > 0) sizes.push({ name: objects.get(key)?.name ?? '', size: [round(length), round(width), round(height)] });
+    if (length > 0 && width > 0 && height > 0)
+      sizes.push({ name: objects.get(key)?.name ?? '', size: [round(length), round(width), round(height)], ...(volume > 0 ? { volume: Math.round(volume) } : {}) });
   }
   return sizes;
 }
@@ -475,6 +503,8 @@ function objectMarker(line: string): string | null | undefined {
  */
 export function gcodeSizes(bytes: Uint8Array): PieceSize[] {
   const boxes = new Map<string, Bounds>();
+  // Millimetres of filament pushed into each piece.
+  const pushed = new Map<string, number>();
   let labelled = false;
   let current: string | null = null;
   let x = 0;
@@ -508,6 +538,7 @@ export function gcodeSizes(bytes: Uint8Array): PieceSize[] {
       if (value) e = Number(value[1]);
     } else if (code[0] === 'G' && (code[1] === '0' || code[1] === '1') && (code.length === 2 || code[2] === ' ')) {
       let extrudes = false;
+      let amount = 0;
       for (const word of code.split(/\s+/)) {
         const value = Number(word.slice(1));
         if (!Number.isFinite(value)) continue;
@@ -516,6 +547,7 @@ export function gcodeSizes(bytes: Uint8Array): PieceSize[] {
         else if (word[0] === 'Z') z = value;
         else if (word[0] === 'E') {
           extrudes = relativeE ? value > 0 : value > e;
+          amount = relativeE ? value : value - e;
           if (!relativeE) e = value;
         }
       }
@@ -524,6 +556,7 @@ export function gcodeSizes(bytes: Uint8Array): PieceSize[] {
       const key = labelled ? current : '';
       if (key === null || (!labelled && z <= firstZ + 1e-6)) return;
       boxes.set(key, grow(boxes.get(key) ?? null, [x, y, z]));
+      pushed.set(key, (pushed.get(key) ?? 0) + amount);
     }
   };
   // In chunks cut at a line break (never inside a line or a character), so no huge string is built.
@@ -545,9 +578,18 @@ export function gcodeSizes(bytes: Uint8Array): PieceSize[] {
     const [length, width] = [box[3] - box[0] + 0.4, box[4] - box[1] + 0.4].sort((p, q) => q - p);
     // The piece starts on the bed: its height is the top of its last layer.
     const height = box[5];
-    if (length > 0 && width > 0 && height > 0) sizes.push({ name: name || 'Pieza', size: [round(length), round(width), round(height)] });
+    // Filament of 1.75 mm: only the proportion between pieces matters.
+    const volume = (pushed.get(name) ?? 0) * Math.PI * 0.875 ** 2;
+    if (length > 0 && width > 0 && height > 0)
+      sizes.push({ name: name || 'Pieza', size: [round(length), round(width), round(height)], ...(labelled && volume > 0 ? { volume: Math.round(volume) } : {}) });
   }
   return sizes;
+}
+
+/** Average volume (mm³) of the objects of the file that are copies of `piece`; undefined when the file does not say. */
+export function pieceVolume(sizes: PieceSize[] | undefined, piece: string) {
+  const same = (sizes ?? []).filter((item) => pieceName(item.name).toLowerCase() === piece.toLowerCase() && (item.volume ?? 0) > 0);
+  return same.length ? Math.round(same.reduce((sum, item) => sum + (item.volume ?? 0), 0) / same.length) : undefined;
 }
 
 /**

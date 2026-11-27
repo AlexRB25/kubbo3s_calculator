@@ -23,6 +23,7 @@ import {
   packagingName,
   plateCombos,
   piecesOnPlate,
+  pieceShares,
   wastePct,
   plateCost,
   productCost,
@@ -57,7 +58,8 @@ const SECTIONS = [
 type Section = (typeof SECTIONS)[number][0];
 
 /** A piece as typed. */
-type PartRow = { id: string; name: string; needed: string };
+/** `volume`: mm³ of one piece, from the sliced file (shares the plate's cost by size). */
+type PartRow = { id: string; name: string; needed: string; volume?: number };
 
 /** A plate as typed: hours, minutes, grams and pieces stay text while editing. */
 type PlateRow = { name: string; hours: string; minutes: string; grams: Record<string, string>; parts: Record<string, string> };
@@ -74,9 +76,12 @@ const emptyPlate = (index: number, parts: PartRow[]): PlateRow => ({
 });
 
 /** The pieces of the product; a single unnamed one when it never declared any. */
+/** 4200 mm³ → "4.2 cm³". */
+const volumeLabel = (mm3: number) => (mm3 >= 1000 ? `${Math.round(mm3 / 100) / 10} cm³` : `${Math.round(mm3)} mm³`);
+
 function partRowsOf(product: Product | undefined): PartRow[] {
   if (!product?.parts?.length) return [{ id: "pieza", name: "", needed: "1" }];
-  return product.parts.map((part) => ({ id: part.id, name: part.name, needed: String(part.needed) }));
+  return product.parts.map((part) => ({ id: part.id, name: part.name, needed: String(part.needed), ...(part.volume ? { volume: part.volume } : {}) }));
 }
 
 /** A printer's model as shown to the user ("Bambu Lab A1"), without the device id. */
@@ -252,6 +257,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     id: row.id,
     name: row.name.trim() || (partRows.length === 1 ? "Pieza" : `Pieza ${index + 1}`),
     needed: Math.max(1, Math.round(num(row.needed))),
+    ...(row.volume ? { volume: row.volume } : {}),
   }));
   const usedIds = [...new Set(used.filter(Boolean))];
   // A slot without a filament, or with one that was deleted from Filamento: its grams cost nothing.
@@ -336,14 +342,18 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     for (const part of found) {
       const same = pieceRows.find((row) => row.name.trim().toLowerCase() === part.name.toLowerCase());
       const blank = pieceRows.length === 1 && !pieceRows[0].name.trim() ? pieceRows[0] : null;
-      if (same) idOf[part.name] = same.id;
-      else if (blank) {
+      // The file's volume of the piece shares each plate's cost by size.
+      const volume = part.volume ? { volume: part.volume } : {};
+      if (same) {
+        idOf[part.name] = same.id;
+        if (part.volume) pieceRows = pieceRows.map((row) => (row.id === same.id ? { ...row, ...volume } : row));
+      } else if (blank) {
         idOf[part.name] = blank.id;
-        pieceRows = [{ ...blank, name: part.name, needed: String(part.needed) }];
+        pieceRows = [{ ...blank, name: part.name, needed: String(part.needed), ...volume }];
       } else {
         const id = newId();
         idOf[part.name] = id;
-        pieceRows = [...pieceRows, { id, name: part.name, needed: String(part.needed) }];
+        pieceRows = [...pieceRows, { id, name: part.name, needed: String(part.needed), ...volume }];
       }
     }
     if (pieceRows !== partRows) setPartRows(pieceRows);
@@ -629,7 +639,10 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       <div className={part("impresion")}>
         <fieldset className="flex flex-col gap-2 sm:col-span-2">
           <legend className="mb-1 text-sm font-semibold">Piezas del producto</legend>
-          <p className="text-xs text-muted">De qué piezas se compone y cuántas lleva cada producto. Si es de una sola pieza, déjalo así.</p>
+          <p className="text-xs text-muted">
+            De qué piezas se compone y cuántas lleva cada producto. Si es de una sola pieza, déjalo así. Al importar el archivo laminado se lee el volumen
+            de cada pieza: el costo de una placa se reparte por tamaño (una pieza grande paga más que una chica).
+          </p>
           {partRows.map((row, index) => (
             <div key={row.id} className="flex items-end gap-2">
               <label className="label flex-1">
@@ -642,6 +655,11 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                   maxLength={40}
                 />
               </label>
+              {partRows.length > 1 && (
+                <span className="w-24 pb-2.5 text-right text-xs text-muted" title="Volumen de una pieza, leído del archivo laminado">
+                  {row.volume ? `${volumeLabel(row.volume)}` : "sin volumen"}
+                </span>
+              )}
               <label className="label w-36">
                 Por producto
                 <input
@@ -985,9 +1003,14 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                                 const waste = wastePct(profile?.waste_rules, count);
                                 const total = plateCost(saved, printer, filaments, kwhPrice, waste).total;
                                 const extraNote = waste > 0 ? ` · incluye ${waste}% de merma en filamento` : "";
-                                return count > 0
-                                  ? `Imprimirla cuesta ${money(total)} · ${money(total / count)} por pieza (${count} ${count === 1 ? "pieza" : "piezas"})${extraNote}`
-                                  : `Imprimirla cuesta ${money(total)}`;
+                                if (count <= 0) return `Imprimirla cuesta ${money(total)}`;
+                                const { shares, byVolume } = pieceShares(saved, parts);
+                                const kinds = parts.filter((item) => shares[item.id] !== undefined);
+                                const each =
+                                  kinds.length > 1
+                                    ? `${kinds.map((item) => `${item.name} ${money(total * shares[item.id])}`).join(" · ")}${byVolume ? " (por volumen)" : " (igual cada una: falta el volumen de alguna)"}`
+                                    : `${money(total / count)} por pieza`;
+                                return `Imprimirla cuesta ${money(total)} (${count} ${count === 1 ? "pieza" : "piezas"}) · ${each}${extraNote}`;
                               })()}
                           </span>
                           {rows.length > 1 && (

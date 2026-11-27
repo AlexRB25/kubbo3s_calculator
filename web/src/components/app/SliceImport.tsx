@@ -6,7 +6,18 @@ import { Modal } from "@/components/app/ui";
 import { filamentName, isResin } from "@/lib/costs";
 import { duration, weight } from "@/lib/format";
 import { filamentColors } from "@/lib/labels";
-import { isResinFile, matchFilament, matchPrinter, neededPerProduct, pieceGroups, printersFor, productSizes, readSlice, type SliceReport } from "@/lib/slice";
+import {
+  isResinFile,
+  matchFilament,
+  matchPrinter,
+  neededPerProduct,
+  pieceGroups,
+  pieceVolume,
+  printersFor,
+  productSizes,
+  readSlice,
+  type SliceReport,
+} from "@/lib/slice";
 import { pieceThumbnails } from "@/lib/slice-thumbs";
 import type { Filament, Printer } from "@/lib/types";
 
@@ -16,7 +27,8 @@ export type ImportedPlate = { name: string; minutes: number; grams: Record<strin
 export type SliceImportResult = {
   printerId: string;
   plates: ImportedPlate[];
-  parts: { name: string; needed: number }[];
+  /** `volume`: mm³ of one of the piece, when the file says (to share a plate's cost by size). */
+  parts: { name: string; needed: number; volume?: number }[];
   thumbnail: File | null;
   /** The product's size suggested by the pieces (mm: length, width, height): built, and disassembled in a box. */
   sizes?: { assembled: [number, number, number] | null; packed: [number, number, number] | null };
@@ -103,7 +115,9 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
     const parts: SliceImportResult["parts"] = [];
     for (const piece of review.pieces) {
       const name = nameOf(piece.key);
-      if (!parts.some((part) => part.name.toLowerCase() === name.toLowerCase())) parts.push({ name, needed: Math.max(1, Math.round(Number(piece.needed) || 1)) });
+      const volume = pieceVolume(report.sizes, piece.key);
+      if (!parts.some((part) => part.name.toLowerCase() === name.toLowerCase()))
+        parts.push({ name, needed: Math.max(1, Math.round(Number(piece.needed) || 1)), ...(volume ? { volume } : {}) });
     }
     const plates = report.plates.map((plate) => {
       const grams: Record<string, number> = {};
