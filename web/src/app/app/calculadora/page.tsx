@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Line, PageHeader, Switch } from "@/components/app/ui";
-import { costPerGram, filamentName, overheadPerPiece, packagingName, priceLevels, wastePct } from "@/lib/costs";
+import { costPerGram, filamentName, isResin, isResinPrinter, overheadPerPiece, packagingName, priceLevels, wastePct } from "@/lib/costs";
 import { useData } from "@/lib/data";
 import { money, num } from "@/lib/format";
 import { DRAFT_KEY, quickCost, type QuoteDraft } from "@/lib/quotes";
@@ -19,9 +19,15 @@ export default function QuickCalculatorPage() {
   const taxDefault = Number(profile?.quote_settings?.tax_pct ?? 16);
 
   const [name, setName] = useState("");
-  const [uses, setUses] = useState<Use[]>([{ filament: filaments[0]?.id ?? OTHER, perKg: "", grams: "" }]);
+  // Filament (grams, price per kg) or resin (ml, price per litre): only that kind's materials and printers are offered.
+  const [resinMade, setResinMade] = useState(false);
+  const kindFilaments = filaments.filter((item) => isResin(item) === resinMade);
+  const kindPrinters = printers.filter((item) => isResinPrinter(item) === resinMade);
+  const firstUse = (list = kindFilaments): Use => ({ filament: list[0]?.id ?? OTHER, perKg: "", grams: "" });
+  const [uses, setUses] = useState<Use[]>(() => [firstUse()]);
   const [hours, setHours] = useState("");
-  const [printerId, setPrinterId] = useState(printers[0]?.id ?? "");
+  const [printerId, setPrinterId] = useState(kindPrinters[0]?.id ?? "");
+  const amountUnit = resinMade ? "ml" : "g";
   const [waste, setWaste] = useState(String(wastePct(profile?.waste_rules, 1) || 10));
   const [post, setPost] = useState("");
   const [packagingId, setPackagingId] = useState("");
@@ -55,6 +61,13 @@ export default function QuickCalculatorPage() {
   const taxes = withTax ? ((subtotal - off) * num(tax)) / 100 : 0;
   const total = subtotal - off + taxes;
 
+  function chooseResin(toResin: boolean) {
+    if (toResin === resinMade) return;
+    setResinMade(toResin);
+    setUses([firstUse(filaments.filter((item) => isResin(item) === toResin))]);
+    setPrinterId(printers.find((item) => isResinPrinter(item) === toResin)?.id ?? "");
+  }
+
   const setUse = (index: number, patch: Partial<Use>) => setUses((list) => list.map((use, at) => (at === index ? { ...use, ...patch } : use)));
 
   function toQuote() {
@@ -63,7 +76,7 @@ export default function QuickCalculatorPage() {
       .map((use) => filaments.find((item) => item.id === use.filament))
       .filter(Boolean)
       .map((filament) => filamentName(filament!));
-    const detail = [materials.join(", "), grams ? `${Math.round(grams)} g` : "", num(hours) ? `${num(hours)} h` : ""].filter(Boolean).join(" · ");
+    const detail = [materials.join(", "), grams ? `${Math.round(grams)} ${amountUnit}` : "", num(hours) ? `${num(hours)} h` : ""].filter(Boolean).join(" · ");
     const draft: QuoteDraft = {
       items: [{ name: name.trim() || "Pieza impresa en 3D", detail, quantity: pieces, unit_price: Math.round(unit * 100) / 100 }],
       discount_pct: num(discount),
@@ -97,22 +110,41 @@ export default function QuickCalculatorPage() {
               ¿Qué es? (para la cotización)
               <input className="input" value={name} placeholder="Llavero personalizado" onChange={(event) => setName(event.target.value)} />
             </label>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Se imprime con">
+              {(
+                [
+                  [false, "Filamento (FDM)"],
+                  [true, "Resina"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="radio"
+                  aria-checked={resinMade === value}
+                  className={`btn ${resinMade === value ? "btn-on" : ""}`}
+                  onClick={() => chooseResin(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {uses.map((use, index) => (
               <div key={index} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px_auto] sm:items-end">
                 <label className="label">
-                  {index === 0 ? "Filamento o resina" : `Material ${index + 1}`}
+                  {resinMade ? (index === 0 ? "Resina" : `Resina ${index + 1}`) : index === 0 ? "Filamento" : `Filamento ${index + 1}`}
                   <select className="input" value={use.filament} onChange={(event) => setUse(index, { filament: event.target.value })}>
-                    {filaments.map((filament) => (
+                    {kindFilaments.map((filament) => (
                       <option key={filament.id} value={filament.id}>
                         {filamentName(filament)}
                       </option>
                     ))}
-                    <option value={OTHER}>Otro (escribo el precio por kg o por litro)</option>
+                    <option value={OTHER}>Otro (escribo el precio por {resinMade ? "litro" : "kg"})</option>
                   </select>
                 </label>
                 {use.filament === OTHER ? (
                   <label className="label">
-                    Precio por kg o litro
+                    Precio por {resinMade ? "litro" : "kg"}
                     {input(use.perKg, (value) => setUse(index, { perKg: value }), "350", "$")}
                   </label>
                 ) : (
@@ -120,19 +152,19 @@ export default function QuickCalculatorPage() {
                 )}
                 <div className="flex items-end gap-2">
                   <label className="label flex-1">
-                    {filaments.find((filament) => filament.id === use.filament)?.kind === "resin" ? "Mililitros" : "Gramos"}
-                    {input(use.grams, (value) => setUse(index, { grams: value }), "0", filaments.find((filament) => filament.id === use.filament)?.kind === "resin" ? "ml" : "g")}
+                    {resinMade ? "Mililitros" : "Gramos"}
+                    {input(use.grams, (value) => setUse(index, { grams: value }), "0", amountUnit)}
                   </label>
                   {uses.length > 1 && (
-                    <button type="button" className="btn" aria-label="Quitar filamento" onClick={() => setUses((list) => list.filter((_, at) => at !== index))}>
+                    <button type="button" className="btn" aria-label={resinMade ? "Quitar resina" : "Quitar filamento"} onClick={() => setUses((list) => list.filter((_, at) => at !== index))}>
                       ✕
                     </button>
                   )}
                 </div>
               </div>
             ))}
-            <button type="button" className="btn self-start" onClick={() => setUses((list) => [...list, { filament: filaments[0]?.id ?? OTHER, perKg: "", grams: "" }])}>
-              + Otro color o material
+            <button type="button" className="btn self-start" onClick={() => setUses((list) => [...list, firstUse()])}>
+              {resinMade ? "+ Otra resina" : "+ Otro color o material"}
             </button>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="label">
@@ -143,7 +175,7 @@ export default function QuickCalculatorPage() {
                 Impresora
                 <select className="input" value={printerId} onChange={(event) => setPrinterId(event.target.value)}>
                   <option value="">Sin impresora (no suma luz ni desgaste)</option>
-                  {printers.map((item) => (
+                  {kindPrinters.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
                     </option>
@@ -206,7 +238,7 @@ export default function QuickCalculatorPage() {
 
         <aside className="card flex h-fit flex-col gap-2 lg:sticky lg:top-6">
           <h2>Resultado</h2>
-          <Line label={`Filamento${num(waste) ? ` (+${num(waste)} % merma)` : ""}`} value={money(cost.filament)} />
+          <Line label={`${resinMade ? "Resina" : "Filamento"}${num(waste) ? ` (+${num(waste)} % merma)` : ""}`} value={money(cost.filament)} />
           <Line label="Luz" value={money(cost.electricity)} />
           <Line label="Desgaste de la impresora" value={money(cost.machine)} />
           {cost.post > 0 && <Line label="Posprocesado" value={money(cost.post)} />}

@@ -163,8 +163,46 @@ export default function ProductFormScreen() {
   const [printerIds, setPrinterIds] = useState<string[]>(
     product?.printer_ids ?? [],
   );
+  // Printed with filament (FDM) or resin: only that kind's materials and printers are offered.
+  const [resinMade, setResinMade] = useState(
+    () =>
+      !!product &&
+      (product.filaments.some((use) =>
+        isResin(filaments.find((item) => item.id === use.filament_id)),
+      ) ||
+        product.printer_ids.some(
+          (id) => printers.find((item) => item.id === id)?.technology === "resin",
+        )),
+  );
+  const kindFilaments = filaments.filter((item) => isResin(item) === resinMade);
+  const kindPrinters = printers.filter(
+    (item) => (item.technology === "resin") === resinMade,
+  );
+  const materialWord = resinMade ? "resina" : "filamento";
+  const amountWord = resinMade ? "ml" : "gramos";
   // Printers grouped by model: any printer of a model can print the product.
-  const models = modelsOf(printers);
+  const models = modelsOf(kindPrinters);
+
+  /** Filament ⇄ resin: the materials and printers of the other kind leave the product. */
+  function chooseResin(toResin: boolean) {
+    if (toResin === resinMade) return;
+    const keep = (id: string) =>
+      (printers.find((item) => item.id === id)?.technology === "resin") === toResin;
+    setResinMade(toResin);
+    setRecipe(
+      recipe.filter(
+        (row) =>
+          row.filament_id &&
+          isResin(filaments.find((item) => item.id === row.filament_id)) === toResin,
+      ).length
+        ? recipe.filter(
+            (row) =>
+              isResin(filaments.find((item) => item.id === row.filament_id)) === toResin,
+          )
+        : [{ filament_id: null, grams: "" }],
+    );
+    setPrinterIds(printerIds.filter(keep));
+  }
   // The form goes in tabs: general data, printing, costs, packaging and prices.
   const [section, setSection] = useState<Section>("general");
   const [packagingId, setPackagingId] = useState<string | null>(
@@ -332,7 +370,7 @@ export default function ProductFormScreen() {
           if (!filament) {
             notes.push(
               sliced.resin
-                ? "No tienes resina dada de alta: agrégala en Filamento con el tipo «Resina»."
+                ? "No tienes resina dada de alta: agrégala en Más → Resina."
                 : `No tienes filamentos para ${sliced.type} ${sliced.color}: da de alta uno.`,
             );
             continue;
@@ -366,14 +404,25 @@ export default function ProductFormScreen() {
       );
       setHours(field(Math.floor(Math.round(totalMinutes) / 60)));
       setMinutes(field(Math.round(totalMinutes) % 60));
-      if (printer && !printerIds.includes(printer.id)) {
-        const ids = models.find((group) => group.ids.includes(printer.id))
-          ?.ids ?? [printer.id];
+      // A resin file makes it a resin product (and a G-code a filament one).
+      const fileResin = !!report.resin;
+      const keptIds =
+        fileResin === resinMade
+          ? printerIds
+          : printerIds.filter(
+              (id) =>
+                (printers.find((item) => item.id === id)?.technology === "resin") === fileResin,
+            );
+      setResinMade(fileResin);
+      if (printer && !keptIds.includes(printer.id)) {
+        const ids = modelsOf(
+          printers.filter((item) => (item.technology === "resin") === fileResin),
+        ).find((group) => group.ids.includes(printer.id))?.ids ?? [printer.id];
         setPrinterIds([
-          ...printerIds,
-          ...ids.filter((id) => !printerIds.includes(id)),
+          ...keptIds,
+          ...ids.filter((id) => !keptIds.includes(id)),
         ]);
-      }
+      } else setPrinterIds(keptIds);
       if (!printer)
         notes.push(
           "El archivo no dice para qué impresora es: elige abajo en cuál sale.",
@@ -510,10 +559,10 @@ export default function ProductFormScreen() {
       )
     )
       return setError(
-        "Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo.",
+        `Falta elegir ${resinMade ? "una resina" : "un filamento"} (está marcado en rojo). Elígelo o quítalo.`,
       );
     if (!plated && recipe.some((row) => row.filament_id && num(row.grams) <= 0))
-      return setError("Indica cuántos gramos consume cada filamento.");
+      return setError(`Indica cuántos ${amountWord} consume cada ${materialWord}.`);
     save(write);
   }
 
@@ -671,7 +720,16 @@ export default function ProductFormScreen() {
           </Card>
         ) : (
           <>
-            <Heading>Filamento por pieza</Heading>
+            <Chips
+              label="Se imprime con"
+              options={[
+                { value: "filament", label: "Filamento (FDM)" },
+                { value: "resin", label: "Resina" },
+              ]}
+              value={resinMade ? "resin" : "filament"}
+              onChange={(next) => chooseResin(next === "resin")}
+            />
+            <Heading>{resinMade ? "Resina por pieza" : "Filamento por pieza"}</Heading>
             <Button
               variant="secondary"
               icon="document-attach"
@@ -681,7 +739,8 @@ export default function ProductFormScreen() {
             <Muted>
               En Bambu Studio u OrcaSlicer: lamina, y en el menú de «Imprimir
               placa» elige «Exportar la placa de impresión actual». Llena
-              gramos, colores, tiempo e impresora.
+              gramos, colores, tiempo e impresora. Para resina: el archivo
+              laminado (.ctb, .goo, .pwmx, .sl1) con sus ml.
             </Muted>
             {sliceNote.length > 0 && (
               <Card>
@@ -694,11 +753,11 @@ export default function ProductFormScreen() {
               <Row key={index} style={{ alignItems: "flex-end" }}>
                 <Select
                   style={{ flex: 2 }}
-                  label={row.filament_id ? "Filamento" : "⚠ Falta elegir"}
+                  label={row.filament_id ? (resinMade ? "Resina" : "Filamento") : "⚠ Falta elegir"}
                   placeholder="Buscar y elegir…"
                   value={row.filament_id}
                   onChange={(filament_id) => setRow(index, { filament_id })}
-                  options={filaments.map((filament) => ({
+                  options={kindFilaments.map((filament) => ({
                     value: filament.id,
                     label: filamentName(filament),
                     hint: `${weight(filament.stock_g, isResin(filament))} · ${money(costPerGram(filament) * 1000)}/${isResin(filament) ? "L" : "kg"}`,
@@ -706,14 +765,14 @@ export default function ProductFormScreen() {
                 />
                 <Field
                   style={{ flex: 1 }}
-                  label={isResin(filaments.find((filament) => filament.id === row.filament_id)) ? "ml" : "Gramos"}
+                  label={resinMade ? "ml" : "Gramos"}
                   numeric
                   value={row.grams}
                   onChangeText={(grams) => setRow(index, { grams })}
                 />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Quitar filamento"
+                  accessibilityLabel={`Quitar ${materialWord}`}
                   hitSlop={8}
                   onPress={() =>
                     setRecipe(
@@ -733,31 +792,29 @@ export default function ProductFormScreen() {
             {recipe.some(
               (row) => !filaments.some((item) => item.id === row.filament_id),
             ) &&
-              filaments.length > 0 && (
+              kindFilaments.length > 0 && (
                 <ErrorText>
-                  Falta elegir un filamento (vacío o borrado de Filamento).
-                  Mientras falte, sus gramos no se cuentan y el precio sale más
-                  bajo de lo real. Elígelo o quítalo.
+                  {`Falta elegir ${resinMade ? "una resina" : "un filamento"} (vacío o borrado). Mientras falte, sus ${amountWord} no se cuentan y el precio sale más bajo de lo real. Elígelo o quítalo.`}
                 </ErrorText>
               )}
             {recipe.some((row) => row.filament_id && num(row.grams) <= 0) && (
               <ErrorText>
-                Hay un filamento sin gramos: no suma al costo. Anota cuántos
-                gramos usa.
+                {`Hay ${resinMade ? "una resina" : "un filamento"} sin ${amountWord}: no suma al costo. Anota cuántos ${amountWord} usa.`}
               </ErrorText>
             )}
             <Button
               variant="secondary"
               icon="add"
-              label="Agregar otro filamento"
+              label={resinMade ? "Agregar otra resina" : "Agregar otro filamento"}
               onPress={() =>
                 setRecipe([...recipe, { filament_id: null, grams: "" }])
               }
             />
-            {filaments.length === 0 && (
+            {kindFilaments.length === 0 && (
               <Muted>
-                Aún no tienes filamentos: regístralos en la pestaña Filamento
-                para calcular el costo.
+                {resinMade
+                  ? "Aún no tienes resinas: regístralas en Más → Resina para calcular el costo."
+                  : "Aún no tienes filamentos: regístralos en la pestaña Filamento para calcular el costo."}
               </Muted>
             )}
 
@@ -780,7 +837,7 @@ export default function ProductFormScreen() {
                 placeholder="0"
               />
             </Row>
-            {printers.length > 0 ? (
+            {kindPrinters.length > 0 ? (
               <Chips
                 label="Impresoras en las que sale (cualquiera de ese modelo)"
                 options={models.map((group) => ({
@@ -804,8 +861,9 @@ export default function ProductFormScreen() {
               />
             ) : (
               <Muted>
-                Da de alta tus impresoras en Más → Impresoras para sumar luz y
-                desgaste al costo.
+                {resinMade
+                  ? "Da de alta tus impresoras de resina en Más → Impresoras para sumar luz, desgaste y consumibles al costo."
+                  : "Da de alta tus impresoras en Más → Impresoras para sumar luz y desgaste al costo."}
               </Muted>
             )}
           </>

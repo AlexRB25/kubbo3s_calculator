@@ -44,6 +44,7 @@ export default function AppLayout() {
           <Stack.Screen name="producto/importar" options={{ title: 'Carga rápida (Excel)' }} />
           <Stack.Screen name="filamento/form" options={{ title: 'Filamento' }} />
           <Stack.Screen name="filamento/compra" options={{ title: 'Comprar filamento' }} />
+          <Stack.Screen name="resina" options={{ title: 'Resina' }} />
           <Stack.Screen name="filamento/catalogo" options={{ title: 'Catálogo de filamentos' }} />
           <Stack.Screen name="inventario/arqueo" options={{ title: 'Arquear' }} />
           <Stack.Screen name="impresion/nueva" options={{ title: 'Mandar a imprimir' }} />

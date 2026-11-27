@@ -48,7 +48,8 @@ export function PurchaseForm({ items, initial, onDone }: { items: Item[]; initia
   }
 
   const groups = [
-    { label: "Filamento y resina", list: items.filter((candidate) => candidate.type === "filament") },
+    { label: "Filamento", list: items.filter((candidate) => candidate.type === "filament" && candidate.unit !== "ml") },
+    { label: "Resina", list: items.filter((candidate) => candidate.type === "filament" && candidate.unit === "ml") },
     { label: "Otros materiales", list: items.filter((candidate) => candidate.type === "material") },
   ];
   return (

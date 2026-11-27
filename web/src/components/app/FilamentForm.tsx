@@ -14,7 +14,7 @@ const MATERIALS = ["PLA", "PLA Basic", "PLA+", "PLA Silk", "Silk PLA+", "PLA Mat
 const RESINS = ["Resina estándar", "Resina ABS-Like", "Resina lavable con agua", "Resina 8K", "Resina Tough", "Resina flexible", "Resina calcinable", "Resina dental"];
 
 /** Picks a filament from the Kubbo catalog: search by brand, material or colour. */
-function CatalogPicker({ onPick, onCancel, onResin }: { onPick: (filament: CatalogFilament) => void; onCancel: () => void; onResin: () => void }) {
+function CatalogPicker({ onPick, onCancel }: { onPick: (filament: CatalogFilament) => void; onCancel: () => void }) {
   const [catalog, setCatalog] = useState<CatalogFilament[] | null>(null);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -50,9 +50,6 @@ function CatalogPicker({ onPick, onCancel, onResin }: { onPick: (filament: Catal
         <button type="button" className="btn" onClick={onCancel}>
           Escribirlo yo
         </button>
-        <button type="button" className="btn" onClick={onResin}>
-          Es resina
-        </button>
       </div>
       {error && <p className="error">No se pudo leer el catálogo: {error}</p>}
       {!catalog && !error && <p className="text-sm text-muted">Cargando catálogo…</p>}
@@ -86,19 +83,19 @@ function CatalogPicker({ onPick, onCancel, onResin }: { onPick: (filament: Catal
 }
 
 /**
- * A filament of the workshop: picked from the Kubbo catalog or written by hand, with the name of
- * its colour, its swatch and a photo. Stock is typed only when it is new; later it moves with
- * purchases, prints and arqueos.
+ * A filament (or, with kind "resin", a resin) of the workshop: a filament is picked from the Kubbo catalog or written by
+ * hand, with the name of its colour, its swatch and a photo. Stock is typed only when it is new; later it moves with
+ * purchases, prints and arqueos. Filament is in grams and price per kg; resin in ml and price per litre.
  */
-export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone: () => void }) {
+export function FilamentForm({ filament, kind = "filament", onDone }: { filament?: Filament; kind?: "filament" | "resin"; onDone: () => void }) {
   const { suppliers, filaments, shop, profile } = useData();
   const { session } = useSession();
   const { busy, error, setError, save } = useSave();
-  const [picking, setPicking] = useState(!filament);
+  const resin = filament ? filament.kind === "resin" : kind === "resin";
+  const [picking, setPicking] = useState(!filament && !resin);
   const [catalogId, setCatalogId] = useState(filament?.catalog_id ?? null);
-  const [resin, setResin] = useState(filament?.kind === "resin");
   const unit = resin ? "ml" : "g";
-  const [material, setMaterial] = useState(filament?.material ?? "PLA");
+  const [material, setMaterial] = useState(filament?.material ?? (resin ? RESINS[0] : "PLA"));
   const [brand, setBrand] = useState(filament?.brand ?? "");
   const [color, setColor] = useState(filament?.color ?? "");
   const [colors, setColors] = useState(filament ? filamentColors(filament) : ["#ffffff"]);
@@ -113,7 +110,6 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
 
   function pick(item: CatalogFilament) {
     setCatalogId(item.id);
-    setResin(false);
     setMaterial(item.material);
     setBrand(item.brand);
     setColor(item.color_name);
@@ -161,47 +157,10 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
     save(() => (filament ? supabase().from("filaments").update(row).eq("id", filament.id) : supabase().from("filaments").insert(row)), onDone);
   }
 
-  function chooseKind(toResin: boolean) {
-    if (toResin === resin) return;
-    setResin(toResin);
-    setCatalogId(null);
-    setMaterial(toResin ? RESINS[0] : "PLA");
-  }
-
-  if (picking)
-    return (
-      <CatalogPicker
-        onPick={pick}
-        onCancel={() => setPicking(false)}
-        onResin={() => {
-          chooseKind(true);
-          setPicking(false);
-        }}
-      />
-    );
+  if (picking) return <CatalogPicker onPick={pick} onCancel={() => setPicking(false)} />;
 
   return (
     <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <div className="flex flex-wrap items-center gap-2 sm:col-span-2" role="radiogroup" aria-label="Tipo de material">
-        {(
-          [
-            [false, "Filamento (FDM)"],
-            [true, "Resina"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={label}
-            type="button"
-            role="radio"
-            aria-checked={resin === value}
-            className={`btn px-3 py-1 text-sm ${resin === value ? "btn-primary" : ""}`}
-            onClick={() => chooseKind(value)}
-          >
-            {label}
-          </button>
-        ))}
-        {resin && <span className="text-xs text-muted">Se mide en ml y su precio es por litro.</span>}
-      </div>
       <div className="flex items-center gap-3 sm:col-span-2">
         <Swatch colors={colors} glow={glow} className="relative size-20 shrink-0 overflow-hidden rounded-lg border border-line">
           {photo && (
@@ -251,7 +210,7 @@ export function FilamentForm({ filament, onDone }: { filament?: Filament; onDone
           placeholder="Elige de la lista o escribe otra"
         />
         <datalist id="filament-brands">
-          {brandOptions(filaments.map((item) => item.brand)).map((value) => (
+          {brandOptions(filaments.filter((item) => (item.kind === "resin") === resin).map((item) => item.brand)).map((value) => (
             <option key={value} value={value} />
           ))}
         </datalist>

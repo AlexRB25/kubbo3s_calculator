@@ -312,7 +312,7 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
                 : "Los gramos del laminador ya traen la purga y la torre de los cambios de color. Tu merma de Ajustes (las piezas que salen mal) se sigue sumando aparte en el costo."}
             </p>
             {review.report.resin
-              ? !filaments.some(isResin) && <p className="text-sm text-warn">Primero da de alta tu resina en Filamento y resina (botón «Es resina»).</p>
+              ? !filaments.some(isResin) && <p className="text-sm text-warn">Primero da de alta tu resina en la sección Resina.</p>
               : filaments.length === 0 && <p className="text-sm text-warn">Primero da de alta tus filamentos en Filamento.</p>}
             <div className="flex flex-wrap justify-end gap-2">
               <button type="button" className="btn" onClick={() => setReview(null)}>

@@ -19,6 +19,7 @@ import {
   processesCost,
   suppliesCost,
   filamentName,
+  isResin,
   packagingName,
   plateCombos,
   piecesOnPlate,
@@ -43,7 +44,7 @@ import { filamentColors } from "@/lib/labels";
 import { duration, field, money, num } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { imageUrl, supabase, uploadProductImage } from "@/lib/supabase";
-import type { Part, Plate, Printer, Product } from "@/lib/types";
+import type { Filament, Part, Plate, Printer, Product } from "@/lib/types";
 
 /** Tabs of the product form. */
 const SECTIONS = [
@@ -190,6 +191,19 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
   );
   // Pieces the product is made of; each plate says how many of each it prints.
   const [partRows, setPartRows] = useState<PartRow[]>(() => partRowsOf(product));
+  // Printed with filament (FDM) or resin: only that kind's materials and printers are offered.
+  const [resinMade, setResinMade] = useState(
+    () =>
+      !!product &&
+      (product.filaments.some((use) => isResin(filaments.find((item) => item.id === use.filament_id))) ||
+        (product.plates ?? []).some((plate) => printers.find((item) => item.id === plate.printer_id)?.technology === "resin")),
+  );
+  const sameKind = (filament: Filament | undefined) => !filament || isResin(filament) === resinMade;
+  const kindFilaments = filaments.filter((item) => isResin(item) === resinMade);
+  const kindPrinter = (printerId: string) => (printers.find((item) => item.id === printerId)?.technology === "resin") === resinMade;
+  const material = resinMade
+    ? { one: "resina", many: "resinas", amount: "ml", page: "/app/resina", title: "Resina" }
+    : { one: "filamento", many: "filamentos", amount: "gramos", page: "/app/filamento", title: "Filamento" };
   // Filaments the product uses; each plate says how many grams of each it takes.
   const [used, setUsed] = useState<string[]>(product?.filaments.length ? product.filaments.map((use) => use.filament_id) : [""]);
   // Printer models the product prints on (each keyed by its first printer), shown as tabs.
@@ -347,15 +361,23 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     }));
     const printerId = models.find((group) => group.ids.includes(slicedOn))?.id ?? slicedOn;
     setTab(printerId);
-    const current = (plates[printerId] ?? []).filter((plate) => plate.hours || plate.minutes || Object.values(plate.grams).some((grams) => num(grams) > 0));
+    // A resin file makes it a resin product (and a G-code a filament one): what was of the other kind goes.
+    const fileResin = printers.find((item) => item.id === slicedOn)?.technology === "resin";
+    const switching = fileResin !== resinMade;
+    const printerTech = (id: string) => (printers.find((item) => item.id === id)?.technology === "resin") === fileResin;
+    const keptIds = switching ? printerIds.filter(printerTech) : printerIds;
+    const keptPlates = switching ? Object.fromEntries(Object.entries(plates).filter(([id]) => printerTech(id))) : plates;
+    const keptUsed = switching ? used.filter((id) => isResin(filaments.find((item) => item.id === id)) === fileResin) : used;
+    if (switching) setResinMade(fileResin);
+    const current = (keptPlates[printerId] ?? []).filter((plate) => plate.hours || plate.minutes || Object.values(plate.grams).some((grams) => num(grams) > 0));
     // Numbered after the plates the printer already had.
     const numbered = [...current, ...rows].map((plate, index) =>
       current.length && /^Placa \d+$/.test(plate.name) ? { ...plate, name: `Placa ${index + 1}` } : plate,
     );
-    setPlates({ ...plates, [printerId]: numbered });
-    if (!printerIds.includes(printerId)) setPrinterIds([...printerIds, printerId]);
+    setPlates({ ...keptPlates, [printerId]: numbered });
+    setPrinterIds(keptIds.includes(printerId) ? keptIds : [...keptIds, printerId]);
     const ids = imported.flatMap((plate) => Object.keys(plate.grams));
-    setUsed([...new Set([...used.filter(Boolean), ...ids])]);
+    setUsed([...new Set([...keptUsed.filter(Boolean), ...ids])]);
     if (thumbnail && photos.length === 0) setPhotos([{ key: `placa-${newId()}`, file: thumbnail, url: URL.createObjectURL(thumbnail) }]);
   }
 
@@ -367,6 +389,19 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
       ...current,
       ...images.map((file) => ({ key: `${file.name}-${file.size}-${Math.random()}`, file, url: URL.createObjectURL(file) })),
     ]);
+  }
+
+  /** Filament ⇄ resin: the materials and printers of the other kind leave the product (after asking, if there were any). */
+  function chooseResin(toResin: boolean) {
+    if (toResin === resinMade) return;
+    const chosen = used.filter(Boolean).length + printerIds.length;
+    if (chosen && !confirm(`Se quitarán ${toResin ? "los filamentos y las impresoras FDM" : "las resinas y las impresoras de resina"} que elegiste, con sus placas. ¿Cambiar?`))
+      return;
+    const keep = (id: string) => (printers.find((item) => item.id === id)?.technology === "resin") === toResin;
+    setResinMade(toResin);
+    setUsed([""]);
+    setPrinterIds(printerIds.filter(keep));
+    setPlates(Object.fromEntries(Object.entries(plates).filter(([id]) => keep(id))));
   }
 
   function addModel(modelId: string) {
@@ -450,8 +485,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
     };
     event.preventDefault();
     if (partRows.length > 1 && partRows.some((row) => !row.name.trim())) return fail("impresion", "Ponle nombre a cada pieza.");
-    if (!usedIds.length) return fail("impresion", "Indica qué filamentos usa el producto.");
-    if (missingCount) return fail("impresion", "Falta elegir un filamento (está marcado en rojo). Elígelo o quítalo con ✕.");
+    if (!usedIds.length) return fail("impresion", `Indica qué ${material.many} usa el producto.`);
+    if (missingCount) return fail("impresion", `Falta elegir ${resinMade ? "una resina" : "un filamento"} (está marcado en rojo). Elígelo o quítalo con ✕.`);
     if (!printerIds.length) return fail("impresion", "Elige al menos una impresora y llena sus placas.");
     for (const plate of savedPlates) {
       const where = `${plate.name} de ${modelLabel(plate.printer_id)}`;
@@ -463,7 +498,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         setTab(model);
       if (!Object.values(plate.parts ?? {}).some((count) => count > 0)) return fail("impresion", `Indica qué piezas salen en ${where}.`);
       if (plate.minutes <= 0) return fail("impresion", `Indica el tiempo de ${where}.`);
-      if (!Object.values(plate.grams).some((grams) => grams > 0)) return fail("impresion", `Indica los gramos de filamento (o los ml de resina) de ${where}.`);
+      if (!Object.values(plate.grams).some((grams) => grams > 0)) return fail("impresion", `Indica ${resinMade ? "los ml de resina" : "los gramos de filamento"} de ${where}.`);
     }
     if (combos.missing.length) return fail("impresion", `Ninguna placa imprime: ${combos.missing.map((part) => part.name).join(", ")}.`);
     if (!dearest) return fail("impresion", "Con estas placas no se completa un producto.");
@@ -636,18 +671,41 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
         </fieldset>
 
         <fieldset className="flex flex-col gap-2 sm:col-span-2">
-          <legend className="mb-1 text-sm font-semibold">Filamentos que usa</legend>
-          <p className="text-xs text-muted">Solo cuáles: los gramos de cada uno van abajo, en cada placa.</p>
+          <legend className="mb-1 text-sm font-semibold">Se imprime con</legend>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Se imprime con">
+            {(
+              [
+                [false, "Filamento (FDM)"],
+                [true, "Resina"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                role="radio"
+                aria-checked={resinMade === value}
+                className={`btn ${resinMade === value ? "btn-on" : ""}`}
+                onClick={() => chooseResin(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-2 sm:col-span-2">
+          <legend className="mb-1 text-sm font-semibold">{resinMade ? "Resinas que usa" : "Filamentos que usa"}</legend>
+          <p className="text-xs text-muted">Solo cuáles: {resinMade ? "los ml" : "los gramos"} de cada una van abajo, en cada placa.</p>
           {used.map((filamentId, index) => {
             const filament = filaments.find((item) => item.id === filamentId);
             return (
               <div key={index} className="flex items-center gap-2">
                 <Swatch colors={filament ? filamentColors(filament) : []} glow={filament?.glow} className="size-5 shrink-0 rounded-full border border-line" />
                 <FilamentPicker
-                  filaments={filaments}
+                  filaments={filament && !sameKind(filament) ? [...kindFilaments, filament] : kindFilaments}
                   value={filamentId}
                   taken={used}
-                  label={`Filamento ${index + 1}`}
+                  label={`${material.title} ${index + 1}`}
                   onChange={(id) => {
                     setUsed(used.map((item, position) => (position === index ? id : item)));
                     // Replacing a deleted filament keeps the grams typed for it in every plate.
@@ -665,32 +723,38 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                       );
                   }}
                 />
-                <button type="button" className="btn" aria-label="Quitar filamento" onClick={() => setUsed(used.filter((_, position) => position !== index))}>
+                <button type="button" className="btn" aria-label={`Quitar ${material.one}`} onClick={() => setUsed(used.filter((_, position) => position !== index))}>
                   ✕
                 </button>
               </div>
             );
           })}
-          {missingCount > 0 && filaments.length > 0 && (
+          {missingCount > 0 && kindFilaments.length > 0 && (
             <p role="alert" className="error">
-              Falta elegir {missingCount === 1 ? "un filamento" : `${missingCount} filamentos`} (vacío o borrado de Filamento). Mientras falte, sus gramos no se
-              cuentan y el precio sale más bajo de lo real. Elígelo (los gramos que ya anotaste pasan al nuevo) o quítalo con ✕.
+              Falta elegir {missingCount === 1 ? (resinMade ? "una resina" : "un filamento") : `${missingCount} ${material.many}`} (vacío o borrado de{" "}
+              {material.title}). Mientras falte, sus {material.amount} no se cuentan y el precio sale más bajo de lo real. Elígelo (lo que ya anotaste pasa al
+              nuevo) o quítalo con ✕.
+            </p>
+          )}
+          {used.some((id) => !sameKind(filaments.find((item) => item.id === id))) && (
+            <p role="alert" className="error">
+              Este producto se imprime con {material.one}, pero tiene {resinMade ? "un filamento" : "una resina"}: cámbialo o quítalo con ✕.
             </p>
           )}
           {unweighed.length > 0 && (
             <p role="alert" className="error">
-              {unweighed.map((filament) => filamentName(filament)).join(", ")} no {unweighed.length === 1 ? "tiene" : "tienen"} gramos en ninguna placa: no suma
-              al costo. Anota sus gramos abajo o quítalo.
+              {unweighed.map((filament) => filamentName(filament)).join(", ")} no {unweighed.length === 1 ? "tiene" : "tienen"} {material.amount} en ninguna
+              placa: no suma al costo. Anota sus {material.amount} abajo o quítalo.
             </p>
           )}
           <button type="button" className="btn self-start" onClick={() => setUsed([...used, ""])}>
-            + Otro filamento
+            {resinMade ? "+ Otra resina" : "+ Otro filamento"}
           </button>
-          {filaments.length === 0 && (
+          {kindFilaments.length === 0 && (
             <p className="text-sm text-muted">
-              Primero da de alta tus filamentos en{" "}
-              <Link href="/app/filamento" className="text-brand hover:underline">
-                Filamento
+              Primero da de alta tus {material.many} en{" "}
+              <Link href={material.page} className="text-brand hover:underline">
+                {material.title}
               </Link>
               .
             </p>
@@ -699,9 +763,9 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
 
         <fieldset className="flex flex-col gap-3 sm:col-span-2">
           <legend className="mb-1 text-sm font-semibold">Impresoras y placas</legend>
-          {printers.length === 0 ? (
+          {!printers.some((item) => kindPrinter(item.id)) && !printerIds.length ? (
             <p className="text-sm text-muted">
-              Registra tus impresoras en{" "}
+              Registra tus impresoras {resinMade ? "de resina " : ""}en{" "}
               <Link href="/app/impresoras" className="text-brand hover:underline">
                 Impresoras
               </Link>{" "}
@@ -712,7 +776,8 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
               <SliceImport filaments={filaments} printers={printers} onApply={applySlice} />
               <p className="text-xs text-muted">
                 Agrega los modelos de impresora en que sale (cualquier impresora de ese modelo lo puede imprimir). En cada placa anota qué piezas salen y
-                cuántas (por ejemplo 4 brazos y 5 colas), su tiempo y los gramos de cada filamento como te los da el laminador.
+                cuántas (por ejemplo 4 brazos y 5 colas), su tiempo y {resinMade ? "los ml de cada resina" : "los gramos de cada filamento"} como te los da el
+                laminador.
               </p>
               <div role="tablist" className="flex flex-wrap items-end gap-1 border-b border-line">
                 {printerIds.map((modelId) => (
@@ -744,7 +809,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                     </button>
                   </div>
                 ))}
-                {models.some((group) => !printerIds.includes(group.id)) &&
+                {models.some((group) => !printerIds.includes(group.id) && kindPrinter(group.id)) &&
                   (adding ? (
                     <select
                       className="input mb-1 w-auto"
@@ -758,7 +823,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                         Elige la impresora…
                       </option>
                       {models
-                        .filter((group) => !printerIds.includes(group.id))
+                        .filter((group) => !printerIds.includes(group.id) && kindPrinter(group.id))
                         .map((group) => (
                           <option key={group.id} value={group.id}>
                             {group.name}
@@ -881,7 +946,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                             />
                           </label>
                         ))}
-                        <p className="col-span-2 text-xs font-semibold text-muted sm:col-span-4">Filamento de toda la placa</p>
+                        <p className="col-span-2 text-xs font-semibold text-muted sm:col-span-4">{resinMade ? "Resina de toda la placa" : "Filamento de toda la placa"}</p>
                         {usedIds.map((id) => {
                           const filament = filaments.find((item) => item.id === id);
                           return (
@@ -910,7 +975,7 @@ function ProductForm({ product, onDone }: { product?: Product; onDone: () => voi
                           );
                         })}
                         {usedIds.length === 0 && (
-                          <p className="col-span-2 text-xs text-muted sm:col-span-4">Elige arriba los filamentos para anotar sus gramos.</p>
+                          <p className="col-span-2 text-xs text-muted sm:col-span-4">Elige arriba {resinMade ? "las resinas para anotar sus ml" : "los filamentos para anotar sus gramos"}.</p>
                         )}
                         <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 sm:col-span-4">
                           <span className="text-sm text-muted">
@@ -1485,6 +1550,7 @@ export default function ProductsPage() {
                 const cost = breakdown.total;
                 const photo = imageUrl(product.image_path);
                 const grams = product.filaments.reduce((total, use) => total + use.grams, 0);
+                const resinMade = product.filaments.some((use) => isResin(filaments.find((item) => item.id === use.filament_id)));
                 const box = packaging.find((item) => item.id === product.packaging_id);
                 const levels = priceLevels(profile, product);
                 const margin = levels.normal;
@@ -1515,7 +1581,10 @@ export default function ProductsPage() {
                       {money(cost)}
                       <InfoTip label={`Desglose del costo de ${product.name}`}>
                         <p className="font-semibold">Una pieza</p>
-                        <TipLine label="Filamento (sin merma)" value={grams ? `${Math.round(grams * 10) / 10} g` : "—"} />
+                        <TipLine
+                          label={resinMade ? "Resina (sin merma)" : "Filamento (sin merma)"}
+                          value={grams ? `${Math.round(grams * 10) / 10} ${resinMade ? "ml" : "g"}` : "—"}
+                        />
                         {product.filaments.length > 1 &&
                           product.filaments.map((use) => {
                             const filament = filaments.find((item) => item.id === use.filament_id);
@@ -1530,7 +1599,7 @@ export default function ProductsPage() {
                         <TipLine label="Tiempo de impresión" value={duration(product.print_minutes)} />
                         <p className="mt-1 font-semibold">Costo</p>
                         <TipLine
-                          label={profile?.waste_rules?.length && product.plates?.length ? "Filamento (con merma)" : "Filamento"}
+                          label={`${resinMade ? "Resina" : "Filamento"}${profile?.waste_rules?.length && product.plates?.length ? " (con merma)" : ""}`}
                           value={money(breakdown.filament)}
                         />
                         <TipLine label="Luz" value={money(breakdown.electricity)} />

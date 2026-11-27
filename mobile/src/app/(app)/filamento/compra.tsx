@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { Button, Card, ErrorText, Field, Line, Row, Screen, Select } from '@/components/ui';
@@ -8,13 +8,15 @@ import { supabase } from '@/lib/supabase';
 import { useData, useSave } from '@/store/data';
 
 export default function FilamentPurchaseScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
-  const { filaments, suppliers, expenses } = useData();
+  const { id, kind } = useLocalSearchParams<{ id?: string; kind?: string }>();
+  const { filaments: all, suppliers, expenses } = useData();
+  const resinScreen = all.find((item) => item.id === id)?.kind === 'resin' || kind === 'resin';
+  const filaments = all.filter((item) => (item.kind === 'resin') === resinScreen);
   const { busy, error, setError, save } = useSave();
 
   const [filamentId, setFilamentId] = useState<string | null>(id ?? null);
   const filament = filaments.find((item) => item.id === filamentId);
-  const resin = filament?.kind === 'resin';
+  const resin = resinScreen;
   const [grams, setGrams] = useState('1000');
   const [amount, setAmount] = useState('');
   // Undefined until the user picks one: by default the purchase goes to the filament's usual supplier.
@@ -31,8 +33,8 @@ export default function FilamentPurchaseScreen() {
   const newCost = before.grams + num(grams) > 0 ? ((before.paid + num(amount)) / (before.grams + num(grams))) * 1000 : 0;
 
   function submit() {
-    if (!filament) return setError('Elige el filamento que compraste.');
-    if (num(grams) <= 0) return setError('Indica cuántos gramos compraste.');
+    if (!filament) return setError(resin ? 'Elige la resina que compraste.' : 'Elige el filamento que compraste.');
+    if (num(grams) <= 0) return setError(resin ? 'Indica cuántos ml compraste.' : 'Indica cuántos gramos compraste.');
     if (!isIsoDay(date)) return setError('Escribe la fecha como AAAA-MM-DD.');
     save(() =>
       supabase.from('expenses').insert({
@@ -49,8 +51,9 @@ export default function FilamentPurchaseScreen() {
 
   return (
     <Screen>
+      <Stack.Screen options={{ title: resin ? 'Comprar resina' : 'Comprar filamento' }} />
       <Select
-        label="Filamento o resina"
+        label={resin ? 'Resina' : 'Filamento'}
         value={filamentId}
         onChange={setFilamentId}
         options={filaments.map((item) => ({ value: item.id, label: filamentName(item), hint: `Quedan ${weight(item.stock_g, item.kind === 'resin')}` }))}

@@ -38,6 +38,7 @@ const ROLE_NAMES: Record<ShopRole, string> = {
 export default function MoreScreen() {
   const {
     printers,
+    filaments,
     suppliers,
     expenses,
     channels,
@@ -96,6 +97,13 @@ export default function MoreScreen() {
       title: "Proveedores",
       subtitle: `${suppliers.length} registrados`,
       roles: ["owner", "admin"],
+    },
+    {
+      group: "materiales",
+      href: "/resina",
+      icon: "water",
+      title: "Resina",
+      subtitle: `${filaments.filter((filament) => filament.kind === "resin").length} · en ml, con su precio por litro`,
     },
     {
       group: "materiales",

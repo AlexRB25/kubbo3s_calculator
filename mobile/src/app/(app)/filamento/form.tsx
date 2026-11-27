@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -18,15 +18,16 @@ const SWATCHES = [
 ];
 
 export default function FilamentFormScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, kind: kindParam } = useLocalSearchParams<{ id?: string; kind?: string }>();
   const { filaments, suppliers } = useData();
   const { busy, error, setError, save } = useSave();
   const filament = filaments.find((item) => item.id === id);
 
-  const [kind, setKind] = useState<'filament' | 'resin'>(filament?.kind === 'resin' ? 'resin' : 'filament');
-  const resin = kind === 'resin';
+  // Filament or resin comes from the screen it was opened from (or from the saved one).
+  const resin = filament ? filament.kind === 'resin' : kindParam === 'resin';
+  const kind = resin ? 'resin' : 'filament';
   const unit = resin ? 'ml' : 'g';
-  const [material, setMaterial] = useState(filament?.material ?? 'PLA');
+  const [material, setMaterial] = useState(filament?.material ?? (resin ? RESINS[0] : 'PLA'));
   const [brand, setBrand] = useState(filament?.brand ?? '');
   const [color, setColor] = useState(filament?.color ?? '');
   const [colorHex, setColorHex] = useState(filament?.color_hex ?? SWATCHES[0]);
@@ -66,26 +67,14 @@ export default function FilamentFormScreen() {
         />
       )}
 
-      <Chips
-        label="Tipo"
-        options={[
-          { value: 'filament', label: 'Filamento (FDM)' },
-          { value: 'resin', label: 'Resina' },
-        ]}
-        value={kind}
-        onChange={(next) => {
-          if (next === kind) return;
-          setKind(next);
-          setMaterial(next === 'resin' ? RESINS[0] : 'PLA');
-        }}
-      />
+      <Stack.Screen options={{ title: resin ? 'Resina' : 'Filamento' }} />
       {resin && <Muted>Se mide en ml y su precio es por litro.</Muted>}
       <Field label="Material" value={material} onChangeText={setMaterial} autoCapitalize={resin ? 'sentences' : 'characters'} maxLength={30} />
       <Chips options={(resin ? RESINS : MATERIALS).map((item) => ({ value: item, label: item }))} value={material} onChange={setMaterial} />
       <Field label="Color" value={color} onChangeText={setColor} placeholder="Negro mate" maxLength={40} />
       <Field label="Marca" value={brand} onChangeText={setBrand} placeholder="Elige abajo o escribe otra" maxLength={40} />
       <Chips
-        options={brandOptions(filaments.map((item) => item.brand))
+        options={brandOptions(filaments.filter((item) => (item.kind === 'resin') === resin).map((item) => item.brand))
           // While typing, only the brands that match.
           .filter((item) => !brand.trim() || item.toLowerCase().includes(brand.trim().toLowerCase()))
           .slice(0, brand.trim() ? 12 : 31)

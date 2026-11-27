@@ -56,6 +56,9 @@ export default function InventoryPage() {
             <Link className="btn" href="/app/filamento">
               Nuevo filamento
             </Link>
+            <Link className="btn" href="/app/resina">
+              Nueva resina
+            </Link>
             {raw.length > 0 && (
               <button className="btn btn-primary" onClick={() => setBuying("any")}>
                 Registrar compra
