@@ -29,6 +29,8 @@ type Review = {
   report: SliceReport;
   fileName: string;
   printerId: string;
+  /** The file names the printer and the user has one of it: nothing to choose. */
+  fromFile: boolean;
   /** Slot of the slicer ("plate:slot") → the user's filament chosen for it. */
   choices: Record<string, string>;
   pieces: PieceRow[];
@@ -83,7 +85,7 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
       const pieces = totals.map((group, index) => ({ key: group.name, name: group.name, needed: String(needed[index]) }));
       const candidates = printersFor(report, printers);
       const printerId = (matchPrinter(report.printerModel, candidates) ?? (report.resin && candidates.length === 1 ? candidates[0] : null))?.id ?? "";
-      setReview({ report, fileName: file.name, printerId, choices, pieces });
+      setReview({ report, fileName: file.name, printerId, fromFile: !!printerId, choices, pieces });
       setThumbs({});
       pieceThumbnails(report).then(setThumbs);
     } catch (reason) {
@@ -195,6 +197,12 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
               </p>
             ))}
 
+            {review.fromFile ? (
+              <p className="text-sm">
+                Impresora: <strong>{review.report.printerModel || printers.find((printer) => printer.id === review.printerId)?.name}</strong>{" "}
+                <span className="text-muted">(lo dice el archivo; cualquiera de tus impresoras de ese modelo lo puede imprimir)</span>
+              </p>
+            ) : (
             <label className="label">
               Impresora
               <select
@@ -221,9 +229,10 @@ export function SliceImport({ filaments, printers, onApply }: { filaments: Filam
                     : `No tienes impresoras compatibles para este archivo${review.report.printerModel ? ` (se laminó para ${review.report.printerModel})` : ""}. Lamínalo para una de tus impresoras o da de alta esa impresora en Impresoras.`}
                 </span>
               ) : (
-                !review.printerId && <span className="font-normal text-warn">Elige en qué impresora sale.</span>
+                !review.printerId && <span className="font-normal text-warn">El archivo no dice para qué impresora es: elige en cuál sale.</span>
               )}
             </label>
+            )}
 
             {review.report.plates.map((plate) => (
               <div key={plate.index} className="flex flex-col gap-2 rounded-lg border border-line p-3">
